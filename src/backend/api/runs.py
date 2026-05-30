@@ -14,7 +14,6 @@ def get_runs(
     status: str | None = None,
     tag: str | None = None,
 ) -> list[dict[str, Any]]:
-    """List runs across projects, optionally filtered by project, status, or tag."""
     result = []
     if not runs_root.exists():
         return result
@@ -61,7 +60,6 @@ def get_runs(
 
 @router.get("/api/runs/{project}/{run}")
 def get_run(project: str, run: str, runs_root: Path) -> dict:
-    """Get a single run as a folder table (stub for v0)."""
     run_dir = runs_root / project / run
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")

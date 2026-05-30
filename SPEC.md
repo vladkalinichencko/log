@@ -209,7 +209,6 @@ log/
         models.py                 # Table, Cell, CellType, TableKind, Representation + on-disk record DTOs
         read_table.py             # read_table(path) -> Table  (physical files -> Table)
         table_engine.py           # `.`-path merge language evaluator (Section 9.13)
-        statistics.py             # derived-column statistic functions
       api/
         __init__.py
         runs.py                   # /api/runs endpoints
@@ -640,14 +639,14 @@ Classes (justified): `LocalFileStorage`, `SqliteIndex`, `WebSocketTransport` (ea
 
 Plain functions (no state): `read_table(path) -> Table`, the whole `table_engine.py` (`evaluate(expression) -> Table`, `parse(expression) -> Ast`), and every FastAPI route handler in `api/`.
 
-`statistics.py` is not a separate feature — it is the **one function registry** that backs the formula language (§9.13). It holds a single dict `FUNCTIONS: dict[str, Function]`, where each `Function` records its `kind` (`"aggregation"` = column→scalar, or `"transform"` = column→column) and its pure implementation. `table_engine` resolves every name in `agg(...)` and `derive(...)` through this one dict; nothing else holds a list of statistics. Each entry has the identical shape and differs only by name, kind, and body (Lego). Adding a statistic = adding one `FUNCTIONS` entry.
+There is no separate statistics module. The **one function registry** that backs the formula language (§9.13) lives in `table_engine.py` itself, next to the parser that uses it: a single dict `FUNCTIONS: dict[str, Function]`, where `Function` is a small dataclass record (its only justified class here) holding `kind` (`"aggregation"` = column→scalar, or `"transform"` = column→column) and the pure implementation `fn`. `evaluate(...)` resolves every name in `agg(...)` and `derive(...)` through this one dict; nothing else holds a list of statistics. Each entry has the identical shape and differs only by name, kind, and body (Lego). Adding a statistic = adding one `FUNCTIONS` entry.
 
 | Function | Input | Output | Purpose |
 |---|---|---|---|
 | `read_table(path)` | `.`-path | `Table` | Map physical files/folders to a `Table` (Section 6.2). |
 | `evaluate(expression)` | DSL string | `Table` | Run the merge language (Section 9.13); resolve names via `FUNCTIONS`. |
 | `parse(expression)` | DSL string | `Ast` | Tokenize + parse the DSL; raise on bad token. |
-| `FUNCTIONS[name]` (statistics.py) | column (+ args) | scalar or column | One registry entry per statistic; `kind` picks scalar (aggregation) vs column (transform). |
+| `FUNCTIONS[name].fn` (table_engine.py) | column (+ args) | scalar or column | One registry entry per statistic; `kind` picks scalar (aggregation) vs column (transform). |
 | route handlers (Section 9.12) | request DTO | response DTO | Wire ports to HTTP/WS. |
 
 ### 7.3 Frontend code (`frontend/src/`)
@@ -762,7 +761,7 @@ Ownership and forbidden imports:
 - **Training layer (`src/log/`)** owns writing files via the writer thread. Forbidden to import `backend/` or `frontend/`; forbidden to read back its own written files (write-only); forbidden to make network calls.
 - **Writer subpackage (`src/log/writer/`)** owns all training-side disk I/O — the only place `os.replace`, `open(..., "ab")`, and `numpy.save` are called on the training side. Public `log` functions enqueue jobs; they never write files directly.
 - **Backend adapters (`backend/adapters/`)** are the only place the backend touches the filesystem, SQLite, or sockets. Forbidden to import `backend/api/` (dependency points inward).
-- **Backend domain (`backend/domain/`)** is pure logic (`Table`, `read_table`, table engine, statistics). Forbidden to import any adapter or FastAPI. Receives data through port protocols only.
+- **Backend domain (`backend/domain/`)** is pure logic (`Table`, `read_table`, table engine + its function registry). Forbidden to import any adapter or FastAPI. Receives data through port protocols only.
 - **Backend api (`backend/api/`)** wires ports to HTTP/WS. Forbidden to read files directly; goes through `StoragePort`/`IndexPort`.
 - **Frontend store/selectors/reducers/FSMs** are pure. Forbidden to call `fetch` or touch the network (that lives in `api/`).
 - **Frontend components** read state via selectors and dispatch actions. Forbidden to call `fetch` directly (use `api/client.ts`) and forbidden to read `runs/` files.
@@ -973,7 +972,7 @@ WebSocket `/ws`:
 
 ### 9.13 Merge / table language (v1)
 
-**In one breath:** there is one Excel-like set of functions that operate on table columns, and everything — merges, statistics, derived metrics — is built from it. A statistic is not a separate feature; it is one function in this set, applied to a column. The engine evaluates a small path-expression DSL whose function names all come from the single **function registry** (§7.2, `statistics.py`). **Single `.` separator** (was `::`).
+**In one breath:** there is one Excel-like set of functions that operate on table columns, and everything — merges, statistics, derived metrics — is built from it. A statistic is not a separate feature; it is one function in this set, applied to a column. The engine evaluates a small path-expression DSL whose function names all come from the single **function registry** (§7.2, `table_engine.py` `FUNCTIONS`). **Single `.` separator** (was `::`).
 
 ```
 expr        := source ( "|" op )*
@@ -995,7 +994,7 @@ formula     := arithmetic over column refs, numeric literals, and registry
                functions of kind "transform", e.g. rolling_mean(col, window)
 ```
 
-The single function registry (§7.2, `statistics.py`). Every callable name above —
+The single function registry (§7.2, `table_engine.py` `FUNCTIONS`). Every callable name above —
 both the `aggregate` in `agg(...)` and the functions in a `derive(...)` formula —
 resolves through one registry. Each entry has the same shape and one of two kinds,
 distinguished only by output:
@@ -1371,7 +1370,7 @@ Build stages are separate from feature tiers (Section 3). A stage leaves a syste
 
 **Stage 0 — walking skeleton.** Every module/file in Section 5 exists; the system starts end to end; logic is stubbed except the minimal real spine.
 - Real: `log.run` + `log.log` (scalar only) → writer thread → `config.json`/`meta.json`/`metrics.jsonl`. Backend `read_table` for the run-list and one scalar `Table`; `GET /api/runs`, `GET /api/table`. Frontend boots, fetches one `Table`, renders a grid of plain divs, supports cell-edit / add-remove row+column / select / representation-switch against in-memory state (no persistence), top nav bar drill.
-- Stubbed: `watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure` exist with exact signatures and raise `NotImplementedError`. SQLite index, file watcher, WebSocket, and the table engine (parser) exist as importable no-ops. The statistics registry (`statistics.py` `FUNCTIONS`, §7.2/§9.13) is real from v0 — its functions are pure one-liners, so stubbing them would be pointless; only the parser that calls them is deferred.
+- Stubbed: `watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure` exist with exact signatures and raise `NotImplementedError`. SQLite index, file watcher, WebSocket, and the table engine *parser* (`evaluate`/`parse`) exist as importable no-ops. The function registry (`table_engine.py` `FUNCTIONS`, §7.2/§9.13) is real from v0 — its functions are pure one-liners, so stubbing them would be pointless; only the parser that calls them is deferred.
 - Done when: importing `log` exposes the full Section 9.1 surface; the acceptance criteria "Run registration" (finished), "Scalar logging" (single row), and "UI: Table as the screen" (run list renders, drill replaces view) pass.
 - Tests: unit on `atomic_write_bytes`, `append_jsonl`, `read_table` (run-list + scalar); integration on `GET /api/runs` and `GET /api/table`; one end-to-end smoke test (run a tiny decorated script, start backend, assert the run appears via the API). Frontend unit on `tables_reducer`, `cellEdit_fsm`, `makeFsm`; component test on `TableView` rendering a grid.
 
@@ -1383,7 +1382,7 @@ Build stages are separate from feature tiers (Section 3). A stage leaves a syste
 - Done when: the watch/track/distribute, checkpoint/resume, schedules/tick acceptance criteria pass.
 - Tests: unit per function (cadence math, schedule multipliers, samples counting); integration on a tiny train loop.
 
-**Stage 3 — backend observability.** SQLite derived index + rebuild, file watcher → index upsert + WS push, table engine (full DSL), statistics, all `/api/views`, `/api/workspaces`, `/api/series`, `/api/tables/eval`, `/api/runs/rename`, `/ws`.
+**Stage 3 — backend observability.** SQLite derived index + rebuild, file watcher → index upsert + WS push, table engine parser (full DSL over the function registry), all `/api/views`, `/api/workspaces`, `/api/series`, `/api/tables/eval`, `/api/runs/rename`, `/ws`.
 - Done when: "Merge language", "UI: live", "Workspace/view persistence" pass at the API level.
 - Tests: unit on the parser/evaluator and each statistic; integration per endpoint; one watcher→WS smoke test.
 

@@ -1,17 +1,20 @@
 import pytest
 
-from backend.domain.table_engine import evaluate, parse
-
-# Stage 0: the merge language is stubbed (§3.1, §14). These tests pin that the
-# public surface exists with the right signatures and is honestly unimplemented,
-# and become real behavior tests when the engine lands (§9.13).
+from backend.domain.table_engine import FUNCTIONS, evaluate, parse
 
 
-def test_evaluate_is_stubbed(tmp_path):
+def test_aggregation_returns_scalar():
+    assert FUNCTIONS["mean"].kind == "aggregation"
+    assert FUNCTIONS["mean"].fn([1, 2, 3]) == 2.0
+
+
+def test_transform_returns_column():
+    assert FUNCTIONS["rolling_mean"].kind == "transform"
+    assert FUNCTIONS["rolling_mean"].fn([1, 2, 3, 4], 2) == [1.0, 1.5, 2.5, 3.5]
+
+
+def test_parser_is_stubbed(tmp_path):
     with pytest.raises(NotImplementedError):
         evaluate("table(p.run.loss)", tmp_path)
-
-
-def test_parse_is_stubbed():
     with pytest.raises(NotImplementedError):
         parse("table(p.run.loss)")

@@ -1,6 +1,3 @@
-"""End-to-end smoke test (§14 Stage 0): run a tiny decorated script, then verify
-the files the writer produced. `pythonpath=src` (pyproject) makes `import log` work.
-"""
 import json
 import tempfile
 from pathlib import Path

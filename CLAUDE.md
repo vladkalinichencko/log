@@ -14,7 +14,7 @@ Read before writing or reviewing any code in this repo. `SPEC.md` says WHAT to b
 
 5. **Every stateful UI element is an explicit FSM**, derived from the one base factory (`makeFsm`), never re-invented per element — including a plain button and every loading state.
 
-6. **No unrequested visuals.** Not one line of CSS — no color, border, padding, margin, spacing, radius, shadow, gradient, animation — and no DOM beyond what `SPEC.md` names. The only motion allowed is `cursor: pointer` on hover. If a visual seems needed, stop and ask first.
+6. **Build only what was asked — and name what you left out.** Add nothing the request and `SPEC.md` don't call for: not a CSS rule, not a DOM node, not a function, not a parameter, not a layer, not a dependency. This is not a ban on CSS or on features — it is a ban on *unrequested* ones. Asked for a grid? Build exactly that grid, nothing around it. When you notice something that plausibly should exist but was not asked for (a style, an edge case, a helper, a guard), do not add it silently and do not drop it silently — **mention it in chat at implementation time** so the owner decides. The one thing you may add unprompted is `cursor: pointer` on a clickable element.
 
 ## How to communicate
 

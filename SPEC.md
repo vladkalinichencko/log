@@ -142,9 +142,10 @@ Neither owns the data model or imposes styles; both are off by default.
 
 | Dependency | Purpose |
 |---|---|
-| pytest | Python unit/integration tests. |
+| pytest | Python unit/integration tests. Declared as the `dev` optional-dependency in `pyproject.toml`; pytest config sets `pythonpath = ["src"]` so `import log` / `import backend` resolve. |
 | vitest | Frontend unit tests (reducers, selectors, FSMs). |
 | @testing-library/react | Component render tests. |
+| jsdom | The in-memory DOM that vitest runs component tests against (`test.environment = "jsdom"` in `vite.config.ts`). Without it `render(<Component/>)` throws `document is not defined`. |
 
 ---
 
@@ -223,11 +224,13 @@ log/
         test_local_file_storage.py
         test_sqlite_index.py
         test_api_runs.py
+        test_smoke.py             # one end-to-end smoke test per stage (§14)
   frontend/
     package.json
     package-lock.json
-    vite.config.ts
+    vite.config.ts                # vite + vitest config (test.environment = jsdom)
     tsconfig.json
+    tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
     index.html
     src/
       main.tsx                    # React root, router
@@ -635,14 +638,16 @@ classDiagram
 
 Classes (justified): `LocalFileStorage`, `SqliteIndex`, `WebSocketTransport` (each holds a handle — a root path, a db connection, a socket set), `FileWatcher` (holds the watch loop + debounce state). Ports are `typing.Protocol`s (no state).
 
-Plain functions (no state): `read_table(path) -> Table`, the whole `table_engine.py` (`evaluate(expression) -> Table`, `parse(expression) -> Ast`), every function in `statistics.py` (`rolling_mean`, `zscore`, ...), and every FastAPI route handler in `api/`.
+Plain functions (no state): `read_table(path) -> Table`, the whole `table_engine.py` (`evaluate(expression) -> Table`, `parse(expression) -> Ast`), and every FastAPI route handler in `api/`.
+
+`statistics.py` is not a separate feature — it is the **one function registry** that backs the formula language (§9.13). It holds a single dict `FUNCTIONS: dict[str, Function]`, where each `Function` records its `kind` (`"aggregation"` = column→scalar, or `"transform"` = column→column) and its pure implementation. `table_engine` resolves every name in `agg(...)` and `derive(...)` through this one dict; nothing else holds a list of statistics. Each entry has the identical shape and differs only by name, kind, and body (Lego). Adding a statistic = adding one `FUNCTIONS` entry.
 
 | Function | Input | Output | Purpose |
 |---|---|---|---|
 | `read_table(path)` | `.`-path | `Table` | Map physical files/folders to a `Table` (Section 6.2). |
-| `evaluate(expression)` | DSL string | `Table` | Run the merge language (Section 9.13). |
+| `evaluate(expression)` | DSL string | `Table` | Run the merge language (Section 9.13); resolve names via `FUNCTIONS`. |
 | `parse(expression)` | DSL string | `Ast` | Tokenize + parse the DSL; raise on bad token. |
-| `rolling_mean(col, window)` etc. | column + args | column | Derived-column statistics. |
+| `FUNCTIONS[name]` (statistics.py) | column (+ args) | scalar or column | One registry entry per statistic; `kind` picks scalar (aggregation) vs column (transform). |
 | route handlers (Section 9.12) | request DTO | response DTO | Wire ports to HTTP/WS. |
 
 ### 7.3 Frontend code (`frontend/src/`)
@@ -968,7 +973,7 @@ WebSocket `/ws`:
 
 ### 9.13 Merge / table language (v1)
 
-The table engine evaluates a small path-expression DSL. **Single `.` separator** (was `::`).
+**In one breath:** there is one Excel-like set of functions that operate on table columns, and everything — merges, statistics, derived metrics — is built from it. A statistic is not a separate feature; it is one function in this set, applied to a column. The engine evaluates a small path-expression DSL whose function names all come from the single **function registry** (§7.2, `statistics.py`). **Single `.` separator** (was `::`).
 
 ```
 expr        := source ( "|" op )*
@@ -985,10 +990,26 @@ op          := "select(" collist ")"
 collist     := IDENT ("," IDENT)*
 CMP         := "==" | "!=" | ">" | ">=" | "<" | "<="
 DIR         := "asc" | "desc"
-func        := "mean" | "sum" | "min" | "max" | "count" | "std"
-formula     := arithmetic over column refs, numeric literals, and funcs:
-               rolling_mean(col, window), zscore(col, window), abs, log, sqrt
+aggregate   := IDENT                               ; any registry function of kind "aggregation"
+formula     := arithmetic over column refs, numeric literals, and registry
+               functions of kind "transform", e.g. rolling_mean(col, window)
 ```
+
+The single function registry (§7.2, `statistics.py`). Every callable name above —
+both the `aggregate` in `agg(...)` and the functions in a `derive(...)` formula —
+resolves through one registry. Each entry has the same shape and one of two kinds,
+distinguished only by output:
+
+| Kind | Signature | Used by | Examples |
+|---|---|---|---|
+| `aggregation` | `column -> scalar` (collapses a column to a derived **row**) | `agg(name, by=col)` | `mean`, `sum`, `min`, `max`, `count`, `std` |
+| `transform` | `column -> column` (a derived **column**, same length) | `derive(name=...formula...)` | `rolling_mean`, `zscore`, `abs`, `log`, `sqrt` |
+
+Adding a statistic is adding **one registry entry** — its name then works in both
+`agg` and `derive` with no grammar or engine change (the same "one row added"
+uniformity as the renderer in §7.4). The parser rejects a name absent from the
+registry with `TABLE_EXPRESSION_ERROR`.
+
 Semantics:
 - `table(pathexpr)` produces a `Table` whose columns are `step, samples_seen, wall_time, rank` plus one value column per matched leaf path; a `GLOB` matching multiple paths yields one column per match. Because `.` is now the only separator, a module path like `encoder.layer1` and a hierarchy level are addressed the same way; segments may not contain `.`.
 - `join(other, on=step)` = side-by-side comparison joined on the named column (inner join). `concat(other)` = row-wise concatenation and adds a computed boolean column `continuity` (true where consecutive `step` values are non-decreasing across the seam).
@@ -1350,7 +1371,7 @@ Build stages are separate from feature tiers (Section 3). A stage leaves a syste
 
 **Stage 0 — walking skeleton.** Every module/file in Section 5 exists; the system starts end to end; logic is stubbed except the minimal real spine.
 - Real: `log.run` + `log.log` (scalar only) → writer thread → `config.json`/`meta.json`/`metrics.jsonl`. Backend `read_table` for the run-list and one scalar `Table`; `GET /api/runs`, `GET /api/table`. Frontend boots, fetches one `Table`, renders a grid of plain divs, supports cell-edit / add-remove row+column / select / representation-switch against in-memory state (no persistence), top nav bar drill.
-- Stubbed: `watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure` exist with exact signatures and raise `NotImplementedError`. SQLite index, file watcher, WebSocket, table engine, statistics exist as importable no-ops.
+- Stubbed: `watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure` exist with exact signatures and raise `NotImplementedError`. SQLite index, file watcher, WebSocket, and the table engine (parser) exist as importable no-ops. The statistics registry (`statistics.py` `FUNCTIONS`, §7.2/§9.13) is real from v0 — its functions are pure one-liners, so stubbing them would be pointless; only the parser that calls them is deferred.
 - Done when: importing `log` exposes the full Section 9.1 surface; the acceptance criteria "Run registration" (finished), "Scalar logging" (single row), and "UI: Table as the screen" (run list renders, drill replaces view) pass.
 - Tests: unit on `atomic_write_bytes`, `append_jsonl`, `read_table` (run-list + scalar); integration on `GET /api/runs` and `GET /api/table`; one end-to-end smoke test (run a tiny decorated script, start backend, assert the run appears via the API). Frontend unit on `tables_reducer`, `cellEdit_fsm`, `makeFsm`; component test on `TableView` rendering a grid.
 

@@ -8,5 +8,4 @@ def resume_state(
     scheduler: object | None = None,
     checkpoint: str | None = None,
 ) -> int:
-    """Restore training state from checkpoint (stub for v0)."""
     raise NotImplementedError

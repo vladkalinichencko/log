@@ -4,7 +4,6 @@ from pathlib import Path
 
 
 def git_hash() -> str | None:
-    """Return the current git HEAD hash, or None if not in a git repo or git unavailable."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -21,7 +20,6 @@ def git_hash() -> str | None:
 
 
 def requirements_hash() -> str | None:
-    """Hash of requirements.txt if present, else None."""
     req_path = Path("requirements.txt")
     if not req_path.exists():
         return None
@@ -31,7 +29,6 @@ def requirements_hash() -> str | None:
 
 
 def capture_rng() -> dict:
-    """Capture RNG states for torch, torch.cuda, numpy, random."""
     import random
     import numpy as np
     import torch

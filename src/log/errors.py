@@ -1,5 +1,4 @@
 class LogError(Exception):
-    """Base exception for all log toolkit errors."""
 
     def __init__(self, message: str):
         self.message = message

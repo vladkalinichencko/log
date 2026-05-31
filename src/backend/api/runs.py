@@ -2,14 +2,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..config import get_runs_root
 
 router = APIRouter()
 
 
 @router.get("/api/runs")
 def get_runs(
-    runs_root: Path,
+    runs_root: Path = Depends(get_runs_root),
     project: str | None = None,
     status: str | None = None,
     tag: str | None = None,
@@ -59,7 +61,7 @@ def get_runs(
 
 
 @router.get("/api/runs/{project}/{run}")
-def get_run(project: str, run: str, runs_root: Path) -> dict:
+def get_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
     run_dir = runs_root / project / run
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")

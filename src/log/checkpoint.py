@@ -12,5 +12,4 @@ def checkpoint(
     mode: str = "min",
     tag: str | None = None,
 ) -> bool:
-    """Save a checkpoint (stub for v0)."""
     raise NotImplementedError

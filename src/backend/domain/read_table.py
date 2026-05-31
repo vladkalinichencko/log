@@ -5,16 +5,9 @@ from .models import Cell, CellType, Representation, Table, TableKind
 
 
 def read_table(path: str, runs_root: Path) -> Table:
-    """
-    Read a table from a dot-path.
-
-    v0: handles runs root (folder of projects) and project folder (folder of runs).
-    Returns a folder Table with table_ref cells.
-    """
     segments = path.split(".") if path else []
 
     if not segments or path == "":
-        # runs/ root: folder of projects
         projects = [
             d for d in runs_root.iterdir() if d.is_dir() and not d.name.startswith(".")
         ]
@@ -33,7 +26,6 @@ def read_table(path: str, runs_root: Path) -> Table:
         )
 
     elif len(segments) == 1:
-        # <project>: folder of runs
         project = segments[0]
         project_dir = runs_root / project
         if not project_dir.exists():
@@ -78,7 +70,6 @@ def read_table(path: str, runs_root: Path) -> Table:
         )
 
     else:
-        # v0: stub deeper paths
         return Table(
             name="stub",
             kind=TableKind.grid,

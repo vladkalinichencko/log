@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..config import get_runs_root
 from ..domain.models import Table
 from ..domain.read_table import read_table
 
@@ -9,8 +10,9 @@ router = APIRouter()
 
 
 @router.get("/api/table")
-def get_table(path: str = Query(...), runs_root: Path = None) -> dict:
-    """Get a table by dot-path."""
+def get_table(
+    path: str = Query(...), runs_root: Path = Depends(get_runs_root)
+) -> dict:
     try:
         table = read_table(path, runs_root)
         return _table_to_dict(table)
@@ -19,7 +21,6 @@ def get_table(path: str = Query(...), runs_root: Path = None) -> dict:
 
 
 def _table_to_dict(table: Table) -> dict:
-    """Convert Table to dict for JSON response."""
     return {
         "name": table.name,
         "kind": table.kind.value,

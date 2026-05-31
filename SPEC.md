@@ -945,7 +945,7 @@ log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 
 ### 9.12 Backend HTTP API
 
-All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status.
+All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status. Server settings a handler needs but the client never sends — `runs_root` above all — are passed in via FastAPI's `Depends(get_runs_root)`, not as query parameters (ADR-017); the only query parameters are the ones listed in the Request column.
 
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
@@ -1492,4 +1492,11 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Why**: Each of the three changes an interface — the way a tensor is opened, the shape of the series response, the way the grid mounts rows — so it cannot be retrofitted without breaking callers; a run with a 4 GB tensor or a 2M-point series is simply unopenable without them. The governing rule is one sentence: never materialize more than the viewport can display. Prefetch changes no interface, so it is a pure later speed-up.
 **Alternatives considered**: full-load everything and optimize when it hurts (rejected — the first real training run breaks it, and the fixes are interface changes, not tweaks); a client-side downsampling library (rejected — it still ships 2M points over the socket; the bucketing must be server-side); a virtualization library for the grid (acceptable, but windowing is ~40 lines hand-rolled and matches ADR-013's drop-the-dependency stance).
 **Consequences**: `read_table`, the series endpoint, and the grid renderer each carry a small amount of structure from the first version. In return the system opens arbitrarily large runs, and the one rule ("never load more than the screen shows") is auditable per component.
+
+### ADR-017: Server settings reach handlers via `Depends`, never as query parameters
+
+**Decision**: A route handler that needs a server-side value the client must not send — `runs_root` (where run data lives) above all — declares it as `param: T = Depends(provider)` (e.g. `runs_root: Path = Depends(get_runs_root)`). FastAPI calls the provider and injects the value. Handlers never take such a value as a bare parameter, and the app never re-wraps a route to smuggle it in.
+**Why**: FastAPI infers each handler parameter's source from its declaration; a bare `runs_root: Path` is read as a *client-supplied query parameter*, which is wrong (the client must not choose the server's data directory) and forces a workaround. The original code worked around it by registering the router and then re-declaring `get_table`/`get_runs` on the app to pull `runs_root` from middleware — an override layer that duplicated each route and silently dropped any parameter the inner function later gained (the `project/status/tag` filters became dead on the real URL). `Depends` is FastAPI's built-in mechanism for exactly this: one declaration, no wrapper, no duplication, every parameter preserved, and one identical shape across all handlers.
+**Alternatives considered**: middleware + `request.state` + per-route override (rejected — the duplication/drift bug above); a global module singleton for `runs_root` (rejected — hidden global state, untestable per-request, can't be swapped in tests). With `Depends`, tests call the handler directly and pass `runs_root` positionally, overriding the default.
+**Consequences**: Every endpoint that touches the filesystem reads `runs_root` the same way; adding a server-injected setting is one `Depends` parameter, not a new wrapper; the audit checks the registered route's parameters, not an inner helper's.
 

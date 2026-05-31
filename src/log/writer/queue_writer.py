@@ -15,7 +15,6 @@ from .tensor_io import write_npy
 
 @dataclass
 class WriteJob:
-    """Base class for write jobs."""
 
     pass
 
@@ -50,7 +49,6 @@ class CheckpointJob(WriteJob):
 
 
 class WriterThread:
-    """Background writer thread consuming WriteJobs from a queue."""
 
     def __init__(self, run_dir: Path, meta_path: Path):
         self.run_dir = run_dir
@@ -60,22 +58,18 @@ class WriterThread:
         self.current_step_scalars: dict[tuple[int, int], dict[str, Any]] = {}
 
     def start(self) -> None:
-        """Start the background writer thread."""
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def stop_and_join(self) -> None:
-        """Enqueue sentinel and join the thread."""
         self.queue.put(None)
         if self.thread is not None:
             self.thread.join()
 
     def enqueue(self, job: WriteJob) -> None:
-        """Enqueue a write job."""
         self.queue.put(job)
 
     def _run(self) -> None:
-        """Worker loop: drain queue until sentinel None."""
         while True:
             job = self.queue.get()
             if job is None:
@@ -87,7 +81,6 @@ class WriterThread:
                 self._append_error(str(e))
 
     def _process(self, job: WriteJob) -> None:
-        """Process one write job."""
         if isinstance(job, ScalarJob):
             key = (job.step, job.rank)
             if key not in self.current_step_scalars:
@@ -100,7 +93,6 @@ class WriterThread:
                 }
             self.current_step_scalars[key]["scalars"][job.path] = job.value
 
-            # Flush if step advanced
             all_steps = sorted(set(k[0] for k in self.current_step_scalars.keys()))
             if len(all_steps) > 1:
                 for s in all_steps[:-1]:
@@ -113,29 +105,24 @@ class WriterThread:
             self._write_checkpoint(job)
 
     def _flush_scalars(self) -> None:
-        """Flush all pending scalar rows."""
         for step in sorted(set(k[0] for k in self.current_step_scalars.keys())):
             self._flush_step(step)
 
     def _flush_step(self, step: int) -> None:
-        """Flush all rows for a given step."""
         keys = [k for k in self.current_step_scalars.keys() if k[0] == step]
         for key in keys:
             row = self.current_step_scalars.pop(key)
-            epoch = 0  # v0: single epoch
+            epoch = 0
             epoch_dir = self.run_dir / f"epoch_{epoch:04d}"
             metrics_path = epoch_dir / "metrics.jsonl"
             append_jsonl(metrics_path, row)
 
     def _write_tensor(self, job: TensorJob) -> None:
-        """Write one tensor job."""
         epoch_dir = self.run_dir / f"epoch_{job.epoch:04d}"
         tensors_dir = epoch_dir / "tensors"
 
-        # CPU copy on writer thread
         arr = job.tensor.detach().cpu().numpy()
 
-        # Sanitize path for filename
         safe_name = "".join(
             c if c not in r'/\:*?"<>|' else "_" for c in job.path
         )
@@ -144,7 +131,6 @@ class WriterThread:
 
         write_npy(file_path, arr)
 
-        # Append index row
         index_row = {
             "path": job.path,
             "step": job.step,
@@ -158,11 +144,9 @@ class WriterThread:
         append_jsonl(tensors_dir / "index.jsonl", index_row)
 
     def _write_checkpoint(self, job: CheckpointJob) -> None:
-        """Write checkpoint (stub for v0)."""
         pass
 
     def _append_error(self, error: str) -> None:
-        """Append an error to meta.json writer_errors."""
         try:
             meta = json.loads(self.meta_path.read_text())
             meta.setdefault("writer_errors", []).append(error)

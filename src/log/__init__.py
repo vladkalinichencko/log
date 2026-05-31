@@ -1,4 +1,3 @@
-"""log: Local-first ML training toolkit for PyTorch."""
 
 from . import export
 from .checkpoint import checkpoint

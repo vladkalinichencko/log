@@ -10,7 +10,6 @@ from .writer.queue_writer import ScalarJob, TensorJob
 
 
 class Logger:
-    """Logger bound to an active run."""
 
     def __init__(self, ctx: RunContext):
         self.ctx = ctx
@@ -21,7 +20,6 @@ class Logger:
         value: Union[float, int, bool, torch.Tensor, np.ndarray],
         step: int | None = None,
     ) -> None:
-        """Log a scalar or tensor at a given step."""
         if not path or path == "":
             raise InvalidPathError("path cannot be empty")
 
@@ -29,9 +27,8 @@ class Logger:
             step = self.ctx.current_step
 
         wall_time = time.time()
-        rank = 0  # v0: single rank
+        rank = 0
 
-        # Determine if scalar or tensor
         is_scalar = False
         if isinstance(value, (int, float, bool)):
             is_scalar = True
@@ -60,7 +57,6 @@ class Logger:
                 epoch=self.ctx.epoch,
             )
         else:
-            # Tensor case
             if isinstance(value, np.ndarray):
                 value = torch.from_numpy(value)
             job = TensorJob(
@@ -77,7 +73,6 @@ class Logger:
 
 
 def logger() -> Logger:
-    """Return a logger bound to the active run."""
     ctx = get_active_run()
     return Logger(ctx)
 
@@ -87,5 +82,4 @@ def log(
     value: Union[float, int, bool, torch.Tensor, np.ndarray],
     step: int | None = None,
 ) -> None:
-    """Module-level shortcut to log."""
     logger().log(path, value, step)

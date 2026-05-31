@@ -3,7 +3,6 @@ from typing import Protocol
 
 
 class StoragePort(Protocol):
-    """Protocol for backend storage operations."""
 
     def read(self, path: Path) -> bytes:
         ...

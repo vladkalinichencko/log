@@ -8,7 +8,7 @@ Read before writing or reviewing any code in this repo. `SPEC.md` says WHAT to b
 
 2. **Reads effortlessly.** Names say what a thing is AND why it exists, in the fewest words that still distinguish it. No comments — names carry the meaning. Parallel names for parallel roles. Someone unfamiliar must understand a function by reading it, with no external context.
 
-3. **Minimum code.** The fewest concepts, layers, and dependencies that satisfy `SPEC.md`. Never add defensively, never pad, never keep something merely because it is conventional. Anything that looks like extra (an error class, a layer, an abstraction, a dependency) must justify its existence in one concrete sentence or be removed. Expect this to be challenged — answer with the concrete reason or cut it.
+3. **Minimum code.** The fewest concepts, layers, dependencies, and **function parameters** that satisfy `SPEC.md`. Never add defensively, never pad, never keep something merely because it is conventional. Anything that looks like extra (an error class, a layer, an abstraction, a dependency, an extra parameter) must justify its existence in one concrete sentence or be removed. A "fancy" touch that seems useful but was not requested — an extra option, a configurability knob, a clever generalization — is **forbidden until you name it to the owner and they accept it**; do not add it silently. Expect every line to be challenged — answer with the concrete reason or cut it.
 
 4. **Functions over classes.** A class exists only when it holds data/state fields with operations on them. No state fields → plain functions, never an object for its own sake.
 

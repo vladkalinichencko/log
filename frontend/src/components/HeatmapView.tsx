@@ -5,6 +5,5 @@ interface HeatmapViewProps {
 }
 
 export function HeatmapView({ table }: HeatmapViewProps) {
-  // Stub for v0
   return <div>{table.name} (heatmap)</div>;
 }

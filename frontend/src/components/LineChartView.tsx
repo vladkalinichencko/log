@@ -5,6 +5,5 @@ interface LineChartViewProps {
 }
 
 export function LineChartView({ table }: LineChartViewProps) {
-  // Stub for v0
   return <div>{table.name} (line chart)</div>;
 }

@@ -5,6 +5,5 @@ interface ListViewProps {
 }
 
 export function ListView({ table }: ListViewProps) {
-  // Stub for v0
   return <div>{table.name} (list view)</div>;
 }

@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_runs_root
+from ..domain.read_table import read_table
+from .tables import _table_to_dict
 
 router = APIRouter()
 
@@ -62,7 +64,7 @@ def get_runs(
 
 @router.get("/api/runs/{project}/{run}")
 def get_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
-    run_dir = runs_root / project / run
-    if not run_dir.exists():
+    try:
+        return _table_to_dict(read_table(f"{project}.{run}", runs_root))
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
-    return {"name": run, "kind": "folder", "cells": []}

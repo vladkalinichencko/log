@@ -52,8 +52,19 @@ flowchart LR
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
 | Representation switcher as nested table/viz two-step dropdown | **simplified** | §11.2a; currently a flat row of buttons |
 
+## Pending v1 (audit-identified, not built yet — not bugs)
+
+- **histogram** representation + `HistogramView` (§11.2b) — `applicable` does not offer it yet.
+- **Tile mode toggle** (table | visualization) + **nested chart-type dropdown** (§11.2a) — current `RepresentationSwitcher` is a flat row of buttons; no `mode` field on the tile record.
+- **`POST /api/tables/eval`** (§9.12) — blocked on the `table_engine` parser (stub).
+- **`DELETE /api/runs/{p}/{run}`**, **`POST /api/runs/rename`** (§9.12) — not built.
+- **`applicable()` refinement** (§11.1) — currently keys off `kind` only; does not yet inspect column types / x-axis to gate `line`/`heatmap` precisely.
+- **Edit persistence to `views/<id>.json`** — table edits are in-memory only.
+- **`Toolbar`**, **search wiring** — stubs.
+
 ## Changelog (newest first — commit → what became real)
 
+- `HEAD` — Audit drift fixes: `tags` written into `meta.json`; clickable breadcrumb (NavBar); `id` saved on workspace tiles; `GET /api/runs/{p}/{run}` returns the real folder `Table` (read_table + serialize); `/api/series` stub signatures match §9.12; §6.3 representation rule reworded to match `read_table` (folders/key-value/tensor→grid, series→line).
 - `be00da1` — Route-backed fullscreen modal (§11.2a): Tile "expand" sets `?modal=path`; Modal renders the tile fullscreen, URL-addressable, closed by the close button or browser back.
 - `bb7c1e5` — Real URL routing: react-router-dom replaces the store route slice. Drill changes the URL (`/<dot-path>`), browser back/forward work, links are shareable (§11.2 "URL is state"). routeSlice deleted; Cell/NavBar/App use useNavigate/useLocation.
 - `4977966` — Table editing complete (§11.3): editable name/headers (HeaderCell + cellEdit_fsm), delete row/column (DotMenu + deleteConfirm_fsm two-click), tables_removeRow/removeColumn/editName. In-memory.

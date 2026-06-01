@@ -94,6 +94,7 @@ def run(
                 "samples_seen": 0,
                 "world_size": 1,
                 "status": "running",
+                "tags": tags,
                 "resume_diff": None,
                 "writer_errors": [],
             }

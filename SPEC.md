@@ -380,7 +380,7 @@ classDiagram
 Field rules:
 - `column_names` / `row_names`: `null` when the table has none; a header row/column is rendered only when its names list is non-`null`.
 - `kind`: `scalar` = no cells until grown (rendered as just the name); `row` = 1×N; `column` = N×1; `grid` = N×M (Excel); `folder` = a table whose cells are `table_ref`s to child tables. n-D is `[v3]` and not represented here.
-- `representation`: default chosen by `kind` (`scalar`→grid, `grid`→grid, `folder`→list, a single numeric series→line). The UI may switch it.
+- `representation`: default set by `read_table` per table role — folders, key/value tables, and tensor grids default to `grid` (rendered by `TableView`, which carries headers + drill); a scalar series defaults to `line`. The UI may switch it via `applicable(table)` (§11.1), which offers `list` as the flat alternative to `grid`.
 - `source_path`: the `.`-path this table was read from (e.g. `default.run3.epoch_0000.loss`); `null` for a table that exists only as derived/in-memory state.
 - `Cell.value`: in v0/v1 every value is stored as a **string**; `type` records the intended type for later typed display.
 - `Cell.ref`: for `tensor_ref` and `table_ref`, the `.`-path of the target; `null` otherwise.

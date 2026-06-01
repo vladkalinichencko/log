@@ -39,6 +39,7 @@ export function App() {
     saveWorkspace("default", {
       id: "default",
       tiles: pinned.map((path) => ({
+        id: path,
         table_path: path,
         mode: "table",
         representation: tiles.get(path)?.representation,

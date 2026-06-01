@@ -10,14 +10,20 @@ export function NavBar() {
       <button onClick={() => navigate(-1)}>←</button>
       <button onClick={() => navigate(1)}>→</button>
       <span>
-        {segments.length === 0
-          ? "Home"
-          : segments.map((seg: string, i: number) => (
-              <span key={i}>
-                {i > 0 && " / "}
-                {seg}
-              </span>
-            ))}
+        <span style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
+          Home
+        </span>
+        {segments.map((seg: string, i: number) => (
+          <span key={i}>
+            {" / "}
+            <span
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate("/" + segments.slice(0, i + 1).join("."))}
+            >
+              {seg}
+            </span>
+          </span>
+        ))}
       </span>
     </div>
   );

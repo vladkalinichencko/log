@@ -259,6 +259,7 @@ log/
         deleteConfirmFsm.ts       # deleteConfirm_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
         searchFsm.ts              # search_fsm derived from baseFsm
+        resizeFsm.ts              # resize_fsm (idle/dragging) derived from baseFsm
       components/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
@@ -271,6 +272,7 @@ log/
         AddControl.tsx            # the ＋ control (uses button_fsm)
         Toolbar.tsx               # thin action bar
         RepresentationSwitcher.tsx
+        ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
         LineChartView.tsx         # hand-drawn SVG line
         HeatmapView.tsx           # hand-drawn SVG grid of rects
@@ -1054,7 +1056,8 @@ tables_editName(tableId, kind, index, name): void   // kind: "table"|"row"|"col"
 tables_undo(): void
 tiles_setRepresentation(tileId, rep: Representation): void
 tiles_pin(path: string) / tiles_unpin(path: string): void   // add/remove a dashboard tile
-tiles_loadWorkspace(workspace): void          // restore pinned paths + per-tile representations
+tiles_loadWorkspace(workspace): void          // restore pinned paths + per-tile representations + sizes
+tiles_resize(tileId, dw: number, dh: number): void   // grow/shrink a tile by a delta (floored)
 search_setQuery(q: string): void
 focus_setTarget(path: string): void
 connection_event(e: "open"|"close"|"retry"): void
@@ -1062,7 +1065,7 @@ connection_event(e: "open"|"close"|"retry"): void
 
 Selectors (pure, hand-memoized): `table_selector(state, tableId) -> Table`, `run_selector(state) -> RunSummary[]`, `search_selector(state) -> string[]` (matching `.`-paths), `isFocused(state, path) -> boolean`, `tile_selector(state, tileId) -> {table, representation}`.
 
-FSM hooks: every `Button` mounts a `button_fsm`; every `Cell` a `cellEdit_fsm`; every `DotMenu` a `deleteConfirm_fsm`; every async fetch a `load_fsm`; the websocket a `connection_fsm`; the search box a `search_fsm`. All derive from `makeFsm` (Section 7.3); none is re-invented.
+FSM hooks: every `Button` mounts a `button_fsm`; every `Cell` a `cellEdit_fsm`; every `DotMenu` a `deleteConfirm_fsm`; every async fetch a `load_fsm`; the websocket a `connection_fsm`; the search box a `search_fsm`; every `ResizeHandle` a `resize_fsm`. All derive from `makeFsm` (Section 7.3); none is re-invented.
 
 ---
 

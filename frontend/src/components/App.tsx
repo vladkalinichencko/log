@@ -40,6 +40,8 @@ export function App() {
         table_path: path,
         mode: "table",
         representation: tiles.get(path)?.representation,
+        w: tiles.get(path)?.w,
+        h: tiles.get(path)?.h,
       })),
     }).catch((err) => console.error("Failed to save workspace:", err));
 

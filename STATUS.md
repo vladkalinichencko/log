@@ -43,7 +43,7 @@ flowchart LR
 | `Cell`: drill on `table_ref` click, double-click edit | **real** | §11.2, §11.3 |
 | `TableView`: column/row headers + ＋ add row/column (in-memory) | **real** | §11.3; folders/config/meta now default to `grid` |
 | `AddControl`: ＋ button (button_fsm) | **real** | §11.3; two controls labelled `＋ column`/`＋ row` until CSS positions them on edges |
-| `Dashboard`: pin/unpin tiles + save/load workspace | **partial** | §11.4; persists to `runs/workspaces/`; no resize/drag yet |
+| `Dashboard`: pin/unpin + flex-wrap layout + drag-resize tiles + save/load workspace | **real** | §11.4; tile sizes persist; first functional CSS (flex/size/border/overflow + resize cursor only) |
 | `HeaderCell` (editable header), `DotMenu`, `Toolbar` | **stub** | §11.3; headers render as plain divs for now |
 | Live (WebSocket → `liveTick` → Tile refetch), `connection_fsm` wiring | **real** | §10.5; global tick refetches open tiles on any run change |
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
@@ -51,7 +51,8 @@ flowchart LR
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — Live updates: `/ws` watches `runs/` (watchfiles) and pushes `run_updated`; frontend `live_bump` → tiles refetch; `connection_event` drives `connection_fsm`.
+- `HEAD` — Dashboard tiles are drag-resizable (ResizeHandle + resize_fsm, hand-rolled), laid out flex-wrap; sizes persist in the workspace. First functional CSS.
+- `7ec0afd` — Live updates: `/ws` watches `runs/` (watchfiles) and pushes `run_updated`; frontend `live_bump` → tiles refetch; `connection_event` drives `connection_fsm`.
 - `7051550` — Workspace persistence: `/api/workspaces` (list/save/delete → `runs/workspaces/<id>.json`, global cross-run); App saves the dashboard and reloads it on startup (`tiles_loadWorkspace`).
 - `f60a077` — TableView renders column/row headers + ＋ add row/column (in-memory edits); folders/config/meta default to `grid`; AddControl real; vitest cleanup setup.
 - `1e79987` — Dashboard: pin/unpin tables into a stack of independent Tiles (§11.4, static).

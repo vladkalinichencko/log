@@ -16,7 +16,7 @@ def _folder(name: str, source_path: str, entries: list[tuple[str, str]]) -> Tabl
         column_names=None,
         row_names=None,
         cells=cells,
-        representation=Representation.list,
+        representation=Representation.grid,
         source_path=source_path,
     )
 
@@ -35,7 +35,7 @@ def _keyvalue(name: str, source_path: str, pairs) -> Table:
         column_names=["key", "value"],
         row_names=None,
         cells=cells,
-        representation=Representation.list,
+        representation=Representation.grid,
         source_path=source_path,
     )
 
@@ -63,7 +63,7 @@ def read_table(path: str, runs_root: Path) -> Table:
             column_names=None,
             row_names=None,
             cells=cells,
-            representation=Representation.list,
+            representation=Representation.grid,
             source_path=None,
         )
 
@@ -96,7 +96,7 @@ def read_table(path: str, runs_root: Path) -> Table:
             column_names=["run", "status", "samples_seen"],
             row_names=None,
             cells=cells,
-            representation=Representation.list,
+            representation=Representation.grid,
             source_path=project,
         )
 
@@ -128,7 +128,7 @@ def read_table(path: str, runs_root: Path) -> Table:
         tags = [[Cell(type=CellType.string, value=r["tag"], ref=None)] for r in _jsonl(run_dir / "checkpoints" / "index.jsonl")]
         return Table(
             name="checkpoints", kind=TableKind.folder, column_names=["tag"],
-            row_names=None, cells=tags, representation=Representation.list,
+            row_names=None, cells=tags, representation=Representation.grid,
             source_path=f"{base}.checkpoints",
         )
 

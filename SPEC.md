@@ -277,6 +277,7 @@ log/
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
+        setup.ts                  # vitest afterEach(cleanup)
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx

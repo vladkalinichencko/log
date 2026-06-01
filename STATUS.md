@@ -39,14 +39,17 @@ flowchart LR
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
 | Views: `TableView`, `ListView`, `LineChartView` (SVG), `HeatmapView` (SVG) | **real** | §11.2b; line/heatmap hand-drawn |
 | `Cell`: drill on `table_ref` click, double-click edit | **real** | §11.2, §11.3 |
+| `TableView`: column/row headers + ＋ add row/column (in-memory) | **real** | §11.3; folders/config/meta now default to `grid` |
+| `AddControl`: ＋ button (button_fsm) | **real** | §11.3; two controls labelled `＋ column`/`＋ row` until CSS positions them on edges |
 | `Dashboard`: pin/unpin tiles (static stack) | **partial** | §11.4; no resize/drag/persistence yet |
-| `HeaderCell`, `DotMenu`, `AddControl`, `Toolbar` | **stub** | §11.3 |
+| `HeaderCell` (editable header), `DotMenu`, `Toolbar` | **stub** | §11.3; headers render as plain divs for now |
 | Live (WebSocket → refetch), `connection_fsm` wiring | **not wired** | §10.5 |
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
 | Representation switcher as nested table/viz two-step dropdown | **simplified** | §11.2a; currently a flat row of buttons |
 
 ## Changelog (newest first — commit → what became real)
 
+- `HEAD` — TableView renders column/row headers + ＋ add row/column (in-memory edits); folders/config/meta default to `grid`; AddControl real; vitest cleanup setup.
 - `1e79987` — Dashboard: pin/unpin tables into a stack of independent Tiles (§11.4, static).
 - `eb62146` — extracted `Tile` (load_fsm fetch + switcher + render); `App` went thin.
 - `ff01ad1` — `applicable(table)` + live RepresentationSwitcher (flip grid/list/line/heatmap).

@@ -41,4 +41,36 @@ describe("TableView", () => {
     fireEvent.click(screen.getByText("proj"));
     expect((useStore.getState() as any).currentPath).toBe("proj");
   });
+
+  it("renders column-name headers", () => {
+    const grid: Table = {
+      name: "g",
+      kind: TableKind.Grid,
+      column_names: ["alpha", "beta"],
+      row_names: null,
+      cells: [[{ type: CellType.Number, value: "1", ref: null }, { type: CellType.Number, value: "2", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "g1",
+    };
+    render(<TableView table={grid} />);
+    expect(screen.getByText("alpha")).toBeTruthy();
+    expect(screen.getByText("beta")).toBeTruthy();
+  });
+
+  it("＋ row adds a row to the stored table", () => {
+    const s = () => useStore.getState() as any;
+    const grid: Table = {
+      name: "g",
+      kind: TableKind.Grid,
+      column_names: ["a"],
+      row_names: null,
+      cells: [[{ type: CellType.Number, value: "1", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "g2",
+    };
+    s().tables_loadTable(grid);
+    render(<TableView table={grid} />);
+    fireEvent.click(screen.getByText("＋ row"));
+    expect(s().tables.get("g2").cells.length).toBe(2);
+  });
 });

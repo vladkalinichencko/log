@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { LineChartView } from "../components/LineChartView";
 import { HeatmapView } from "../components/HeatmapView";
 import { ListView } from "../components/ListView";
+import { RepresentationSwitcher } from "../components/RepresentationSwitcher";
+import { applicable } from "../components/render";
+import { useStore } from "../store/store";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
 
 const num = (v: string): Cell => ({ type: CellType.Number, value: v, ref: null });
@@ -43,5 +46,19 @@ describe("representations", () => {
     ]);
     render(<ListView table={folder} />);
     expect(screen.getByText("proj")).toBeTruthy();
+  });
+
+  it("applicable derives representations from table shape", () => {
+    const col = table(TableKind.Column, Representation.Line, [[num("1")]]);
+    expect(applicable(col)).toContain(Representation.Line);
+    const grid = table(TableKind.Grid, Representation.Grid, [[num("1")]]);
+    expect(applicable(grid)).toContain(Representation.Heatmap);
+  });
+
+  it("switcher sets the tile representation on click", () => {
+    const col = table(TableKind.Column, Representation.Line, [[num("1")]]);
+    render(<RepresentationSwitcher table={col} tileId="t1" />);
+    fireEvent.click(screen.getByText("grid"));
+    expect((useStore.getState() as any).tiles.get("t1").representation).toBe("grid");
   });
 });

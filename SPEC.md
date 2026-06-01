@@ -261,6 +261,7 @@ log/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
         Tile.tsx                  # one table: load_fsm fetch + switcher + render
+        Dashboard.tsx             # grid of pinned Tiles
         TableView.tsx             # grid-of-divs representation
         Cell.tsx                  # one cell (uses cellEdit_fsm)
         HeaderCell.tsx            # column/row name cell (edit + dot-menu)
@@ -280,6 +281,7 @@ log/
         cellEditFsm.test.ts
         TableView.test.tsx
         representations.test.tsx  # line / heatmap / list render components
+        tilesSlice.test.ts        # pin / unpin dashboard tiles
 ```
 
 ### 5.3 On-disk run data layout

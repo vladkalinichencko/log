@@ -262,8 +262,9 @@ log/
       components/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
-        Tile.tsx                  # one table: load_fsm fetch + switcher + render
+        Tile.tsx                  # one table: load_fsm fetch + switcher + expand + render
         Dashboard.tsx             # grid of pinned Tiles
+        Modal.tsx                 # fullscreen route-backed tile (?modal=path)
         TableView.tsx             # grid-of-divs representation
         Cell.tsx                  # one cell (uses cellEdit_fsm)
         HeaderCell.tsx            # column/row name cell (edit + dot-menu)
@@ -285,8 +286,9 @@ log/
         cellEditFsm.test.ts
         TableView.test.tsx
         representations.test.tsx  # line / heatmap / list render components
-        tilesSlice.test.ts        # pin / unpin / loadWorkspace
+        tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
+        modal.test.tsx            # route-backed modal open/close
 ```
 
 ### 5.3 On-disk run data layout

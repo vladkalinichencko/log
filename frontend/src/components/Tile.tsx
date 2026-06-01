@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { RepresentationSwitcher } from "./RepresentationSwitcher";
+import { Button } from "./Button";
 import { render } from "./render";
 import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
@@ -11,6 +13,7 @@ interface TileProps {
 }
 
 export function Tile({ path }: TileProps) {
+  const [, setSearchParams] = useSearchParams();
   const [loadState, setLoadState] = useState(loadFsm.initial);
   const [table, setTable] = useState<Table | null>(null);
   const tables_loadTable = useStore((state: any) => state.tables_loadTable);
@@ -36,6 +39,7 @@ export function Tile({ path }: TileProps) {
   return (
     <div>
       <RepresentationSwitcher table={table} tileId={path} />
+      <Button label="expand" onClick={() => setSearchParams({ modal: path })} />
       {render(table, representation)}
     </div>
   );

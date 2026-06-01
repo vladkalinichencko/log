@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { NavBar } from "./NavBar";
 import { Tile } from "./Tile";
 import { Dashboard } from "./Dashboard";
+import { Modal } from "./Modal";
 import { Button } from "./Button";
 import { useStore } from "../store/store";
 import { fetchWorkspaces, saveWorkspace } from "../api/client";
@@ -53,6 +54,7 @@ export function App() {
       <Button label="save" onClick={save} />
       <Tile path={currentPath} />
       <Dashboard />
+      <Modal />
     </div>
   );
 }

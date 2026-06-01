@@ -73,4 +73,43 @@ describe("TableView", () => {
     fireEvent.click(screen.getByText("＋ row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
   });
+
+  it("DotMenu deletes a column after two confirmations", () => {
+    const s = () => useStore.getState() as any;
+    const grid: Table = {
+      name: "g",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [[{ type: CellType.Number, value: "1", ref: null }, { type: CellType.Number, value: "2", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "g3",
+    };
+    s().tables_loadTable(grid);
+    render(<TableView table={grid} />);
+    fireEvent.click(screen.getAllByText("⋯")[0]);
+    fireEvent.click(screen.getByText("delete"));
+    fireEvent.click(screen.getByText("confirm?"));
+    expect(s().tables.get("g3").column_names).toEqual(["b"]);
+  });
+
+  it("double-click + Enter renames a column header", () => {
+    const s = () => useStore.getState() as any;
+    const grid: Table = {
+      name: "gg",
+      kind: TableKind.Grid,
+      column_names: ["a"],
+      row_names: null,
+      cells: [[{ type: CellType.Number, value: "1", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "g4",
+    };
+    s().tables_loadTable(grid);
+    render(<TableView table={grid} />);
+    fireEvent.doubleClick(screen.getByText("a"));
+    const input = screen.getByDisplayValue("a");
+    fireEvent.change(input, { target: { value: "alpha" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(s().tables.get("g4").column_names).toEqual(["alpha"]);
+  });
 });

@@ -223,6 +223,7 @@ log/
         test_local_file_storage.py
         test_sqlite_index.py
         test_api_runs.py
+        test_workspaces.py        # workspace save / list / delete
         test_smoke.py             # one end-to-end smoke test per stage (§14)
   frontend/
     package.json
@@ -291,6 +292,8 @@ log/
 
 ```
 runs/
+  workspaces/                    # GLOBAL, cross-run dashboards (a workspace pins
+    <workspace-id>.json          #   tiles from any run; Section 6.3). Not under a run.
   <project>/
     <run-name>/
       config.json                # hyperparameter snapshot at run start (Section 6.3)
@@ -305,9 +308,9 @@ runs/
         <tag>.pt                 # checkpoint payload (Section 10.3)
       views/
         <view-id>.json           # saved table query/transform definition (Section 6.3)
-      workspaces/
-        <workspace-id>.json      # saved tile-canvas layout (Section 6.3)
 ```
+
+Workspaces live at `runs/workspaces/` (global), not under a run, because a workspace composes tiles from any run (cross-run dashboards). Views stay per-run (a view is a derived transform of one run's table). The backend writes only these derived JSON files (workspaces/views); it never mutates source training data (ADR-017 read-only stance applies to source only).
 
 Rules:
 - `<run-name>` defaults to `<timestamp>-<8-hex>` where timestamp is `YYYYMMDD-HHMMSS` (local time) and hex is `os.urandom(4).hex()`. Overridable via `log.run(name=...)`. On collision, append `-<8-hex>` until unique.
@@ -965,7 +968,7 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | GET | `/api/views` | `run?` | `ViewDefinition[]` | — |
 | PUT | `/api/views/{id}` | `ViewDefinition` | `ViewDefinition` | 400 `INVALID_VIEW` |
 | DELETE | `/api/views/{id}` | — | `{ deleted: true }` | 404 `VIEW_NOT_FOUND` |
-| GET | `/api/workspaces` | `run?` | `Workspace[]` | — |
+| GET | `/api/workspaces` | — | `Workspace[]` (all global workspaces) | — |
 | PUT | `/api/workspaces/{id}` | `Workspace` | `Workspace` | 400 `INVALID_WORKSPACE` |
 | DELETE | `/api/workspaces/{id}` | — | `{ deleted: true }` | 404 `WORKSPACE_NOT_FOUND` |
 
@@ -1049,6 +1052,7 @@ tables_editName(tableId, kind, index, name): void   // kind: "table"|"row"|"col"
 tables_undo(): void
 tiles_setRepresentation(tileId, rep: Representation): void
 tiles_pin(path: string) / tiles_unpin(path: string): void   // add/remove a dashboard tile
+tiles_loadWorkspace(workspace): void          // restore pinned paths + per-tile representations
 search_setQuery(q: string): void
 focus_setTarget(path: string): void
 connection_event(e: "open"|"close"|"retry"): void

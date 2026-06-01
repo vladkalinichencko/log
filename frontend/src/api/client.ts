@@ -19,3 +19,23 @@ export async function fetchRuns(): Promise<any[]> {
   }
   return response.json();
 }
+
+export async function fetchWorkspaces(): Promise<any[]> {
+  const response = await fetch(`${API_BASE}/api/workspaces`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function saveWorkspace(id: string, workspace: any): Promise<any> {
+  const response = await fetch(`${API_BASE}/api/workspaces/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(workspace),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save workspace: ${response.statusText}`);
+  }
+  return response.json();
+}

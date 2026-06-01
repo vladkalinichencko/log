@@ -32,7 +32,8 @@ flowchart LR
 | Toolkit: `watch/track/distribute/checkpoint/resume_state/schedules/tick/export.figure` | **stub** | NotImplementedError, exact §9 signatures (Stage 2) |
 | `read_table` all levels | **real** | §6.2 full ladder |
 | `GET /api/runs` (project/status/tag filters), `GET /api/table` | **real** | §9.12, ADR-017 (Depends) |
-| `/api/series`, `/api/views`, `/api/workspaces`, `/ws` | **stub** | endpoints exist, no behavior |
+| `/api/workspaces` (GET list, PUT save, DELETE) | **real** | §9.12; writes `runs/workspaces/<id>.json` (global, cross-run; atomic temp+rename) |
+| `/api/series`, `/api/views`, `/ws` | **stub** | endpoints exist, no behavior |
 | `table_engine` parser (`evaluate`/`parse`) | **stub** | §9.13; `FUNCTIONS` registry is **real** |
 | SqliteIndex, FileWatcher, WebSocketTransport | **stub** | §7.2 adapters (Stage 3) |
 | Frontend: store + 6 slices, makeFsm + 6 FSMs | **real** | §7.3 |
@@ -41,7 +42,7 @@ flowchart LR
 | `Cell`: drill on `table_ref` click, double-click edit | **real** | §11.2, §11.3 |
 | `TableView`: column/row headers + ＋ add row/column (in-memory) | **real** | §11.3; folders/config/meta now default to `grid` |
 | `AddControl`: ＋ button (button_fsm) | **real** | §11.3; two controls labelled `＋ column`/`＋ row` until CSS positions them on edges |
-| `Dashboard`: pin/unpin tiles (static stack) | **partial** | §11.4; no resize/drag/persistence yet |
+| `Dashboard`: pin/unpin tiles + save/load workspace | **partial** | §11.4; persists to `runs/workspaces/`; no resize/drag yet |
 | `HeaderCell` (editable header), `DotMenu`, `Toolbar` | **stub** | §11.3; headers render as plain divs for now |
 | Live (WebSocket → refetch), `connection_fsm` wiring | **not wired** | §10.5 |
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
@@ -49,7 +50,8 @@ flowchart LR
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — TableView renders column/row headers + ＋ add row/column (in-memory edits); folders/config/meta default to `grid`; AddControl real; vitest cleanup setup.
+- `HEAD` — Workspace persistence: `/api/workspaces` (list/save/delete → `runs/workspaces/<id>.json`, global cross-run); App saves the dashboard and reloads it on startup (`tiles_loadWorkspace`).
+- `f60a077` — TableView renders column/row headers + ＋ add row/column (in-memory edits); folders/config/meta default to `grid`; AddControl real; vitest cleanup setup.
 - `1e79987` — Dashboard: pin/unpin tables into a stack of independent Tiles (§11.4, static).
 - `eb62146` — extracted `Tile` (load_fsm fetch + switcher + render); `App` went thin.
 - `ff01ad1` — `applicable(table)` + live RepresentationSwitcher (flip grid/list/line/heatmap).

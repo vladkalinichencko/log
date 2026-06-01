@@ -39,6 +39,6 @@ describe("TableView", () => {
     };
     render(<TableView table={folder} />);
     fireEvent.click(screen.getByText("proj"));
-    expect(useStore.getState().currentPath).toBe("proj");
+    expect((useStore.getState() as any).currentPath).toBe("proj");
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavBar } from "./NavBar";
-import { TableView } from "./TableView";
+import { render } from "./render";
 import { useStore } from "../store/store";
 import { fetchTable } from "../api/client";
 import { Table } from "../types/domain";
@@ -24,7 +24,7 @@ export function App() {
   return (
     <div>
       <NavBar />
-      {currentTable ? <TableView table={currentTable} /> : <div>Loading...</div>}
+      {currentTable ? render(currentTable, currentTable.representation) : <div>Loading...</div>}
     </div>
   );
 }

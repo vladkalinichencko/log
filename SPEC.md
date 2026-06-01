@@ -278,6 +278,7 @@ log/
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx
+        representations.test.tsx  # line / heatmap / list render components
 ```
 
 ### 5.3 On-disk run data layout

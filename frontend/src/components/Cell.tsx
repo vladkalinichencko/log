@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Cell as CellData, CellType } from "../types/domain";
 import { cellEditFsm } from "../fsm/cellEditFsm";
 import { useStore } from "../store/store";
@@ -12,13 +13,13 @@ interface CellProps {
 
 export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   const editCell = useStore((state: any) => state.tables_editCell);
-  const navigate = useStore((state: any) => state.route_navigate);
+  const navigate = useNavigate();
   const [editState, setEditState] = useState(cellEditFsm.initial);
   const [editValue, setEditValue] = useState(cell.value);
 
   if (cell.type === CellType.TableRef && cell.ref) {
     return (
-      <div style={{ cursor: "pointer" }} onClick={() => navigate(cell.ref!)}>
+      <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${cell.ref}`)}>
         {cell.value}
       </div>
     );

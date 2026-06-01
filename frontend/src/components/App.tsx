@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { NavBar } from "./NavBar";
 import { Tile } from "./Tile";
 import { Dashboard } from "./Dashboard";
@@ -8,7 +9,7 @@ import { fetchWorkspaces, saveWorkspace } from "../api/client";
 import { connectWebSocket } from "../api/websocket";
 
 export function App() {
-  const currentPath = useStore((state: any) => state.currentPath);
+  const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
   const pin = useStore((state: any) => state.tiles_pin);
   const pinned = useStore((state: any) => state.pinned) as string[];
   const tiles = useStore((state: any) => state.tiles);

@@ -238,7 +238,6 @@ log/
       store/
         store.ts                  # Zustand store (single state tree)
         slices/
-          routeSlice.ts           # route_state, route_reducer (drill path)
           tablesSlice.ts          # tables_state, tables_reducer (loaded Tables + edits)
           tilesSlice.ts           # tiles_state, tiles_reducer (representation per tile)
           searchSlice.ts          # search_state, search_reducer (query)
@@ -693,7 +692,7 @@ Per-feature function set (one row = one feature, all four shapes present where a
 
 | Feature | `_state` | `_reducer` | `_selector` | FSM | Component |
 |---|---|---|---|---|---|
-| route/drill | `route_state` | `route_reducer` | `route_selector` | — | `NavBar`, `App` |
+| route/drill | the URL itself (`react-router-dom`) — no store slice; `currentPath = location.pathname` | — | — | `NavBar` (`useNavigate` back/forward + breadcrumb), `App` (`useLocation` → `currentPath`), `Cell` (`useNavigate` to drill) |
 | tables/edits | `tables_state` | `tables_reducer` | `table_selector` | `cellEdit_fsm`, `deleteConfirm_fsm` | `TableView`, `Cell`, `HeaderCell`, `DotMenu`, `AddControl` |
 | tiles/representation | `tiles_state` | `tiles_reducer` | `tile_selector` | `button_fsm` | `RepresentationSwitcher` → `render` (§7.4) → `TableView`/`ListView`/`LineChartView`/`HeatmapView` |
 | search | `search_state` | `search_reducer` | `search_selector` | `search_fsm` | `NavBar` search box |
@@ -1046,8 +1045,9 @@ Semantics:
 Actions are dispatched into the store; each is handled by exactly one `<feature>_reducer`. Signatures (TypeScript):
 
 ```
-route_navigate(path: string): void           // push a drill path; router syncs URL
-route_back(): void / route_forward(): void
+// drill navigation is react-router-dom, not a store action:
+//   drill in: useNavigate()(`/${ref}`)   ·   back/forward: navigate(-1) / navigate(1)
+//   currentPath = decodeURIComponent(useLocation().pathname.slice(1))  (URL is state)
 tables_loadTable(path: string): void          // triggers load_fsm + client.fetchTable
 tables_editCell(tableId, r, c, value): void
 tables_addRow(tableId) / tables_addColumn(tableId): void

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { LineChartView } from "../components/LineChartView";
 import { HeatmapView } from "../components/HeatmapView";
 import { ListView } from "../components/ListView";
@@ -44,7 +45,11 @@ describe("representations", () => {
     const folder = table(TableKind.Folder, Representation.List, [
       [{ type: CellType.TableRef, value: "proj", ref: "proj" }],
     ]);
-    render(<ListView table={folder} />);
+    render(
+      <MemoryRouter>
+        <ListView table={folder} />
+      </MemoryRouter>
+    );
     expect(screen.getByText("proj")).toBeTruthy();
   });
 

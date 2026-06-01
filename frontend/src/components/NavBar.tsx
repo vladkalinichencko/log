@@ -1,16 +1,14 @@
-import { useStore } from "../store/store";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export function NavBar() {
-  const currentPath = useStore((state: any) => state.currentPath) as string;
-  const route_back = useStore((state: any) => state.route_back);
-  const route_forward = useStore((state: any) => state.route_forward);
-
+  const navigate = useNavigate();
+  const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
   const segments: string[] = currentPath.split(".").filter(Boolean);
 
   return (
     <div>
-      <button onClick={route_back}>←</button>
-      <button onClick={route_forward}>→</button>
+      <button onClick={() => navigate(-1)}>←</button>
+      <button onClick={() => navigate(1)}>→</button>
       <span>
         {segments.length === 0
           ? "Home"

@@ -224,6 +224,7 @@ log/
         test_sqlite_index.py
         test_api_runs.py
         test_workspaces.py        # workspace save / list / delete
+        test_ws.py                # run-change grouping for live push
         test_smoke.py             # one end-to-end smoke test per stage (§14)
   frontend/
     package.json
@@ -283,7 +284,8 @@ log/
         cellEditFsm.test.ts
         TableView.test.tsx
         representations.test.tsx  # line / heatmap / list render components
-        tilesSlice.test.ts        # pin / unpin dashboard tiles
+        tilesSlice.test.ts        # pin / unpin / loadWorkspace
+        connectionSlice.test.ts   # live_bump + connection FSM
 ```
 
 ### 5.3 On-disk run data layout

@@ -33,9 +33,10 @@ flowchart LR
 | `read_table` all levels | **real** | §6.2 full ladder |
 | `GET /api/runs` (project/status/tag filters), `GET /api/table` | **real** | §9.12, ADR-017 (Depends) |
 | `/api/workspaces` (GET list, PUT save, DELETE) | **real** | §9.12; writes `runs/workspaces/<id>.json` (global, cross-run; atomic temp+rename) |
-| `/api/series`, `/api/views`, `/ws` | **stub** | endpoints exist, no behavior |
+| `/ws` live push: watch `runs/` → `run_updated` | **real** | §10.5; `watchfiles.awatch` inside the handler |
+| `/api/series`, `/api/views` | **stub** | endpoints exist, no behavior |
 | `table_engine` parser (`evaluate`/`parse`) | **stub** | §9.13; `FUNCTIONS` registry is **real** |
-| SqliteIndex, FileWatcher, WebSocketTransport | **stub** | §7.2 adapters (Stage 3) |
+| SqliteIndex, WebSocketTransport adapters | **stub** | §7.2; live runs in the ws handler, not the adapter split yet |
 | Frontend: store + 6 slices, makeFsm + 6 FSMs | **real** | §7.3 |
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
 | Views: `TableView`, `ListView`, `LineChartView` (SVG), `HeatmapView` (SVG) | **real** | §11.2b; line/heatmap hand-drawn |
@@ -44,13 +45,14 @@ flowchart LR
 | `AddControl`: ＋ button (button_fsm) | **real** | §11.3; two controls labelled `＋ column`/`＋ row` until CSS positions them on edges |
 | `Dashboard`: pin/unpin tiles + save/load workspace | **partial** | §11.4; persists to `runs/workspaces/`; no resize/drag yet |
 | `HeaderCell` (editable header), `DotMenu`, `Toolbar` | **stub** | §11.3; headers render as plain divs for now |
-| Live (WebSocket → refetch), `connection_fsm` wiring | **not wired** | §10.5 |
+| Live (WebSocket → `liveTick` → Tile refetch), `connection_fsm` wiring | **real** | §10.5; global tick refetches open tiles on any run change |
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
 | Representation switcher as nested table/viz two-step dropdown | **simplified** | §11.2a; currently a flat row of buttons |
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — Workspace persistence: `/api/workspaces` (list/save/delete → `runs/workspaces/<id>.json`, global cross-run); App saves the dashboard and reloads it on startup (`tiles_loadWorkspace`).
+- `HEAD` — Live updates: `/ws` watches `runs/` (watchfiles) and pushes `run_updated`; frontend `live_bump` → tiles refetch; `connection_event` drives `connection_fsm`.
+- `7051550` — Workspace persistence: `/api/workspaces` (list/save/delete → `runs/workspaces/<id>.json`, global cross-run); App saves the dashboard and reloads it on startup (`tiles_loadWorkspace`).
 - `f60a077` — TableView renders column/row headers + ＋ add row/column (in-memory edits); folders/config/meta default to `grid`; AddControl real; vitest cleanup setup.
 - `1e79987` — Dashboard: pin/unpin tables into a stack of independent Tiles (§11.4, static).
 - `eb62146` — extracted `Tile` (load_fsm fetch + switcher + render); `App` went thin.

@@ -896,4 +896,10 @@ Assessment given: spec is complete + tier-tagged and the v0/v1/v2/v3 split match
 
 ---
 
-*Last updated: 2026-05-30 (round b: error framing kept-16-but-grouped, §8 Performance + ADR-016 added, human "in one breath" framings now a standing spec requirement). Pre-spec interview phase is over; SPEC.md is authoritative. This doc now only tracks post-spec feedback rounds and open questions.*
+## IDEAS (not scheduled, owner's parking lot)
+
+- **Fit experiment data to a formula (scaling laws).** A registry function/operator that fits a chosen functional form (power law `y = a·x^b + c`, log, etc.) to a series and reports the fitted parameters + goodness-of-fit, so the user can see how well a run's loss/metric follows a scaling law. Fits the existing registry idea (a `fit`-kind entry returning a small result `Table`) and the representation idea (overlay the fitted curve on the `line` view). Raised 2026-05-30; not yet tiered — likely v2 alongside statistical `test`s.
+
+---
+
+*Last updated: 2026-05-30 (round c: v1 UI vision documented — representation applies to any table + `applicable()` §11.1; representation catalog + custom-Python renderers §11.2b; dashboard-grid-of-resizable-tiles vs route-modal editor §11.4; registry `test` kind + Python extensibility §9.13; §3.2 v1 scope widened. Scaling-law-fit parked as an idea.). Pre-spec interview phase is over; SPEC.md is authoritative.*

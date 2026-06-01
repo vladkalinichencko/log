@@ -70,7 +70,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 *Observability:*
 - Backend: read-only file storage, SQLite derived index, file watcher, WebSocket push, table engine (the `.`-path merge language), statistics.
-- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11, the four representations (grid / line / heatmap / list), workspace + view persistence, search.
+- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / list / line / heatmap / histogram` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `scatter` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
 - Every UI edit creates derived columns / derived state in `views/<id>.json`; source files immutable.
 - Publication export via `log.export.figure`.
 - The three structural performance seams (Section 8, *Performance constraints*; ADR-016) ship here, since v1 is the first tier that handles real-scale data: memory-mapped `.npy` reads in `read_table`, server-side series downsampling, hand-rolled row windowing. (Hover prefetch is a later v1+ optimization, not part of this tier.)
@@ -986,6 +986,7 @@ op          := "select(" collist ")"
              | "join(" expr "," "on=" col ")"
              | "concat(" expr ")"
              | "agg(" func "," "by=" col ")"
+             | "test(" func "," col "," col ")"     ; [v2] registry function of kind "test"
 collist     := IDENT ("," IDENT)*
 CMP         := "==" | "!=" | ">" | ">=" | "<" | "<="
 DIR         := "asc" | "desc"
@@ -1003,11 +1004,23 @@ distinguished only by output:
 |---|---|---|---|
 | `aggregation` | `column -> scalar` (collapses a column to a derived **row**) | `agg(name, by=col)` | `mean`, `sum`, `min`, `max`, `count`, `std` |
 | `transform` | `column -> column` (a derived **column**, same length) | `derive(name=...formula...)` | `rolling_mean`, `zscore`, `abs`, `log`, `sqrt` |
+| `test` | `columns -> result` (a small derived result table) | `test(name, a, b)` | `ttest`, `ks`, `pearson`, `mannwhitney`, `changepoint` `[v2]` |
 
-Adding a statistic is adding **one registry entry** — its name then works in both
-`agg` and `derive` with no grammar or engine change (the same "one row added"
-uniformity as the renderer in §7.4). The parser rejects a name absent from the
-registry with `TABLE_EXPRESSION_ERROR`.
+Adding a statistic is adding **one registry entry** — its name then works in its
+operator (`agg` / `derive` / `test`) with no grammar or engine change (the same "one
+row added" uniformity as the renderer in §7.4). The `test` kind covers the
+statistically non-trivial things real researchers need — comparing two runs'
+distributions, correlations, change-points in training dynamics — returning a small
+result table that is itself a `Table` (so it renders and drills like any other).
+
+**The registry is user-extensible from Python.** A researcher registers a function (any
+kind) or a renderer (Section 11.2b) under a name, in their own code, and it appears in
+`agg`/`derive`/`test` and the visualization dropdown exactly like a built-in. This is
+how complex domain-specific statistics (interpretability metrics, training-dynamics
+measures) and unusual visualizations are added without touching the core — one
+registration, not a fork. `[v2]`
+
+The parser rejects a name absent from the registry with `TABLE_EXPRESSION_ERROR`.
 
 Semantics:
 - `table(pathexpr)` produces a `Table` whose columns are `step, samples_seen, wall_time, rank` plus one value column per matched leaf path; a `GLOB` matching multiple paths yields one column per match. Because `.` is now the only separator, a module path like `encoder.layer1` and a hierarchy level are addressed the same way; segments may not contain `.`.
@@ -1195,7 +1208,9 @@ The UI is a single-page application. One HTML page; `react-router-dom` swaps scr
 
 ### 11.1 Core model: a screen is a `Table` in a representation
 
-"All projects", "the runs of a project", "the tables of a run", and "a single metric" are all `Table`s (Section 6.2). They differ only in which representation renders them: `grid`, `list`, `line`, `heatmap`. A list and a chart are the same `Table` rendered two ways; switching representation calls a different render component over identical data.
+"All projects", "the runs of a project", "a run's config", "the tables of a run", and "a single metric" are all `Table`s (Section 6.2), and this holds at **every** level — not just leaf metrics. Any of them can be rendered in any representation its shape supports: a list and a line chart are the same `Table` rendered two ways; switching representation calls a different render component (Section 7.4) over identical data, with no refetch. You can, literally, render the projects list as a histogram — the UI is **one renderer × many representations**, applied uniformly to any table on any level. There are no bespoke screens; there is one `render(table, representation)`.
+
+**Applicable representations are a pure function of the table's shape:** `applicable(table) -> Representation[]`, derived from `kind` and column types — any table supports `grid`/`list`; a numeric column over an x column supports `line`; a 2-D numeric grid supports `heatmap`; one numeric/categorical column supports `histogram`/`pie`; two numeric columns support `scatter`. The visualization dropdown (Section 11.2a) offers exactly `applicable(table)` and nothing inapplicable. `applicable` is the one place that knows shape→representation; adding a representation adds it here and in `RENDERERS` (Section 7.4), nowhere else.
 
 ### 11.2 Navigation = drilling into a `Table`
 
@@ -1215,6 +1230,23 @@ Automatic statistics (rolling mean, z-score spike, min/max, etc.) are computed a
 
 Data-model note: this introduces a tile **mode** (`table` | `visualization`) alongside the existing `Representation` enum; the chart-type dropdown values extend `Representation` (currently `grid`/`list`/`line`/`heatmap`) with `histogram` and future types. `Tile` (Section 6.3) already carries `representation`; a `mode` field is added there.
 
+### 11.2b Representation catalog
+
+The `Representation` enum is the open vocabulary of view components, each a `(props:{table}) -> view` (Section 7.4). Adding one is one row in `RENDERERS` + one entry in `applicable` (Section 11.1) + one component — nothing else changes.
+
+| Representation | Table shape it needs | Tier |
+|---|---|---|
+| `grid` | any | v0 |
+| `list` | any | v1 |
+| `line` | numeric column(s) over an x column | v1 |
+| `heatmap` | 2-D numeric grid | v1 |
+| `histogram` | one numeric or categorical column | v1 |
+| `pie` | one categorical column with counts | v2 |
+| `scatter` | two numeric columns | v2 |
+| `box` / `violin`, parallel-coordinates, and other publication chart types | per type | v2+ |
+
+**Custom representations via Python extensions.** Beyond the built-ins, a user registers a renderer in code — a Python function `(table) -> figure` built on matplotlib/proplot — under a name that then appears in the visualization dropdown like any built-in (the same registry idea as the function registry, Section 9.13). This is how unusual chart types from papers are added without touching the core, and is the same path `log.export.figure` already uses for publication output. `[v2]`
+
 ### 11.3 Element inventory (what exists on a table screen)
 
 A `Table` rendered as a grid carries:
@@ -1233,6 +1265,13 @@ A `Table` rendered as a grid carries:
 - **Toolbar** — a thin bar with table-wide actions: new table, merge/formula, aggregate, search. Minimal. `[v1]`
 - **Search box** — in the top bar; searches table names and `.`-paths; a result focuses + scrolls-to + highlights the matching table/cell. `[v1]`
 - **Top nav bar** — back/forward arrows + breadcrumb of the drill-path; the only cross-screen navigation. `[v0]`
+
+### 11.4 Two windows: viewer (dashboard) and editor (modal)
+
+A table is **viewed** in the dashboard and **edited** in a modal — the same `Table`, two windows.
+
+- **Viewer = a dashboard grid of tiles.** The normal window is a grid in which tiles are placed and **freely resized** by dragging a handle in any direction, like Android home-screen widgets: a tile can span the full width, a tall column, or a small cell, and tiles combine arbitrarily, so the user composes any arrangement of tables and charts. Each tile is one `render(table, representation)`; the arrangement (positions + sizes + each tile's mode/representation) is saved as a `workspaces/<id>.json` (Section 6.3). The dashboard is for *viewing and composing*, not editing. `[v1]`
+- **Editor = the route-backed modal (Section 11.2a).** Expanding a tile opens it fullscreen as a modal that **changes the URL** (shareable, back-button-closable) and is where the table is *edited* — cells, columns, formulas, aggregations. Following a `table_ref` from **inside** the modal opens the next table as another route-backed modal (each push changes the URL), so a chain of linked tables is navigable and shareable. Plain viewing/composing happens in the dashboard; editing and link-following happen in the modal. `[v1]`
 
 Every stateful element above is an explicit FSM named `<element>_fsm`, derived from `baseFsm` (Section 7.3). Buttons get `cursor: pointer` on hover; no other motion.
 

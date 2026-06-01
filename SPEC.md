@@ -260,6 +260,7 @@ log/
       components/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
+        Tile.tsx                  # one table: load_fsm fetch + switcher + render
         TableView.tsx             # grid-of-divs representation
         Cell.tsx                  # one cell (uses cellEdit_fsm)
         HeaderCell.tsx            # column/row name cell (edit + dot-menu)

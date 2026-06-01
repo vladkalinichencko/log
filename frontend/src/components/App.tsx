@@ -41,7 +41,7 @@ export function App() {
       tiles: pinned.map((path) => ({
         id: path,
         table_path: path,
-        mode: "table",
+        mode: tiles.get(path)?.mode ?? "table",
         representation: tiles.get(path)?.representation,
         w: tiles.get(path)?.w,
         h: tiles.get(path)?.h,

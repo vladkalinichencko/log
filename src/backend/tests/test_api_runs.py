@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from backend.api.runs import get_run, get_runs
+from backend.api.runs import delete_run, get_run, get_runs
 
 
 def _make_run(runs_root, project, name, status):
@@ -48,3 +48,14 @@ def test_get_run_returns_a_folder_table(tmp_path):
 def test_get_run_missing_raises_404(tmp_path):
     with pytest.raises(HTTPException):
         get_run("nope", "nope", tmp_path)
+
+
+def test_delete_run_removes_dir(tmp_path):
+    _make_run(tmp_path, "p1", "run_a", "finished")
+    delete_run("p1", "run_a", tmp_path)
+    assert not (tmp_path / "p1" / "run_a").exists()
+
+
+def test_delete_run_missing_raises_404(tmp_path):
+    with pytest.raises(HTTPException):
+        delete_run("nope", "nope", tmp_path)

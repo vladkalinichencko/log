@@ -39,7 +39,8 @@ flowchart LR
 | SqliteIndex, WebSocketTransport adapters | **stub** | §7.2; live runs in the ws handler, not the adapter split yet |
 | Frontend: store + 5 slices, makeFsm + 7 FSMs | **real** | §7.3; route slice removed (URL is state via react-router); resize_fsm added |
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
-| Views: `TableView`, `ListView`, `LineChartView` (SVG), `HeatmapView` (SVG) | **real** | §11.2b; line/heatmap hand-drawn |
+| Views: `TableView`, `ListView`, `LineChartView`, `HeatmapView`, `HistogramView` (SVG) | **real** | §11.2b; line/heatmap/histogram hand-drawn |
+| `GET /api/runs/{p}/{run}` (folder Table), `DELETE /api/runs/{p}/{run}` | **real** | §9.12 |
 | `Cell`: drill on `table_ref` click, double-click edit | **real** | §11.2, §11.3 |
 | `TableView`: column/row headers + ＋ add row/column (in-memory) | **real** | §11.3; folders/config/meta now default to `grid` |
 | `AddControl`: ＋ button (button_fsm) | **real** | §11.3; two controls labelled `＋ column`/`＋ row` until CSS positions them on edges |
@@ -50,21 +51,22 @@ flowchart LR
 | `Toolbar` | **stub** | §11.3 |
 | Live (WebSocket → `liveTick` → Tile refetch), `connection_fsm` wiring | **real** | §10.5; global tick refetches open tiles on any run change |
 | Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
-| Representation switcher as nested table/viz two-step dropdown | **simplified** | §11.2a; currently a flat row of buttons |
+| Representation switcher: table/visualization mode toggle + chart dropdown | **real** | §11.2a; tile `mode` field, chart picked via a `<select>` in visualization mode |
 
-## Pending v1 (audit-identified, not built yet — not bugs)
+## Pending v1 (need their own subsystem — not bugs)
 
-- **histogram** representation + `HistogramView` (§11.2b) — `applicable` does not offer it yet.
-- **Tile mode toggle** (table | visualization) + **nested chart-type dropdown** (§11.2a) — current `RepresentationSwitcher` is a flat row of buttons; no `mode` field on the tile record.
-- **`POST /api/tables/eval`** (§9.12) — blocked on the `table_engine` parser (stub).
-- **`DELETE /api/runs/{p}/{run}`**, **`POST /api/runs/rename`** (§9.12) — not built.
-- **`applicable()` refinement** (§11.1) — currently keys off `kind` only; does not yet inspect column types / x-axis to gate `line`/`heatmap` precisely.
-- **Edit persistence to `views/<id>.json`** — table edits are in-memory only.
-- **`Toolbar`**, **search wiring** — stubs.
+- **`POST /api/tables/eval`** (§9.12) — blocked on the `table_engine` DSL parser (stub).
+- **`POST /api/runs/rename`** (§9.12) — the `pattern` templating is underspecified; needs a spec decision before building (not guessing).
+- **Edit persistence to `views/<id>.json`** — table edits are in-memory only; needs the views endpoints + a view-definition shape.
+- **search wiring** — needs a `.`-path index to search over.
+- **`Toolbar`** — thin action bar; most of its actions (merge/formula/aggregate) depend on the parser above.
+
+(Cleared into "real": histogram, tile mode toggle + chart dropdown, `applicable()` shape gating, `DELETE /api/runs/{p}/{run}`.)
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — Audit drift fixes: `tags` written into `meta.json`; clickable breadcrumb (NavBar); `id` saved on workspace tiles; `GET /api/runs/{p}/{run}` returns the real folder `Table` (read_table + serialize); `/api/series` stub signatures match §9.12; §6.3 representation rule reworded to match `read_table` (folders/key-value/tensor→grid, series→line).
+- `HEAD` — Cleared audit pending-v1 items: histogram representation + `HistogramView`; tile mode toggle (table/visualization) + chart dropdown (`tiles_setMode`, `mode` field); `applicable()` now gates line/heatmap/histogram by cell types; `DELETE /api/runs/{p}/{run}`.
+- (prev) — Audit drift fixes: `tags` written into `meta.json`; clickable breadcrumb (NavBar); `id` saved on workspace tiles; `GET /api/runs/{p}/{run}` returns the real folder `Table` (read_table + serialize); `/api/series` stub signatures match §9.12; §6.3 representation rule reworded to match `read_table` (folders/key-value/tensor→grid, series→line).
 - `be00da1` — Route-backed fullscreen modal (§11.2a): Tile "expand" sets `?modal=path`; Modal renders the tile fullscreen, URL-addressable, closed by the close button or browser back.
 - `bb7c1e5` — Real URL routing: react-router-dom replaces the store route slice. Drill changes the URL (`/<dot-path>`), browser back/forward work, links are shareable (§11.2 "URL is state"). routeSlice deleted; Cell/NavBar/App use useNavigate/useLocation.
 - `4977966` — Table editing complete (§11.3): editable name/headers (HeaderCell + cellEdit_fsm), delete row/column (DotMenu + deleteConfirm_fsm two-click), tables_removeRow/removeColumn/editName. In-memory.

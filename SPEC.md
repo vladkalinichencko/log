@@ -276,6 +276,7 @@ log/
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
         LineChartView.tsx         # hand-drawn SVG line
         HeatmapView.tsx           # hand-drawn SVG grid of rects
+        HistogramView.tsx         # hand-drawn SVG bars (value distribution)
         ListView.tsx              # list representation
         Button.tsx                # base button component (uses button_fsm)
       types/
@@ -1057,6 +1058,7 @@ tables_removeRow(tableId, r) / tables_removeColumn(tableId, c): void
 tables_editName(tableId, kind, index, name): void   // kind: "table"|"row"|"col"
 tables_undo(): void
 tiles_setRepresentation(tileId, rep: Representation): void
+tiles_setMode(tileId, mode: "table"|"visualization"): void   // tile mode toggle (§11.2a)
 tiles_pin(path: string) / tiles_unpin(path: string): void   // add/remove a dashboard tile
 tiles_loadWorkspace(workspace): void          // restore pinned paths + per-tile representations + sizes
 tiles_resize(tileId, dw: number, dh: number): void   // grow/shrink a tile by a delta (floored)

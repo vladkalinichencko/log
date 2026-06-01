@@ -20,6 +20,7 @@ export enum Representation {
   List = "list",
   Line = "line",
   Heatmap = "heatmap",
+  Histogram = "histogram",
 }
 
 export interface Cell {

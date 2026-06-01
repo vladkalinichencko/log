@@ -25,6 +25,7 @@ class Representation(str, Enum):
     list = "list"
     line = "line"
     heatmap = "heatmap"
+    histogram = "histogram"
 
 
 @dataclass

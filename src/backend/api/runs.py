@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -68,3 +69,12 @@ def get_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) ->
         return _table_to_dict(read_table(f"{project}.{run}", runs_root))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+
+
+@router.delete("/api/runs/{project}/{run}")
+def delete_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
+    run_dir = runs_root / project / run
+    if not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+    shutil.rmtree(run_dir)
+    return {"deleted": True}

@@ -1,6 +1,9 @@
 import { Representation } from "../../types/domain";
 
+type TileMode = "table" | "visualization";
+
 interface TileRecord {
+  mode?: TileMode;
   representation?: Representation;
   w?: number;
   h?: number;
@@ -24,6 +27,13 @@ export const createTilesSlice = (set: any) => ({
     set((state: any) => {
       const tiles = new Map<string, TileRecord>(state.tiles);
       tiles.set(tileId, { ...tiles.get(tileId), representation });
+      return { tiles };
+    }),
+
+  tiles_setMode: (tileId: string, mode: TileMode) =>
+    set((state: any) => {
+      const tiles = new Map<string, TileRecord>(state.tiles);
+      tiles.set(tileId, { ...tiles.get(tileId), mode });
       return { tiles };
     }),
 
@@ -53,6 +63,7 @@ export const createTilesSlice = (set: any) => ({
       for (const tile of workspace.tiles) {
         tiles.set(tile.table_path, {
           ...tiles.get(tile.table_path),
+          mode: tile.mode,
           representation: tile.representation,
           w: tile.w,
           h: tile.h,

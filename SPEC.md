@@ -1231,7 +1231,7 @@ The UI is a single-page application. One HTML page; `react-router-dom` swaps scr
 
 ### 11.2 Navigation = drilling into a `Table`
 
-Behaves like a normal experiment tracker: a **top nav bar** with back/forward arrows + a breadcrumb of the current drill-path. The user goes projects → a project → its runs → a run's tables, and drills back out. A `table_ref` cell holds a reference to a child `Table`; clicking it navigates into that table (`route_navigate(path)`; the router keeps the URL in sync — URL is state). There is **no** free path-typing navigation between arbitrary tables; the `.`-path is used only inside the formula language's autocomplete. Where a new table is created determines where it sits on disk, so the folder tree mirrors the screen drill-path.
+Behaves like a normal experiment tracker: a **top nav bar** with back/forward arrows + a breadcrumb of the current drill-path. The user goes projects → a project → its runs → a run's tables, and drills back out. A `table_ref` cell holds a reference to a child `Table`; clicking it navigates into that table (`react-router-dom` `useNavigate` pushes the `.`-path as the URL pathname; `currentPath = useLocation().pathname` — the URL itself is the state, there is no route store slice). There is **no** free path-typing navigation between arbitrary tables; the `.`-path is used only inside the formula language's autocomplete. Where a new table is created determines where it sits on disk, so the folder tree mirrors the screen drill-path.
 
 Opening a child table by clicking a `table_ref` cell **replaces the current view** (drill in; the breadcrumb grows). That is distinct from *expanding* a tile to fullscreen, below.
 

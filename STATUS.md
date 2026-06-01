@@ -19,7 +19,7 @@ flowchart LR
     CL --> T["Tile (load_fsm)"]
     T --> SW["RepresentationSwitcher (applicable)"]
     T --> RND["render → TableView / List / Line / Heatmap"]
-    CELL["Cell table_ref click"] --> NAVG["route_navigate"] --> T
+    CELL["Cell table_ref click"] --> NAVG["useNavigate → URL"] --> T
     PIN["pin"] --> DASH["Dashboard of Tiles"]
   end
 ```
@@ -37,7 +37,7 @@ flowchart LR
 | `/api/series`, `/api/views` | **stub** | endpoints exist, no behavior |
 | `table_engine` parser (`evaluate`/`parse`) | **stub** | §9.13; `FUNCTIONS` registry is **real** |
 | SqliteIndex, WebSocketTransport adapters | **stub** | §7.2; live runs in the ws handler, not the adapter split yet |
-| Frontend: store + 6 slices, makeFsm + 6 FSMs | **real** | §7.3 |
+| Frontend: store + 5 slices, makeFsm + 7 FSMs | **real** | §7.3; route slice removed (URL is state via react-router); resize_fsm added |
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
 | Views: `TableView`, `ListView`, `LineChartView` (SVG), `HeatmapView` (SVG) | **real** | §11.2b; line/heatmap hand-drawn |
 | `Cell`: drill on `table_ref` click, double-click edit | **real** | §11.2, §11.3 |
@@ -54,7 +54,7 @@ flowchart LR
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — Route-backed fullscreen modal (§11.2a): Tile "expand" sets `?modal=path`; Modal renders the tile fullscreen, URL-addressable, closed by the close button or browser back.
+- `be00da1` — Route-backed fullscreen modal (§11.2a): Tile "expand" sets `?modal=path`; Modal renders the tile fullscreen, URL-addressable, closed by the close button or browser back.
 - `bb7c1e5` — Real URL routing: react-router-dom replaces the store route slice. Drill changes the URL (`/<dot-path>`), browser back/forward work, links are shareable (§11.2 "URL is state"). routeSlice deleted; Cell/NavBar/App use useNavigate/useLocation.
 - `4977966` — Table editing complete (§11.3): editable name/headers (HeaderCell + cellEdit_fsm), delete row/column (DotMenu + deleteConfirm_fsm two-click), tables_removeRow/removeColumn/editName. In-memory.
 - `7b96bae` — Dashboard tiles are drag-resizable (ResizeHandle + resize_fsm, hand-rolled), laid out flex-wrap; sizes persist in the workspace. First functional CSS.

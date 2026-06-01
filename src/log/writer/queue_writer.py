@@ -55,7 +55,7 @@ class WriterThread:
         self.meta_path = meta_path
         self.queue: queue.Queue = queue.Queue()
         self.thread: threading.Thread | None = None
-        self.current_step_scalars: dict[tuple[int, int], dict[str, Any]] = {}
+        self.current_step_scalars: dict[tuple[int, int, int], dict[str, Any]] = {}
 
     def start(self) -> None:
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -82,7 +82,7 @@ class WriterThread:
 
     def _process(self, job: WriteJob) -> None:
         if isinstance(job, ScalarJob):
-            key = (job.step, job.rank)
+            key = (job.epoch, job.step, job.rank)
             if key not in self.current_step_scalars:
                 self.current_step_scalars[key] = {
                     "step": job.step,
@@ -93,10 +93,10 @@ class WriterThread:
                 }
             self.current_step_scalars[key]["scalars"][job.path] = job.value
 
-            all_steps = sorted(set(k[0] for k in self.current_step_scalars.keys()))
-            if len(all_steps) > 1:
-                for s in all_steps[:-1]:
-                    self._flush_step(s)
+            seen = sorted(set((k[0], k[1]) for k in self.current_step_scalars))
+            if len(seen) > 1:
+                for epoch, step in seen[:-1]:
+                    self._flush_step(epoch, step)
 
         elif isinstance(job, TensorJob):
             self._write_tensor(job)
@@ -105,16 +105,14 @@ class WriterThread:
             self._write_checkpoint(job)
 
     def _flush_scalars(self) -> None:
-        for step in sorted(set(k[0] for k in self.current_step_scalars.keys())):
-            self._flush_step(step)
+        for epoch, step in sorted(set((k[0], k[1]) for k in self.current_step_scalars)):
+            self._flush_step(epoch, step)
 
-    def _flush_step(self, step: int) -> None:
-        keys = [k for k in self.current_step_scalars.keys() if k[0] == step]
+    def _flush_step(self, epoch: int, step: int) -> None:
+        keys = [k for k in self.current_step_scalars if k[0] == epoch and k[1] == step]
         for key in keys:
             row = self.current_step_scalars.pop(key)
-            epoch = 0
-            epoch_dir = self.run_dir / f"epoch_{epoch:04d}"
-            metrics_path = epoch_dir / "metrics.jsonl"
+            metrics_path = self.run_dir / f"epoch_{epoch:04d}" / "metrics.jsonl"
             append_jsonl(metrics_path, row)
 
     def _write_tensor(self, job: TensorJob) -> None:

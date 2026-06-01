@@ -39,30 +39,19 @@ def read_table(path: str, runs_root: Path) -> Table:
 
         cells = []
         for run_dir in sorted(runs):
-            run_name = run_dir.name
-            meta_path = run_dir / "meta.json"
-            if meta_path.exists():
-                meta = json.loads(meta_path.read_text())
-                status = meta.get("status", "unknown")
-                samples = meta.get("samples_seen", 0)
-            else:
-                status = "unknown"
-                samples = 0
-
+            meta = json.loads((run_dir / "meta.json").read_text())
             cells.append(
                 [
-                    Cell(
-                        type=CellType.table_ref,
-                        value=run_name,
-                        ref=f"{project}.{run_name}",
-                    )
+                    Cell(type=CellType.table_ref, value=run_dir.name, ref=f"{project}.{run_dir.name}"),
+                    Cell(type=CellType.string, value=meta["status"], ref=None),
+                    Cell(type=CellType.number, value=str(meta["samples_seen"]), ref=None),
                 ]
             )
 
         return Table(
             name=project,
             kind=TableKind.folder,
-            column_names=["run"],
+            column_names=["run", "status", "samples_seen"],
             row_names=None,
             cells=cells,
             representation=Representation.list,

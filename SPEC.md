@@ -1047,6 +1047,7 @@ tables_removeRow(tableId, r) / tables_removeColumn(tableId, c): void
 tables_editName(tableId, kind, index, name): void   // kind: "table"|"row"|"col"
 tables_undo(): void
 tiles_setRepresentation(tileId, rep: Representation): void
+tiles_pin(path: string) / tiles_unpin(path: string): void   // add/remove a dashboard tile
 search_setQuery(q: string): void
 focus_setTarget(path: string): void
 connection_event(e: "open"|"close"|"retry"): void

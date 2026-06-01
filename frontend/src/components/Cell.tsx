@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Cell as CellType } from "../types/domain";
+import { Cell as CellData, CellType } from "../types/domain";
 import { cellEditFsm } from "../fsm/cellEditFsm";
 import { useStore } from "../store/store";
 
 interface CellProps {
-  cell: CellType;
+  cell: CellData;
   tableId: string;
   rowIndex: number;
   colIndex: number;
@@ -12,8 +12,17 @@ interface CellProps {
 
 export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   const editCell = useStore((state: any) => state.tables_editCell);
+  const navigate = useStore((state: any) => state.route_navigate);
   const [editState, setEditState] = useState(cellEditFsm.initial);
   const [editValue, setEditValue] = useState(cell.value);
+
+  if (cell.type === CellType.TableRef && cell.ref) {
+    return (
+      <div style={{ cursor: "pointer" }} onClick={() => navigate(cell.ref!)}>
+        {cell.value}
+      </div>
+    );
+  }
 
   const handleDoubleClick = () => {
     setEditState(cellEditFsm.next(editState, "dblclick"));

@@ -224,6 +224,9 @@ log/
         test_sqlite_index.py
         test_api_runs.py
         test_workspaces.py        # workspace save / list / delete
+        test_views.py             # view save / list / delete
+        test_series.py            # scalar/tensor series + downsampling
+        test_toolkit.py           # schedules/tick/track/distribute/watch/checkpoint/resume/export
         test_ws.py                # run-change grouping for live push
         test_smoke.py             # one end-to-end smoke test per stage (§14)
   frontend/
@@ -290,6 +293,7 @@ log/
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close
+        search.test.ts            # search_selector path filter
 ```
 
 ### 5.3 On-disk run data layout
@@ -968,6 +972,7 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | DELETE | `/api/runs/{project}/{run}` | — | `{ "deleted": true }` | 404 `RUN_NOT_FOUND` |
 | POST | `/api/runs/rename` | `{ pattern: str, run_refs: str[] }` | `{ renamed: {old: new}[] }` | 400 `INVALID_PATTERN` |
 | GET | `/api/table` | query `path` (`.`-path) | `Table` | 404 `TABLE_NOT_FOUND` |
+| GET | `/api/paths` | — | `string[]` (every drillable `.`-path; for search) | — |
 | POST | `/api/tables/eval` | `{ expression: str }` | `Table` | 400 `TABLE_EXPRESSION_ERROR` |
 | GET | `/api/series/scalar` | `run`, `path`, `x?` | `{ x: number[], y: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor` | `run`, `path`, `step` | `{ shape: int[], dtype: str, data: number[] }` | 404 `SERIES_NOT_FOUND` |

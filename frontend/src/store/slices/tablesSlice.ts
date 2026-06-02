@@ -2,6 +2,7 @@ import { Table, Cell, CellType } from "../../types/domain";
 
 export interface TablesState {
   tables: Map<string, Table>;
+  views: Map<string, Table>;
   editHistory: Table[];
 }
 
@@ -9,6 +10,7 @@ const emptyCell = (): Cell => ({ type: CellType.Empty, value: "", ref: null });
 
 export const createTablesSlice = (set: any) => ({
   tables: new Map<string, Table>(),
+  views: new Map<string, Table>(),
   editHistory: [],
 
   tables_loadTable: (table: Table) =>
@@ -17,6 +19,11 @@ export const createTablesSlice = (set: any) => ({
         table.source_path || table.name,
         table
       ),
+    })),
+
+  tables_setViews: (list: any[]) =>
+    set(() => ({
+      views: new Map<string, Table>(list.map((v) => [v.id, v])),
     })),
 
   tables_editCell: (tableId: string, r: number, c: number, value: string) =>

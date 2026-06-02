@@ -116,8 +116,10 @@ def run(
                 raise
             finally:
                 writer.stop_and_join()
-                meta_json["status"] = status
-                atomic_write_bytes(meta_path, json.dumps(meta_json, indent=2).encode())
+                meta = json.loads(meta_path.read_text())
+                meta["status"] = status
+                meta["samples_seen"] = _active_run.samples_seen
+                atomic_write_bytes(meta_path, json.dumps(meta, indent=2).encode())
                 _active_run = None
 
         return wrapper

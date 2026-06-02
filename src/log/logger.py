@@ -25,6 +25,8 @@ class Logger:
 
         if step is None:
             step = self.ctx.current_step
+        else:
+            self.ctx.current_step = step
 
         wall_time = time.time()
         rank = 0

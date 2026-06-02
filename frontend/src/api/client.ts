@@ -39,3 +39,31 @@ export async function saveWorkspace(id: string, workspace: any): Promise<any> {
   }
   return response.json();
 }
+
+export async function fetchPaths(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/api/paths`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch paths: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function fetchViews(): Promise<any[]> {
+  const response = await fetch(`${API_BASE}/api/views`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch views: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function saveView(id: string, view: any): Promise<any> {
+  const response = await fetch(`${API_BASE}/api/views/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(view),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save view: ${response.statusText}`);
+  }
+  return response.json();
+}

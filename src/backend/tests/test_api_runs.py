@@ -3,7 +3,14 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from backend.api.runs import delete_run, get_run, get_runs
+from backend.api.runs import (
+    RenameRequest,
+    delete_run,
+    get_run,
+    get_runs,
+    rename_names,
+    rename_runs,
+)
 
 
 def _make_run(runs_root, project, name, status):
@@ -59,3 +66,25 @@ def test_delete_run_removes_dir(tmp_path):
 def test_delete_run_missing_raises_404(tmp_path):
     with pytest.raises(HTTPException):
         delete_run("nope", "nope", tmp_path)
+
+
+def test_rename_names_finder_style():
+    assert rename_names(["loss"], prefix="exp_") == ["exp_loss"]
+    assert rename_names(["loss"], suffix="_v2") == ["loss_v2"]
+    assert rename_names(["run_tmp_a"], find="tmp_", replace="") == ["run_a"]
+
+
+def test_rename_runs_moves_dirs(tmp_path):
+    _make_run(tmp_path, "p1", "a", "finished")
+    _make_run(tmp_path, "p1", "b", "finished")
+    out = rename_runs(RenameRequest(run_refs=["p1/a", "p1/b"], prefix="exp_"), tmp_path)
+    assert out["renamed"] == {"p1/a": "p1/exp_a", "p1/b": "p1/exp_b"}
+    assert (tmp_path / "p1" / "exp_a").is_dir()
+    assert not (tmp_path / "p1" / "a").exists()
+
+
+def test_rename_runs_collision_raises(tmp_path):
+    _make_run(tmp_path, "p1", "a", "finished")
+    _make_run(tmp_path, "p1", "exp_a", "finished")
+    with pytest.raises(HTTPException):
+        rename_runs(RenameRequest(run_refs=["p1/a"], prefix="exp_"), tmp_path)

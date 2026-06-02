@@ -57,3 +57,11 @@ def test_config_keyvalue(tmp_path):
     cfg = read_table("p.r.config", tmp_path)
     assert cfg.column_names == ["key", "value"]
     assert [[c.value for c in r] for r in cfg.cells] == [["lr", "0.01"]]
+
+
+def test_list_paths_walks_tree(tmp_path):
+    from backend.api.tables import list_paths
+
+    _make_run(tmp_path)
+    paths = list_paths(tmp_path)
+    assert {"p", "p.r", "p.r.epoch_0000", "p.r.epoch_0000.loss", "p.r.epoch_0000.w"} <= set(paths)

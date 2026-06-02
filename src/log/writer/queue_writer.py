@@ -1,4 +1,5 @@
 import json
+import os
 import queue
 import threading
 import time
@@ -46,6 +47,10 @@ class CheckpointJob(WriteJob):
     payload: dict
     tag: str
     run_dir: Path
+    epoch: int
+    metric: str | None
+    mode: str
+    keep_top_k: int
 
 
 class WriterThread:
@@ -142,7 +147,57 @@ class WriterThread:
         append_jsonl(tensors_dir / "index.jsonl", index_row)
 
     def _write_checkpoint(self, job: CheckpointJob) -> None:
-        pass
+        ckpt_dir = job.run_dir / "checkpoints"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        final = ckpt_dir / f"{job.tag}.pt"
+        tmp = ckpt_dir / f"{job.tag}.pt.tmp"
+        torch.save(job.payload, tmp)
+        os.replace(tmp, final)
+
+        index_path = ckpt_dir / "index.jsonl"
+        rows = [
+            json.loads(line)
+            for line in index_path.read_text().splitlines()
+            if line.strip()
+        ] if index_path.exists() else []
+        rows = [r for r in rows if r["tag"] != job.tag]
+        rows.append({"tag": job.tag, "step": job.payload["step"], "metric": self._read_metric(job)})
+
+        keep = self._rotation_keep(rows, job.metric, job.mode, job.keep_top_k)
+        for r in rows:
+            if r["tag"] not in keep:
+                (ckpt_dir / f"{r['tag']}.pt").unlink(missing_ok=True)
+        rows = [{**r, "is_top_k": True} for r in rows if r["tag"] in keep]
+        atomic_write_bytes(
+            index_path, ("\n".join(json.dumps(r) for r in rows) + "\n").encode()
+        )
+
+    def _read_metric(self, job: CheckpointJob) -> float | None:
+        if job.metric is None:
+            return None
+        metrics_path = job.run_dir / f"epoch_{job.epoch:04d}" / "metrics.jsonl"
+        if not metrics_path.exists():
+            return None
+        value = None
+        for line in metrics_path.read_text().splitlines():
+            if line.strip():
+                scalars = json.loads(line).get("scalars", {})
+                if job.metric in scalars:
+                    value = scalars[job.metric]
+        return value
+
+    def _rotation_keep(self, rows: list[dict], metric: str | None, mode: str, k: int) -> set:
+        latest = max(rows, key=lambda r: r["step"])["tag"]
+        if metric is None:
+            best = sorted(rows, key=lambda r: r["step"], reverse=True)[:k]
+            return {r["tag"] for r in best} | {latest}
+        worst = float("inf") if mode == "min" else float("-inf")
+        ordered = sorted(
+            rows,
+            key=lambda r: r["metric"] if r["metric"] is not None else worst,
+            reverse=(mode == "max"),
+        )
+        return {r["tag"] for r in ordered[:k]} | {latest}
 
     def _append_error(self, error: str) -> None:
         try:

@@ -41,3 +41,15 @@ def capture_rng() -> dict:
     if torch.cuda.is_available():
         rng["cuda"] = torch.cuda.get_rng_state_all()
     return rng
+
+
+def restore_rng(rng: dict) -> None:
+    import random
+    import numpy as np
+    import torch
+
+    torch.set_rng_state(rng["torch"])
+    np.random.set_state(rng["numpy"])
+    random.setstate(rng["python"])
+    if "cuda" in rng and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(rng["cuda"])

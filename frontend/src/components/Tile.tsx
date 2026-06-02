@@ -5,8 +5,7 @@ import { Button } from "./Button";
 import { render } from "./render";
 import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
-import { fetchTable } from "../api/client";
-import { Table } from "../types/domain";
+import { fetchTable, saveView } from "../api/client";
 
 interface TileProps {
   path: string;
@@ -15,17 +14,22 @@ interface TileProps {
 export function Tile({ path }: TileProps) {
   const [, setSearchParams] = useSearchParams();
   const [loadState, setLoadState] = useState(loadFsm.initial);
-  const [table, setTable] = useState<Table | null>(null);
-  const tables_loadTable = useStore((state: any) => state.tables_loadTable);
+  const loadTable = useStore((state: any) => state.tables_loadTable);
+  const table = useStore((state: any) => state.tables.get(path));
+  const savedView = useStore((state: any) => state.views.get(path));
   const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
   const liveTick = useStore((state: any) => state.liveTick);
 
   useEffect(() => {
     setLoadState(loadFsm.next(loadFsm.initial, "fetch"));
+    if (savedView) {
+      loadTable(savedView);
+      setLoadState((s) => loadFsm.next(s, "success"));
+      return;
+    }
     fetchTable(path)
       .then((loaded) => {
-        tables_loadTable(loaded);
-        setTable(loaded);
+        loadTable(loaded);
         setLoadState((s) => loadFsm.next(s, "success"));
       })
       .catch(() => setLoadState((s) => loadFsm.next(s, "failure")));
@@ -40,6 +44,10 @@ export function Tile({ path }: TileProps) {
     <div>
       <RepresentationSwitcher table={table} tileId={path} />
       <Button label="expand" onClick={() => setSearchParams({ modal: path })} />
+      <Button
+        label="save view"
+        onClick={() => saveView(path, { id: path, ...table, source_path: path })}
+      />
       {render(table, representation)}
     </div>
   );

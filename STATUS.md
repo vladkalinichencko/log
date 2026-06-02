@@ -29,14 +29,16 @@ flowchart LR
 | Area | Status | Notes / spec |
 |---|---|---|
 | `log.run`, `log.log` (scalar+tensor), WriterThread, atomic/jsonl/npy, identity | **real** | §9, §10.1; scalars merged by (epoch,step,rank) |
-| Toolkit: `watch/track/distribute/checkpoint/resume_state/schedules/tick/export.figure` | **stub** | NotImplementedError, exact §9 signatures (Stage 2) |
+| Toolkit: `watch/track/distribute/checkpoint/resume_state/schedules/tick/export.figure` | **real** | §9/§10/§13; LR schedules, sample counting, DDP/FSDP (single-rank identity), forward/backward hooks, checkpoint cadence+rotation, resume+RNG restore, matplotlib export. **Zero NotImplementedError in src/.** |
 | `read_table` all levels | **real** | §6.2 full ladder |
 | `GET /api/runs` (project/status/tag filters), `GET /api/table` | **real** | §9.12, ADR-017 (Depends) |
 | `/api/workspaces` (GET list, PUT save, DELETE) | **real** | §9.12; writes `runs/workspaces/<id>.json` (global, cross-run; atomic temp+rename) |
 | `/ws` live push: watch `runs/` → `run_updated` | **real** | §10.5; `watchfiles.awatch` inside the handler |
-| `/api/series`, `/api/views` | **stub** | endpoints exist, no behavior |
-| `table_engine` parser (`evaluate`/`parse`) | **stub** | §9.13; `FUNCTIONS` registry is **real** |
-| SqliteIndex, WebSocketTransport adapters | **stub** | §7.2; live runs in the ws handler, not the adapter split yet |
+| `/api/series/scalar` (min/max downsample to ~2000) + `/api/series/tensor` | **real** | §9.12, §8 perf seam |
+| `/api/views` (GET/PUT/DELETE → `runs/views/<id>.json`) | **real** | §9.12 |
+| `/api/tables/eval` + `table_engine` parser/evaluator (`table\|select\|filter\|sort\|derive\|agg\|join\|concat`) over `FUNCTIONS` | **real** | §9.13; general arithmetic in `derive` and nested pipes in `join` deferred |
+| `/api/paths` (walk → all drillable dot-paths) | **real** | for search |
+| `SqliteIndex`, `FileWatcher`, `WebSocketTransport` adapters | **no-op placeholder** | §7.2; not NotImplementedError. Live + index run inline (ws handler, read_table); wiring the port/adapter split is deferred (no current need) |
 | Frontend: store + 5 slices, makeFsm + 7 FSMs | **real** | §7.3; route slice removed (URL is state via react-router); resize_fsm added |
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
 | Views: `TableView`, `ListView`, `LineChartView`, `HeatmapView`, `HistogramView` (SVG) | **real** | §11.2b; line/heatmap/histogram hand-drawn |
@@ -50,22 +52,25 @@ flowchart LR
 | `HeaderCell` (editable name/headers, cellEdit_fsm), `DotMenu` (delete row/col, deleteConfirm_fsm two-click) | **real** | §11.3; in-memory edits |
 | `Toolbar` | **stub** | §11.3 |
 | Live (WebSocket → `liveTick` → Tile refetch), `connection_fsm` wiring | **real** | §10.5; global tick refetches open tiles on any run change |
-| Workspace persistence (`workspaces/<id>.json`) | **not built** | §6.3, §11.4 |
 | Representation switcher: table/visualization mode toggle + chart dropdown | **real** | §11.2a; tile `mode` field, chart picked via a `<select>` in visualization mode |
+| Run rename: universal `rename_names` (prefix/suffix/find-replace) + `POST /api/runs/rename` | **real** | §9.12; Finder-style batch; reusable string fn |
+| Search: `/api/paths` + NavBar search box → filtered clickable matches | **real** | §11.3 |
+| View persistence: `Tile` renders from the store, loads a saved view if present, "save view" persists the edited table | **real** | §11.3; manual save (auto-save-on-edit deferred) |
 
-## Pending v1 (need their own subsystem — not bugs)
+## Pending (not bugs — deferred by choice or need their own pass)
 
-- **`POST /api/tables/eval`** (§9.12) — blocked on the `table_engine` DSL parser (stub).
-- **`POST /api/runs/rename`** (§9.12) — the `pattern` templating is underspecified; needs a spec decision before building (not guessing).
-- **Edit persistence to `views/<id>.json`** — table edits are in-memory only; needs the views endpoints + a view-definition shape.
-- **search wiring** — needs a `.`-path index to search over.
-- **`Toolbar`** — thin action bar; most of its actions (merge/formula/aggregate) depend on the parser above.
+- **`Toolbar`** — thin action bar; a UI affordance, low value alone (its actions exist as buttons elsewhere).
+- **Rename UI** — the `rename_names` fn + endpoint are real; a multi-select Finder-style dialog on top is not wired.
+- **Auto-save views on edit** — view persistence works via a manual "save view"; auto-persisting every edit (store subscription) is deferred.
+- **Port/adapter wiring** (`SqliteIndex`/`FileWatcher`/`WebSocketTransport`) — designed in §7.2 but live+index run inline; wiring the split has no current functional gain.
+- **eval `derive` arithmetic + nested-pipe `join`** — the engine covers the core ops; general arithmetic expressions and pipes-inside-join are deferred.
 
-(Cleared into "real": histogram, tile mode toggle + chart dropdown, `applicable()` shape gating, `DELETE /api/runs/{p}/{run}`.)
+**Zero `NotImplementedError` anywhere in `src/`.**
 
 ## Changelog (newest first — commit → what became real)
 
-- `HEAD` — Cleared audit pending-v1 items: histogram representation + `HistogramView`; tile mode toggle (table/visualization) + chart dropdown (`tiles_setMode`, `mode` field); `applicable()` now gates line/heatmap/histogram by cell types; `DELETE /api/runs/{p}/{run}`.
+- `HEAD` — **Closed every plug (zero NotImplementedError) + finished the feature set:** full toolkit (schedules/tick/track/distribute/watch/checkpoint+rotation/resume+RNG/export); `table_engine` parser/evaluator + `/api/tables/eval`; `/api/series` scalar+tensor with downsampling; `/api/views` persistence; `/api/runs/rename` (universal `rename_names`); `/api/paths` + NavBar search; view persistence (Tile renders from store, loads saved view, save-view button). Run-exit meta now read-modify-writes (preserves `resume_diff`/`writer_errors`/final `samples_seen`). +30 tests.
+- `HEAD~` — Cleared audit pending-v1 items: histogram representation + `HistogramView`; tile mode toggle (table/visualization) + chart dropdown (`tiles_setMode`, `mode` field); `applicable()` now gates line/heatmap/histogram by cell types; `DELETE /api/runs/{p}/{run}`.
 - (prev) — Audit drift fixes: `tags` written into `meta.json`; clickable breadcrumb (NavBar); `id` saved on workspace tiles; `GET /api/runs/{p}/{run}` returns the real folder `Table` (read_table + serialize); `/api/series` stub signatures match §9.12; §6.3 representation rule reworded to match `read_table` (folders/key-value/tensor→grid, series→line).
 - `be00da1` — Route-backed fullscreen modal (§11.2a): Tile "expand" sets `?modal=path`; Modal renders the tile fullscreen, URL-addressable, closed by the close button or browser back.
 - `bb7c1e5` — Real URL routing: react-router-dom replaces the store route slice. Drill changes the URL (`/<dot-path>`), browser back/forward work, links are shareable (§11.2 "URL is state"). routeSlice deleted; Cell/NavBar/App use useNavigate/useLocation.

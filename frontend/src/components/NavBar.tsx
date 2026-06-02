@@ -1,9 +1,29 @@
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useStore } from "../store/store";
+import { search_selector } from "../store/selectors/searchSelectors";
+import { fetchPaths } from "../api/client";
 
 export function NavBar() {
   const navigate = useNavigate();
   const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
   const segments: string[] = currentPath.split(".").filter(Boolean);
+
+  const query = useStore((state: any) => state.query);
+  const setQuery = useStore((state: any) => state.search_setQuery);
+  const setPaths = useStore((state: any) => state.search_setPaths);
+  const matches = useStore(search_selector);
+
+  useEffect(() => {
+    fetchPaths()
+      .then(setPaths)
+      .catch((err) => console.error("Failed to fetch paths:", err));
+  }, []);
+
+  const go = (path: string) => {
+    navigate("/" + path);
+    setQuery("");
+  };
 
   return (
     <div>
@@ -25,6 +45,16 @@ export function NavBar() {
           </span>
         ))}
       </span>
+      <input
+        placeholder="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {matches.map((path: string) => (
+        <div key={path} style={{ cursor: "pointer" }} onClick={() => go(path)}>
+          {path}
+        </div>
+      ))}
     </div>
   );
 }

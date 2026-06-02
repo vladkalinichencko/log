@@ -16,6 +16,16 @@ Read before writing or reviewing any code in this repo. `SPEC.md` says WHAT to b
 
 6. **Build only what was asked — and name what you left out.** Add nothing the request and `SPEC.md` don't call for: not a CSS rule, not a DOM node, not a function, not a parameter, not a layer, not a dependency. This is not a ban on CSS or on features — it is a ban on *unrequested* ones. Asked for a grid? Build exactly that grid, nothing around it. When you notice something that plausibly should exist but was not asked for (a style, an edge case, a helper, a guard), do not add it silently and do not drop it silently — **mention it in chat at implementation time** so the owner decides. The one thing you may add unprompted is `cursor: pointer` on a clickable element.
 
+## Where bugs hide — three seams to close (any language)
+
+A unified data flow governs one layer only; real defects live at the **seams** where data leaves it. These caught every real bug in this project, so they are non-negotiable too:
+
+7. **One source of truth — no shadow copies.** Domain data lives in exactly one place; everything else reads it, never keeps its own copy. Local/ephemeral state is for UI only (is-open, is-hovered), never domain data. *React:* never `useState(fetchedTable)` — read from the store via a selector (a shadow copy is why an edit "doesn't show"). *SwiftUI:* never copy an `@ObservedObject` value into `@State`; bind to the source. *Files:* an in-memory cache of a file is not a free snapshot — sync it on every write or make it a replayable change-log, never an at-open copy written back at close; a file written from >1 place has **one** writer, and updates are read-modify-write.
+
+8. **Don't wrap or duplicate — use the framework's own seam.** *FastAPI:* `param = Depends(provider)`, not a middleware + re-declared route (the wrapper drops params the inner function later gains). *SwiftUI/AppKit:* `@EnvironmentObject` / one delegate / one target-action, not a copy passed down and written back, not two handlers on one control.
+
+9. **Test at the seam, not the inner unit.** Assert at the wired surface: the *registered route* (does `?status=x` actually filter?), not the inner function; the *rendered component* (click → store changed), not the reducer alone; the *effect's result* (run the write, read the file back), not the in-memory call.
+
 ## How to communicate
 
 Explain in concrete mechanics: name the actual file, extension, function, and roughly what the call looks like; prefer one concrete example over a sentence of theory; the first time a concept appears, say what it IS mechanically and why it is here. Do not guess on behavior or cost — calculate it or say you don't know.

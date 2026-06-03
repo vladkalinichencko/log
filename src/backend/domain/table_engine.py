@@ -1,11 +1,11 @@
 import operator
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable, Literal
 
 import numpy as np
 
+from ..ports.storage_port import StoragePort
 from .models import Cell, CellType, Representation, Table, TableKind
 from .read_table import read_table
 
@@ -247,24 +247,24 @@ def _atom(stream: Stream) -> tuple:
     return ("num", value) if isinstance(value, float) else ("col", word)
 
 
-def evaluate(expression: str, runs_root: Path) -> Table:
-    names, rows = _eval_pipeline(parse(expression), runs_root)
+def evaluate(expression: str, storage: StoragePort) -> Table:
+    names, rows = _eval_pipeline(parse(expression), storage)
     return _to_table(names, rows)
 
 
-def _eval_pipeline(node: tuple, runs_root: Path):
+def _eval_pipeline(node: tuple, storage: StoragePort):
     _, source, stages = node
-    names, rows = _eval_source(source, runs_root)
+    names, rows = _eval_source(source, storage)
     for op, payload in stages:
-        names, rows = STAGE_EVAL[op](payload, names, rows, runs_root)
+        names, rows = STAGE_EVAL[op](payload, names, rows, storage)
     return names, rows
 
 
-def _eval_source(source: tuple, runs_root: Path):
+def _eval_source(source: tuple, storage: StoragePort):
     arg = source[1]
     if isinstance(arg, tuple):
-        return _eval_pipeline(arg, runs_root)
-    return _read_columns(arg, runs_root)
+        return _eval_pipeline(arg, storage)
+    return _read_columns(arg, storage)
 
 
 def _value(text: str):
@@ -274,9 +274,9 @@ def _value(text: str):
         return text
 
 
-def _read_columns(path: str, runs_root: Path):
+def _read_columns(path: str, storage: StoragePort):
     try:
-        table = read_table(path, runs_root)
+        table = read_table(path, storage)
     except FileNotFoundError as e:
         raise ExpressionError(str(e)) from e
     names = table.column_names or [f"c{i}" for i in range(len(table.cells[0]) if table.cells else 0)]
@@ -337,14 +337,14 @@ def _eval_agg(payload, names, rows, _):
     return [by] + others, out_rows
 
 
-def _eval_join(payload, names, rows, runs_root):
+def _eval_join(payload, names, rows, storage):
     right, on = payload
-    names2, rows2 = _eval_pipeline(right, runs_root)
+    names2, rows2 = _eval_pipeline(right, storage)
     return _join(names, rows, names2, rows2, on)
 
 
-def _eval_concat(payload, names, rows, runs_root):
-    names2, rows2 = _eval_pipeline(payload[0], runs_root)
+def _eval_concat(payload, names, rows, storage):
+    names2, rows2 = _eval_pipeline(payload[0], storage)
     return _concat(names, rows, names2, rows2)
 
 

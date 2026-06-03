@@ -2,7 +2,12 @@ import json
 
 import pytest
 
+from backend.adapters.local_file_storage import LocalFileStorage
 from backend.domain.table_engine import ExpressionError, FUNCTIONS, evaluate, parse
+
+
+def _eval(expression, root):
+    return evaluate(expression, LocalFileStorage(root))
 
 
 def test_aggregation_returns_scalar():
@@ -32,7 +37,7 @@ def _series(root, project="p", run="r", name="loss", values=(0.5, 0.1, 0.2)):
 
 def test_filter_select_derive(tmp_path):
     _series(tmp_path, values=(0.5, 0.1, 0.2, 0.9))
-    t = evaluate(
+    t = _eval(
         "table(p.r.epoch_0000.loss) | filter(step >= 1) | derive(rm=rolling_mean(loss,2)) | select(step,rm)",
         tmp_path,
     )
@@ -42,7 +47,7 @@ def test_filter_select_derive(tmp_path):
 
 def test_agg_groups(tmp_path):
     _series(tmp_path, values=(0.4, 0.2))
-    t = evaluate("table(p.r.epoch_0000.loss) | agg(mean, by=rank)", tmp_path)
+    t = _eval("table(p.r.epoch_0000.loss) | agg(mean, by=rank)", tmp_path)
     assert "loss" in t.column_names
     assert len(t.cells) == 1
 
@@ -50,7 +55,7 @@ def test_agg_groups(tmp_path):
 def test_join_two_runs(tmp_path):
     _series(tmp_path, run="a", values=(0.5, 0.3))
     _series(tmp_path, run="b", values=(0.4, 0.2))
-    t = evaluate(
+    t = _eval(
         "table(p.a.epoch_0000.loss) | join(table(p.b.epoch_0000.loss), on=step)",
         tmp_path,
     )
@@ -60,7 +65,7 @@ def test_join_two_runs(tmp_path):
 
 def test_derive_arithmetic(tmp_path):
     _series(tmp_path, values=(0.4, 0.2, 0.1))
-    t = evaluate(
+    t = _eval(
         "table(p.r.epoch_0000.loss) | derive(gap = loss - mean(loss)) | select(step,gap)",
         tmp_path,
     )
@@ -71,7 +76,7 @@ def test_derive_arithmetic(tmp_path):
 def test_join_nested_pipeline(tmp_path):
     _series(tmp_path, run="a", values=(0.5, 0.3, 0.7))
     _series(tmp_path, run="b", values=(0.4, 0.2, 0.6))
-    t = evaluate(
+    t = _eval(
         "table(p.a.epoch_0000.loss) | join(table(p.b.epoch_0000.loss) | filter(step >= 1), on=step)",
         tmp_path,
     )
@@ -81,4 +86,4 @@ def test_join_nested_pipeline(tmp_path):
 
 def test_bad_expression_raises(tmp_path):
     with pytest.raises(ExpressionError):
-        evaluate("notable(x)", tmp_path)
+        _eval("notable(x)", tmp_path)

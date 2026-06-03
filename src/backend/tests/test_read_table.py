@@ -2,12 +2,17 @@ import json
 
 import numpy as np
 
+from backend.adapters.local_file_storage import LocalFileStorage
 from backend.domain.read_table import read_table
+
+
+def _storage(root):
+    return LocalFileStorage(root)
 
 
 def test_read_table_runs_root(tmp_path):
     (tmp_path / "test_project").mkdir()
-    table = read_table("", tmp_path)
+    table = read_table("", _storage(tmp_path))
     assert table.name == "Projects"
     assert table.kind.value == "folder"
     assert [c[0].value for c in table.cells] == ["test_project"]
@@ -33,13 +38,13 @@ def _make_run(root):
 
 def test_drill_run_to_scalar(tmp_path):
     _make_run(tmp_path)
-    run = read_table("p.r", tmp_path)
+    run = read_table("p.r", _storage(tmp_path))
     assert {c[0].value for c in run.cells} == {"config", "meta", "epoch_0000"}
 
-    epoch = read_table("p.r.epoch_0000", tmp_path)
+    epoch = read_table("p.r.epoch_0000", _storage(tmp_path))
     assert {c[0].value for c in epoch.cells} == {"loss", "w"}
 
-    series = read_table("p.r.epoch_0000.loss", tmp_path)
+    series = read_table("p.r.epoch_0000.loss", _storage(tmp_path))
     assert series.kind.value == "column"
     assert series.column_names == ["step", "samples_seen", "wall_time", "rank", "loss"]
     assert [r[-1].value for r in series.cells] == ["2.0", "1.0"]
@@ -47,14 +52,14 @@ def test_drill_run_to_scalar(tmp_path):
 
 def test_drill_tensor(tmp_path):
     _make_run(tmp_path)
-    t = read_table("p.r.epoch_0000.w", tmp_path)
+    t = read_table("p.r.epoch_0000.w", _storage(tmp_path))
     assert t.kind.value == "grid"
     assert [[c.value for c in r] for r in t.cells] == [["0", "1", "2"], ["3", "4", "5"]]
 
 
 def test_config_keyvalue(tmp_path):
     _make_run(tmp_path)
-    cfg = read_table("p.r.config", tmp_path)
+    cfg = read_table("p.r.config", _storage(tmp_path))
     assert cfg.column_names == ["key", "value"]
     assert [[c.value for c in r] for r in cfg.cells] == [["lr", "0.01"]]
 
@@ -63,5 +68,5 @@ def test_list_paths_walks_tree(tmp_path):
     from backend.api.tables import list_paths
 
     _make_run(tmp_path)
-    paths = list_paths(tmp_path)
+    paths = list_paths(_storage(tmp_path))
     assert {"p", "p.r", "p.r.epoch_0000", "p.r.epoch_0000.loss", "p.r.epoch_0000.w"} <= set(paths)

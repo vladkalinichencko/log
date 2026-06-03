@@ -5,9 +5,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..config import get_index, get_runs_root
+from ..config import get_index, get_runs_root, get_storage
 from ..domain.read_table import read_table
 from ..ports.index_port import IndexPort
+from ..ports.storage_port import StoragePort
 from .tables import _table_to_dict
 
 router = APIRouter()
@@ -38,9 +39,9 @@ def get_runs(
 
 
 @router.get("/api/runs/{project}/{run}")
-def get_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
+def get_run(project: str, run: str, storage: StoragePort = Depends(get_storage)) -> dict:
     try:
-        return _table_to_dict(read_table(f"{project}.{run}", runs_root))
+        return _table_to_dict(read_table(f"{project}.{run}", storage))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
 

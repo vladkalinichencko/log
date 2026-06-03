@@ -4,7 +4,12 @@ import numpy as np
 import pytest
 from fastapi import HTTPException
 
+from backend.adapters.local_file_storage import LocalFileStorage
 from backend.api.series import _downsample, get_scalar_series, get_tensor_series
+
+
+def _storage(root):
+    return LocalFileStorage(root)
 
 
 def _series_run(root):
@@ -23,7 +28,7 @@ def _series_run(root):
 
 def test_scalar_series(tmp_path):
     _series_run(tmp_path)
-    out = get_scalar_series("p/r", "loss", "step", tmp_path)
+    out = get_scalar_series("p/r", "loss", "step", _storage(tmp_path))
     assert out["x"] == [0, 1, 2, 3, 4]
     assert out["y"][0] == 1.0
 
@@ -31,12 +36,12 @@ def test_scalar_series(tmp_path):
 def test_scalar_series_missing_404(tmp_path):
     _series_run(tmp_path)
     with pytest.raises(HTTPException):
-        get_scalar_series("p/r", "nope", "step", tmp_path)
+        get_scalar_series("p/r", "nope", "step", _storage(tmp_path))
 
 
 def test_tensor_series(tmp_path):
     _series_run(tmp_path)
-    out = get_tensor_series("p/r", "w", 0, tmp_path)
+    out = get_tensor_series("p/r", "w", 0, _storage(tmp_path))
     assert out["shape"] == [2, 3]
     assert out["data"] == [0, 1, 2, 3, 4, 5]
 

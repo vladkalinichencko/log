@@ -1,12 +1,19 @@
-import json
-from pathlib import Path
-
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..config import get_runs_root
+from ..config import get_storage
+from ..domain.read_table import read_jsonl
+from ..ports.storage_port import StoragePort
 
 router = APIRouter()
+
+
+def _epoch_dirs(storage: StoragePort, run_dir: str) -> list[str]:
+    return sorted(
+        f"{run_dir}/{name}"
+        for name in storage.list_dir(run_dir)
+        if name.startswith("epoch_") and storage.is_dir(f"{run_dir}/{name}")
+    )
 
 
 def _downsample(xs: list, ys: list, target: int = 2000):
@@ -30,21 +37,16 @@ def _downsample(xs: list, ys: list, target: int = 2000):
 
 @router.get("/api/series/scalar")
 def get_scalar_series(
-    run: str, path: str, x: str = "step", runs_root: Path = Depends(get_runs_root)
+    run: str, path: str, x: str = "step", storage: StoragePort = Depends(get_storage)
 ) -> dict:
     project, name = run.split("/", 1)
-    run_dir = runs_root / project / name
+    run_dir = f"{project}/{name}"
     xs, ys = [], []
-    for epoch_dir in sorted(run_dir.glob("epoch_*")):
-        metrics_path = epoch_dir / "metrics.jsonl"
-        if not metrics_path.exists():
-            continue
-        for line in metrics_path.read_text().splitlines():
-            if line.strip():
-                row = json.loads(line)
-                if path in row.get("scalars", {}):
-                    xs.append(row.get(x, row["step"]))
-                    ys.append(row["scalars"][path])
+    for epoch_dir in _epoch_dirs(storage, run_dir):
+        for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
+            if path in row.get("scalars", {}):
+                xs.append(row.get(x, row["step"]))
+                ys.append(row["scalars"][path])
     if not xs:
         raise HTTPException(status_code=404, detail="SERIES_NOT_FOUND")
     xs, ys = _downsample(xs, ys)
@@ -53,22 +55,17 @@ def get_scalar_series(
 
 @router.get("/api/series/tensor")
 def get_tensor_series(
-    run: str, path: str, step: int, runs_root: Path = Depends(get_runs_root)
+    run: str, path: str, step: int, storage: StoragePort = Depends(get_storage)
 ) -> dict:
     project, name = run.split("/", 1)
-    run_dir = runs_root / project / name
-    for epoch_dir in sorted(run_dir.glob("epoch_*")):
-        index = epoch_dir / "tensors" / "index.jsonl"
-        if not index.exists():
-            continue
-        for line in index.read_text().splitlines():
-            if line.strip():
-                row = json.loads(line)
-                if row["path"] == path and row["step"] == step:
-                    arr = np.load(epoch_dir / "tensors" / row["file"], mmap_mode="r")
-                    return {
-                        "shape": list(arr.shape),
-                        "dtype": str(arr.dtype),
-                        "data": np.asarray(arr).flatten().tolist(),
-                    }
+    run_dir = f"{project}/{name}"
+    for epoch_dir in _epoch_dirs(storage, run_dir):
+        for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl"):
+            if row["path"] == path and row["step"] == step:
+                arr = storage.read_array(f"{epoch_dir}/tensors/{row['file']}")
+                return {
+                    "shape": list(arr.shape),
+                    "dtype": str(arr.dtype),
+                    "data": np.asarray(arr).flatten().tolist(),
+                }
     raise HTTPException(status_code=404, detail="SERIES_NOT_FOUND")

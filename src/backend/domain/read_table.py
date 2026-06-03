@@ -38,7 +38,7 @@ def _keyvalue(name: str, source_path: str, pairs) -> Table:
     )
 
 
-def _jsonl(storage: StoragePort, path: str) -> list[dict]:
+def read_jsonl(storage: StoragePort, path: str) -> list[dict]:
     if not storage.exists(path):
         return []
     return [json.loads(line) for line in storage.read(path).decode().splitlines() if line.strip()]
@@ -120,7 +120,7 @@ def read_table(path: str, storage: StoragePort) -> Table:
         return _keyvalue("meta", f"{base}.meta", meta.items())
 
     if len(segments) == 3 and third == "checkpoints":
-        tags = [[Cell(type=CellType.string, value=r["tag"], ref=None)] for r in _jsonl(storage, f"{run_dir}/checkpoints/index.jsonl")]
+        tags = [[Cell(type=CellType.string, value=r["tag"], ref=None)] for r in read_jsonl(storage, f"{run_dir}/checkpoints/index.jsonl")]
         return Table(
             name="checkpoints", kind=TableKind.folder, column_names=["tag"],
             row_names=None, cells=tags, representation=Representation.grid,
@@ -133,12 +133,12 @@ def read_table(path: str, storage: StoragePort) -> Table:
     if len(segments) == 3:
         entries = []
         seen = set()
-        for row in _jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
+        for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
             for name in row["scalars"]:
                 if name not in seen:
                     seen.add(name)
                     entries.append((name, f"{base}.{epoch}.{name}"))
-        for row in _jsonl(storage, f"{epoch_dir}/tensors/index.jsonl"):
+        for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl"):
             if row["path"] not in seen:
                 seen.add(row["path"])
                 entries.append((row["path"], f"{base}.{epoch}.{row['path']}"))
@@ -146,7 +146,7 @@ def read_table(path: str, storage: StoragePort) -> Table:
 
     leaf = ".".join(segments[3:])
 
-    tensors = [r for r in _jsonl(storage, f"{epoch_dir}/tensors/index.jsonl") if r["path"] == leaf]
+    tensors = [r for r in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl") if r["path"] == leaf]
     if tensors:
         latest = max(tensors, key=lambda r: r["step"])
         arr = storage.read_array(f"{epoch_dir}/tensors/{latest['file']}")
@@ -158,7 +158,7 @@ def read_table(path: str, storage: StoragePort) -> Table:
         )
 
     rows = []
-    for row in _jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
+    for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
         if leaf in row["scalars"]:
             rows.append([
                 Cell(type=CellType.number, value=str(row["step"]), ref=None),

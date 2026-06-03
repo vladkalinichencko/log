@@ -23,13 +23,13 @@ export function Tile({ path }: TileProps) {
   useEffect(() => {
     setLoadState(loadFsm.next(loadFsm.initial, "fetch"));
     if (savedView) {
-      loadTable(savedView);
+      loadTable(path, savedView);
       setLoadState((s) => loadFsm.next(s, "success"));
       return;
     }
     fetchTable(path)
       .then((loaded) => {
-        loadTable(loaded);
+        loadTable(path, loaded);
         setLoadState((s) => loadFsm.next(s, "success"));
       })
       .catch(() => setLoadState((s) => loadFsm.next(s, "failure")));

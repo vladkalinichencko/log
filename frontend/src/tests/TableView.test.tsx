@@ -81,7 +81,7 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "g2",
     };
-    s().tables_loadTable(grid);
+    s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
     fireEvent.click(screen.getByText("＋ row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
@@ -98,7 +98,7 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "g3",
     };
-    s().tables_loadTable(grid);
+    s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
     fireEvent.click(screen.getAllByText("⋯")[0]);
     fireEvent.click(screen.getByText("delete"));
@@ -117,7 +117,7 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "g4",
     };
-    s().tables_loadTable(grid);
+    s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
     fireEvent.doubleClick(screen.getByText("a"));
     const input = screen.getByDisplayValue("a");

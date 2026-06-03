@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useStore } from "../store/store";
 import { search_selector } from "../store/selectors/searchSelectors";
@@ -10,9 +10,10 @@ export function NavBar() {
   const segments: string[] = currentPath.split(".").filter(Boolean);
 
   const query = useStore((state: any) => state.query);
+  const paths = useStore((state: any) => state.paths);
   const setQuery = useStore((state: any) => state.search_setQuery);
   const setPaths = useStore((state: any) => state.search_setPaths);
-  const matches = useStore(search_selector);
+  const matches = useMemo(() => search_selector({ query, paths }), [query, paths]);
 
   useEffect(() => {
     fetchPaths()

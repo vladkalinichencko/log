@@ -13,12 +13,9 @@ export const createTablesSlice = (set: any) => ({
   views: new Map<string, Table>(),
   editHistory: [],
 
-  tables_loadTable: (table: Table) =>
+  tables_loadTable: (id: string, table: Table) =>
     set((state: any) => ({
-      tables: new Map<string, Table>(state.tables).set(
-        table.source_path || table.name,
-        table
-      ),
+      tables: new Map<string, Table>(state.tables).set(id, table),
     })),
 
   tables_setViews: (list: any[]) =>

@@ -1,9 +1,30 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import runs, tables, series, views, workspaces, ws
+from .adapters.file_watcher import FileWatcher
+from .adapters.sqlite_index import SqliteIndex
+from .adapters.websocket_transport import WebSocketTransport
+from .api import runs, series, tables, views, workspaces, ws
+from .config import get_runs_root
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    runs_root = get_runs_root()
+    index = SqliteIndex(runs_root)
+    index.rebuild()
+    transport = WebSocketTransport()
+    app.state.index = index
+    app.state.transport = transport
+    watcher = asyncio.create_task(FileWatcher(runs_root, index, transport).run())
+    yield
+    watcher.cancel()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

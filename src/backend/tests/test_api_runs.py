@@ -103,5 +103,6 @@ def test_route_status_filter_through_index(tmp_path, monkeypatch):
     monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
     _make_run(tmp_path, "p1", "run_a", "finished")
     _make_run(tmp_path, "p1", "run_b", "running")
-    rows = TestClient(app).get("/api/runs", params={"status": "finished"}).json()
+    with TestClient(app) as client:
+        rows = client.get("/api/runs", params={"status": "finished"}).json()
     assert {r["name"] for r in rows} == {"run_a"}

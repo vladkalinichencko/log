@@ -3,4 +3,5 @@ from typing import Protocol
 
 class TransportPort(Protocol):
 
-    pass
+    async def push(self, event: dict) -> None:
+        ...

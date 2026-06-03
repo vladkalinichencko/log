@@ -15,10 +15,9 @@ def test_transform_returns_column():
     assert FUNCTIONS["rolling_mean"].fn([1, 2, 3, 4], 2) == [1.0, 1.5, 2.5, 3.5]
 
 
-def test_parse_splits_pipe():
-    ast = parse("table(p.r.epoch_0000.loss) | select(step,loss)")
-    assert ast["path"] == "p.r.epoch_0000.loss"
-    assert ast["ops"] == [("select", "step,loss")]
+def test_parse_pipeline_shape():
+    node = parse("table(p.r.epoch_0000.loss) | select(step,loss)")
+    assert node == ("pipe", ("table", "p.r.epoch_0000.loss"), [("select", ["step", "loss"])])
 
 
 def _series(root, project="p", run="r", name="loss", values=(0.5, 0.1, 0.2)):
@@ -57,6 +56,27 @@ def test_join_two_runs(tmp_path):
     )
     assert "loss" in t.column_names and "loss_2" in t.column_names
     assert len(t.cells) == 2
+
+
+def test_derive_arithmetic(tmp_path):
+    _series(tmp_path, values=(0.4, 0.2, 0.1))
+    t = evaluate(
+        "table(p.r.epoch_0000.loss) | derive(gap = loss - mean(loss)) | select(step,gap)",
+        tmp_path,
+    )
+    gaps = [float(row[1].value) for row in t.cells]
+    assert gaps == pytest.approx([0.4 - 0.2333333, 0.2 - 0.2333333, 0.1 - 0.2333333], abs=1e-4)
+
+
+def test_join_nested_pipeline(tmp_path):
+    _series(tmp_path, run="a", values=(0.5, 0.3, 0.7))
+    _series(tmp_path, run="b", values=(0.4, 0.2, 0.6))
+    t = evaluate(
+        "table(p.a.epoch_0000.loss) | join(table(p.b.epoch_0000.loss) | filter(step >= 1), on=step)",
+        tmp_path,
+    )
+    steps = [float(row[0].value) for row in t.cells]
+    assert steps == [1.0, 2.0]
 
 
 def test_bad_expression_raises(tmp_path):

@@ -44,3 +44,14 @@ class Table:
     cells: list[list[Cell]]
     representation: Representation
     source_path: str | None
+
+
+@dataclass
+class RunSummary:
+    project: str
+    name: str
+    status: str
+    samples_seen: int
+    start_wall_time: float | None
+    tags: list[str]
+    config: dict[str, Any]

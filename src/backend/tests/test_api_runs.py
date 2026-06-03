@@ -2,7 +2,10 @@ import json
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
+from backend.adapters.sqlite_index import SqliteIndex
+from backend.main import app
 from backend.api.runs import (
     RenameRequest,
     delete_run,
@@ -20,6 +23,12 @@ def _make_run(runs_root, project, name, status):
     (run_dir / "config.json").write_text(json.dumps({"params": {"lr": 0.1}}))
 
 
+def _index(runs_root):
+    index = SqliteIndex(runs_root)
+    index.rebuild()
+    return index
+
+
 def _names(rows):
     return {r["name"] for r in rows}
 
@@ -27,21 +36,21 @@ def _names(rows):
 def test_lists_runs_across_projects(tmp_path):
     _make_run(tmp_path, "p1", "run_a", "finished")
     _make_run(tmp_path, "p2", "run_b", "running")
-    assert _names(get_runs(tmp_path)) == {"run_a", "run_b"}
+    assert _names(get_runs(_index(tmp_path))) == {"run_a", "run_b"}
 
 
 def test_project_filter(tmp_path):
     _make_run(tmp_path, "p1", "run_a", "finished")
     _make_run(tmp_path, "p1", "run_b", "running")
     _make_run(tmp_path, "p2", "run_c", "finished")
-    assert _names(get_runs(tmp_path, project="p1")) == {"run_a", "run_b"}
+    assert _names(get_runs(_index(tmp_path), project="p1")) == {"run_a", "run_b"}
 
 
 def test_status_filter(tmp_path):
     _make_run(tmp_path, "p1", "run_a", "finished")
     _make_run(tmp_path, "p1", "run_b", "running")
     _make_run(tmp_path, "p2", "run_c", "finished")
-    assert _names(get_runs(tmp_path, status="finished")) == {"run_a", "run_c"}
+    assert _names(get_runs(_index(tmp_path), status="finished")) == {"run_a", "run_c"}
 
 
 def test_get_run_returns_a_folder_table(tmp_path):
@@ -88,3 +97,11 @@ def test_rename_runs_collision_raises(tmp_path):
     _make_run(tmp_path, "p1", "exp_a", "finished")
     with pytest.raises(HTTPException):
         rename_runs(RenameRequest(run_refs=["p1/a"], prefix="exp_"), tmp_path)
+
+
+def test_route_status_filter_through_index(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    _make_run(tmp_path, "p1", "run_a", "finished")
+    _make_run(tmp_path, "p1", "run_b", "running")
+    rows = TestClient(app).get("/api/runs", params={"status": "finished"}).json()
+    assert {r["name"] for r in rows} == {"run_a"}

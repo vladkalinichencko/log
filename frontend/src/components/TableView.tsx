@@ -18,29 +18,44 @@ export function TableView({ table }: TableViewProps) {
   const editName = useStore((state: any) => state.tables_editName);
   return (
     <div>
-      <HeaderCell name={table.name} onRename={(n) => editName(tableId, "table", 0, n)} />
-      {table.column_names && (
-        <div>
-          {table.row_names && <div></div>}
-          {table.column_names.map((name: string, c: number) => (
-            <div key={c}>
-              <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
-              <DotMenu onDelete={() => removeColumn(tableId, c)} />
-            </div>
+      <table>
+        <caption>
+          <HeaderCell name={table.name} onRename={(n) => editName(tableId, "table", 0, n)} />
+        </caption>
+        {table.column_names && (
+          <thead>
+            <tr>
+              {table.row_names && <th></th>}
+              {table.column_names.map((name: string, c: number) => (
+                <th key={c}>
+                  <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
+                  <DotMenu onDelete={() => removeColumn(tableId, c)} />
+                </th>
+              ))}
+              <th></th>
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {table.cells.map((row: Cell[], r: number) => (
+            <tr key={r}>
+              {table.row_names && (
+                <th>
+                  <HeaderCell name={table.row_names[r]} onRename={(n) => editName(tableId, "row", r, n)} />
+                </th>
+              )}
+              {row.map((cell: Cell, c: number) => (
+                <td key={c}>
+                  <CellComponent cell={cell} tableId={tableId} rowIndex={r} colIndex={c} />
+                </td>
+              ))}
+              <td>
+                <DotMenu onDelete={() => removeRow(tableId, r)} />
+              </td>
+            </tr>
           ))}
-        </div>
-      )}
-      {table.cells.map((row: Cell[], r: number) => (
-        <div key={r}>
-          {table.row_names && (
-            <HeaderCell name={table.row_names[r]} onRename={(n) => editName(tableId, "row", r, n)} />
-          )}
-          {row.map((cell: Cell, c: number) => (
-            <CellComponent key={c} cell={cell} tableId={tableId} rowIndex={r} colIndex={c} />
-          ))}
-          <DotMenu onDelete={() => removeRow(tableId, r)} />
-        </div>
-      ))}
+        </tbody>
+      </table>
       <AddControl label="＋ column" onClick={() => addColumn(tableId)} />
       <AddControl label="＋ row" onClick={() => addRow(tableId)} />
     </div>

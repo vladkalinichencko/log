@@ -19,9 +19,9 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
 
   if (cell.type === CellType.TableRef && cell.ref) {
     return (
-      <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${cell.ref}`)}>
+      <span style={{ cursor: "pointer" }} onClick={() => navigate(`/${cell.ref}`)}>
         {cell.value}
-      </div>
+      </span>
     );
   }
 
@@ -52,5 +52,5 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
     );
   }
 
-  return <div onDoubleClick={handleDoubleClick}>{cell.value}</div>;
+  return <span onDoubleClick={handleDoubleClick}>{cell.value}</span>;
 }

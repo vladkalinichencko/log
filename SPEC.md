@@ -59,9 +59,9 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 - The `Table` type exists in backend (`domain/models.py`) and frontend (`types/domain.ts`).
 - `@log.run` + `log.log` write a real `config.json`, `meta.json`, and one `metrics.jsonl` row through the real writer thread (no stubs on the write path — it is the smallest real spine).
 - Backend `read_table(path)` reads the `runs/` tree and returns a `Table`; `GET /api/table?path=` returns it; `GET /api/runs` lists run folders.
-- Frontend boots, fetches one `Table`, renders it as a **grid of plain divs**, left-aligned, stacked in document order. No styling, no positioning.
+- Frontend boots, fetches one `Table`, renders it as **semantic HTML (a real `<table>`)**, unstyled, in document order.
 - The grid supports the basic edit operations wired through the state/reducer/FSM pattern, against in-memory derived state (not persisted in v0): edit a cell, add/remove a row/column, select a cell, change representation. Each is the real reducer + FSM; the only stub is persistence.
-- A `table_ref` cell renders its referenced `Table` **in place** as a small grid of plain divs (W&B-style preview) and stays clickable to drill in. In v0 the in-cell render is plain divs only (no chart), but it exists from v0 — not deferred.
+- A `table_ref` cell renders its referenced `Table` **in place** as a small semantic table (W&B-style preview) and stays clickable to drill in. In v0 the in-cell render is a plain table only (no chart), but it exists from v0 — not deferred.
 - The other toolkit functions (`watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure`) exist as importable stubs with the exact Section 9 signatures, raising `NotImplementedError` in their body, so the public surface is complete and import-testable.
 
 ### 3.2 v1 — full toolkit, tables in files, representations in UI
@@ -268,7 +268,7 @@ log/
         Tile.tsx                  # one table: load_fsm fetch + switcher + expand + render
         Dashboard.tsx             # grid of pinned Tiles
         Modal.tsx                 # fullscreen route-backed tile (?modal=path)
-        TableView.tsx             # grid-of-divs representation
+        TableView.tsx             # semantic <table> representation
         Cell.tsx                  # one cell (uses cellEdit_fsm)
         HeaderCell.tsx            # column/row name cell (edit + dot-menu)
         DotMenu.tsx               # corner ⋯ menu (uses deleteConfirm_fsm)
@@ -1525,9 +1525,9 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Alternatives considered**: separate classes `Project/Run/Config/Meta/Epoch/...` (the earlier draft — duplicates rendering/ops per type, and the UI had to special-case each); a tagged union without a shared shape (loses the single render/operation path).
 **Consequences**: On-disk records still have their own JSON shapes (Section 6.3); `read_table` is the one adapter between them and `Table`. n-D tensors are flattened to 2-D in v1; native n-D `Table` is v3.
 
-### ADR-012: Own the grid — build the table as a grid of plain divs, no third-party spreadsheet
-**Decision**: The `Table` grid is our own React components rendering plain divs; we own the cell, the editing FSM, and the minimal hand-written formula language. No third-party spreadsheet/grid component in v0/v1. Under measured large-table pressure (v1+) we may add only `@tanstack/react-virtual` (windowing) and optionally headless `@tanstack/react-table` (column/sort logic) — both render our own divs and impose no styles.
-**Why**: A grid of divs is the only choice consistent with "everything is our `Table`", minimum dependencies, FSM-per-cell, inspect-by-CSS, no imposed styles, and copy-our-own-code-for-new-features. Research rejected the alternatives on concrete grounds.
+### ADR-012: Own the grid — build the table as semantic HTML, no third-party spreadsheet
+**Decision**: The `Table` grid is our own React components rendering **semantic HTML** — a real `<table>/<thead>/<tbody>/<tr>/<th>/<td>` for the grid, `<ul>/<li>` for the list, real `<button>`/`<input>`/headings — never a `<div>` standing in for an element that already exists. We own the cell, the editing FSM, and the minimal hand-written formula language. No third-party spreadsheet/grid component in v0/v1. Under measured large-table pressure (v1+) we may add only `@tanstack/react-virtual` (windowing) and optionally headless `@tanstack/react-table` (column/sort logic) — both render our own elements and impose no styles. **Styling:** elements stay unstyled until styling is requested; then a single `frontend/src/styles/tokens.css` provides minimal monochrome base styling via design tokens (one spacing scale `--space`, one `--radius`, a gray scale, one `--shadow`) applied through **element selectors**, plus one class per structural role (`.modal`, `.tile`). No arbitrary per-component values, no animations.
+**Why**: Owning the elements is the only choice consistent with "everything is our `Table`", minimum dependencies, FSM-per-cell, inspect-by-CSS, no imposed styles, and copy-our-own-code-for-new-features. Semantic tags (not `<div>`s) give the browser's built-in grid/heading/list/button behavior for free and keep the markup readable. Research rejected the alternatives on concrete grounds.
 **Alternatives considered (with the disqualifier)**: Handsontable (dropped open source in 2019; non-commercial license); AG Grid (advanced editing is Enterprise-gated, large, owns the data model + theme); Glide Data Grid (canvas — no DOM cells, no CSS selectors, no per-cell div/FSM); react-data-grid (MIT div-grid but imposes its own row/column model + styles); Univer/Luckysheet/Fortune-sheet/jspreadsheet CE (full frameworks that own data model, state, and CSS); HyperFormula (GPLv3 or paid — copyleft would force the whole app open or a paid key, and it is far more than our minimal formula language needs).
 **Consequences**: We write the cell, selection, edit FSM, and formula evaluator ourselves (small, testable). We do not get a spreadsheet's batteries for free; we add tiny MIT primitives only when profiling shows a need.
 

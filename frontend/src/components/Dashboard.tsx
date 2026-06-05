@@ -16,7 +16,8 @@ export function Dashboard() {
         return (
           <div
             key={path}
-            style={{ width: tile?.w ?? 400, height: tile?.h ?? 300, border: "1px solid", overflow: "auto" }}
+            className="tile"
+            style={{ width: tile?.w ?? 400, height: tile?.h ?? 300 }}
           >
             <Button label="unpin" onClick={() => unpin(path)} />
             <Tile path={path} />

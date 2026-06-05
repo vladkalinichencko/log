@@ -28,5 +28,5 @@ export function HeaderCell({ name, onRename }: HeaderCellProps) {
       />
     );
   }
-  return <div onDoubleClick={() => setState(cellEditFsm.next(state, "dblclick"))}>{name}</div>;
+  return <span onDoubleClick={() => setState(cellEditFsm.next(state, "dblclick"))}>{name}</span>;
 }

@@ -30,7 +30,7 @@ export function NavBar() {
     <div>
       <button onClick={() => navigate(-1)}>←</button>
       <button onClick={() => navigate(1)}>→</button>
-      <span>
+      <nav>
         <span style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
           Home
         </span>
@@ -45,7 +45,7 @@ export function NavBar() {
             </span>
           </span>
         ))}
-      </span>
+      </nav>
       <input
         placeholder="search"
         value={query}

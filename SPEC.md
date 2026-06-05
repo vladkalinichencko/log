@@ -123,10 +123,11 @@ Dropped vs the earlier draft: **orjson** (stdlib `json` suffices for one user's 
 | vite | Dev server + production static build. Without it, hand-configured bundler. |
 | zustand | The single canonical state tree (one JS object in browser memory) with subscribe-by-slice. Lighter than Redux for one user, same store/selector/action model. Without it we hand-write a store + subscription. |
 | react-router-dom | URL ↔ route state (URL is state). Without it we hand-parse `location` and manage history. |
+| plotly.js + react-plotly.js | The one chart framework behind the RENDER slot (ADR-006): line/heatmap/histogram + future 3D/interpretability views, one `Table → figure` mapping. Without it we hand-write SVG and cannot reach 3D/interactivity. |
 
 Dropped vs the earlier draft, with the replacement named:
 - **@tanstack/react-query** → replaced by our own `load_fsm` (a hand-written `idle → loading → loaded → error` FSM, ~30 lines) + `fetch`. We already require FSM-everywhere; a query library would be a second, redundant async-state system.
-- **@visx/visx** → charts are hand-drawn SVG (`<svg><polyline/><rect/>`), since the only v1 charts are a line, a heatmap (grid of `<rect>`), and a histogram (bars). A D3 dependency to draw a polyline is not justified.
+- **@visx/visx** → superseded by **plotly.js** (ADR-006, revised): the owner chose one declarative chart framework for many styles + 3D + low effort over hand-drawn SVG. (The original draft dropped all charting libs and hand-drew SVG; that decision was reversed when 3D/interpretability views entered scope.)
 - **reselect** → selectors are hand-written memoized functions (close over last input/output). For a single-user tree the memo is a three-line helper.
 - **framer-motion** → no animations exist (Constraint), so nothing to interpolate.
 
@@ -277,9 +278,9 @@ log/
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
-        LineChartView.tsx         # hand-drawn SVG line
-        HeatmapView.tsx           # hand-drawn SVG grid of rects
-        HistogramView.tsx         # hand-drawn SVG bars (value distribution)
+        LineChartView.tsx         # Plotly line chart
+        HeatmapView.tsx           # Plotly heatmap
+        HistogramView.tsx         # Plotly histogram (value distribution)
         ListView.tsx              # list representation
         Button.tsx                # base button component (uses button_fsm)
       types/
@@ -716,9 +717,9 @@ Per-feature function set (one row = one feature, all four shapes present where a
 |---|---|---|
 | `grid` | `TableView` | editable grid of plain divs |
 | `list` | `ListView` | one record per row, stacked |
-| `line` | `LineChartView` | hand-drawn SVG polyline |
-| `heatmap` | `HeatmapView` | hand-drawn SVG grid of `<rect>` |
-| `histogram` *(added when histogram ships, §3.3)* | `HistogramView` | hand-drawn SVG bars |
+| `line` | `LineChartView` | Plotly line |
+| `heatmap` | `HeatmapView` | Plotly heatmap |
+| `histogram` *(added when histogram ships, §3.3)* | `HistogramView` | Plotly histogram |
 
 Mechanically: `render` is `function render(table, representation) { const View = RENDERERS[representation]; return <View table={table} /> }`. Adding a representation is adding **one row** to `RENDERERS` plus one component file — nothing else in the app changes. Every component in the right column reads nothing but its `table` prop; none fetches, none touches the store directly.
 
@@ -1406,7 +1407,7 @@ Each criterion is human-verifiable without reading code (inspect files in `runs/
 **UI: Table as the screen**
 - Given the backend running and a finished run, when the user opens the UI, then `GET /api/runs` data renders as a `Table` (the run list) and each run row is a clickable `table_ref` cell.
 - Given the user clicks a run's `table_ref` cell, then the breadcrumb gains a segment and the screen replaces with that run rendered as a folder `Table` (no modal).
-- Given a single scalar table, when the user clicks the representation switcher from `grid` to `line`, then the same data renders as a hand-drawn SVG line chart with no refetch.
+- Given a single scalar table, when the user clicks the representation switcher from `grid` to `line`, then the same data renders as a Plotly line chart with no refetch.
 
 **UI: editing immutability**
 - Given the user double-clicks a value cell, types a number, presses Enter, then the cell shows the new value, the cell deselects, and no byte of any source `metrics.jsonl` changes (verifiable by file hash before/after). Pressing Esc instead leaves the original value.
@@ -1489,11 +1490,11 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Alternatives considered**: Redux Toolkit (more boilerplate for the same model); Next.js/Remix (SSR/routing unneeded for a local SPA); TanStack Query + reselect (a second async-state system + a dependency replaced by `load_fsm` + a memo helper).
 **Consequences**: We own ~30 lines of `load_fsm` and a memo helper; in exchange the frontend has one async-state mechanism and a smaller dependency set. Client-rendered SPA only; build artifacts are static files servable by the backend.
 
-### ADR-006: Charts = hand-drawn SVG, no charting library
-**Decision**: Line, heatmap, and histogram representations are hand-drawn SVG (`<polyline>`, a grid of `<rect>`, bars) computed by small pure functions, not a charting library.
-**Why**: The only v1 charts are a line, a heatmap, and a histogram — each a few SVG elements over scaled data. A D3/Visx/Plotly dependency to draw a polyline is not justified (Section 4 rule). Hand-drawn SVG stays inside the React render model (components subscribe to state, no imperative chart lifecycle) and keeps total design control.
-**Alternatives considered**: Visx (D3 scales + SVG — still a dependency for what is a scale function and a polyline); Plotly (large bundle, opinionated chrome that fights our design, imperative API); Recharts (higher-level, less control over heatmaps/custom axes).
-**Consequences**: We write the scale math and SVG ourselves (small, testable pure functions). Very large series need downsampling at the representation level (an escape hatch, not core architecture).
+### ADR-006: Charts = Plotly.js, one declarative framework behind the render dispatch
+**Decision**: Line, heatmap, histogram (and future 3D / node-link / embedding-projection views) are rendered with **Plotly.js** (`react-plotly.js`). One pure function `chartSpec(table, kind)` maps a `Table` to a Plotly figure (`{ data, layout }`, monochrome theme); each representation component is a one-liner `<Plot {...chartSpec(table, kind)} />`. The framework lives **only** inside the RENDER slot — the `render(table, representation)` dispatch and `applicable(table)` are unchanged, and store/selectors never see Plotly.
+**Why** (revised — supersedes the original hand-drawn-SVG decision): the owner needs many chart styles, fine control, *and* low effort, plus eventual complex 3D interpretability views (trajectories with correspondence lines, embedding projections). Hand-drawn SVG cannot reach 3D / interactivity without re-implementing a charting engine. Plotly gives ~40 chart types incl. native 3D, built-in zoom/pan/hover, a single JSON config that fits our dispatch, and a monochrome theme. It maps `Table → figure` as one `chartSpec`, preserving WHAT (data) vs HOW (drawing).
+**Cost accepted**: a ~1 MB(gz) dependency — negligible for a local-first single-user tool; the owner chose this trade explicitly. Truly bespoke diagrams Plotly cannot express get a separate representation on D3/three.js *later*, only when a concrete case appears.
+**Alternatives considered**: hand-drawn SVG (original choice; no 3D, no interactivity, reimplements a chart engine for anything nontrivial); ECharts (comparable, slightly more 3D setup); Vega-Lite (great 2D grammar, no real 3D); D3/three.js (max control, far more work — kept as a later escape hatch).
 
 ### ADR-007: Concurrency = single background writer thread; atomic-rename files, append-only JSONL
 **Decision**: All training-side writes go through one background `WriterThread` on an unbounded queue. Non-append files (`.npy`, `.pt`, `.json`) are temp-written then `os.replace`d (atomic on POSIX). `.jsonl` files are append-mode with one `write()`+`flush()` per row.
@@ -1531,8 +1532,8 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Alternatives considered (with the disqualifier)**: Handsontable (dropped open source in 2019; non-commercial license); AG Grid (advanced editing is Enterprise-gated, large, owns the data model + theme); Glide Data Grid (canvas — no DOM cells, no CSS selectors, no per-cell div/FSM); react-data-grid (MIT div-grid but imposes its own row/column model + styles); Univer/Luckysheet/Fortune-sheet/jspreadsheet CE (full frameworks that own data model, state, and CSS); HyperFormula (GPLv3 or paid — copyleft would force the whole app open or a paid key, and it is far more than our minimal formula language needs).
 **Consequences**: We write the cell, selection, edit FSM, and formula evaluator ourselves (small, testable). We do not get a spreadsheet's batteries for free; we add tiny MIT primitives only when profiling shows a need.
 
-### ADR-013: Minimal frontend dependency set (drop query lib, selector lib, charting lib, animation lib)
-**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom (Section 4.2). TanStack Query, reselect, Visx, and framer-motion are not used; their jobs are done by `load_fsm`, a memo helper, hand-drawn SVG, and (nothing — no animations), respectively.
+### ADR-013: Minimal frontend dependency set (drop query lib, selector lib, animation lib)
+**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom, **plotly.js + react-plotly.js** (Section 4.2). TanStack Query, reselect, and framer-motion are not used; their jobs are done by `load_fsm`, a memo helper, and (nothing — no animations). The charting lib is **kept** (plotly.js, ADR-006 revised): one declarative framework earns its place by covering many chart styles + 3D + interactivity that hand-drawn SVG cannot.
 **Why**: Each dropped library either duplicates a mechanism we already require (FSM for async state) or exists to do something trivial (memoize a function, draw a polyline) or something the spec forbids (animations). Section 4's rule: a dependency is allowed only when the stdlib / a few lines / plain CSS cannot do the job.
 **Alternatives considered**: keep them for convenience (rejected — convenience alone is not justification per the dependency rule).
 **Consequences**: A little more first-party code (an FSM, a memo helper, SVG scale math), all small and unit-tested. Smaller bundle, fewer upgrade surfaces, one async-state model.

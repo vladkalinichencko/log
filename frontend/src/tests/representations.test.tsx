@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { LineChartView } from "../components/LineChartView";
-import { HeatmapView } from "../components/HeatmapView";
-import { HistogramView } from "../components/HistogramView";
 import { ListView } from "../components/ListView";
 import { RepresentationSwitcher } from "../components/RepresentationSwitcher";
+import { chartSpec } from "../components/chartSpec";
 import { applicable } from "../components/render";
 import { useStore } from "../store/store";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
@@ -17,7 +15,7 @@ function table(kind: TableKind, rep: Representation, cells: Cell[][], cols: stri
 }
 
 describe("representations", () => {
-  it("line view draws one polyline point per row", () => {
+  it("chartSpec(line) maps step→x and the last column→y", () => {
     const series = table(
       TableKind.Column,
       Representation.Line,
@@ -27,19 +25,20 @@ describe("representations", () => {
       ],
       ["step", "samples_seen", "wall_time", "rank", "loss"]
     );
-    const { container } = render(<LineChartView table={series} />);
-    const poly = container.querySelector("polyline");
-    expect(poly).toBeTruthy();
-    expect(poly!.getAttribute("points")!.trim().split(" ").length).toBe(2);
+    const trace = chartSpec(series, "line").data[0] as any;
+    expect(trace.type).toBe("scatter");
+    expect(trace.x).toEqual([0, 1]);
+    expect(trace.y).toEqual([2, 1]);
   });
 
-  it("heatmap draws one rect per cell", () => {
+  it("chartSpec(heatmap) maps the grid to z", () => {
     const grid = table(TableKind.Grid, Representation.Heatmap, [
       [num("0"), num("1")],
       [num("2"), num("3")],
     ]);
-    const { container } = render(<HeatmapView table={grid} />);
-    expect(container.querySelectorAll("rect").length).toBe(4);
+    const trace = chartSpec(grid, "heatmap").data[0] as any;
+    expect(trace.type).toBe("heatmap");
+    expect(trace.z).toEqual([[0, 1], [2, 3]]);
   });
 
   it("list view renders each cell value", () => {
@@ -61,15 +60,16 @@ describe("representations", () => {
     expect(applicable(grid)).toContain(Representation.Heatmap);
   });
 
-  it("histogram draws one bar per bin", () => {
+  it("chartSpec(histogram) maps the last column to x", () => {
     const series = table(
       TableKind.Column,
       Representation.Histogram,
       [[num("0"), num("1")], [num("1"), num("5")], [num("2"), num("9")]],
       ["step", "loss"]
     );
-    const { container } = render(<HistogramView table={series} />);
-    expect(container.querySelectorAll("rect").length).toBe(10);
+    const trace = chartSpec(series, "histogram").data[0] as any;
+    expect(trace.type).toBe("histogram");
+    expect(trace.x).toEqual([1, 5, 9]);
   });
 
   it("applicable offers histogram for a numeric series", () => {

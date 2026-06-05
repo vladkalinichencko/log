@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RepresentationSwitcher } from "./RepresentationSwitcher";
 import { Button } from "./Button";
-import { render } from "./render";
+import { render, chartReps } from "./render";
+import { Representation } from "../types/domain";
 import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
 import { fetchTable, saveView } from "../api/client";
@@ -18,6 +19,7 @@ export function Tile({ path }: TileProps) {
   const table = useStore((state: any) => state.tables.get(path));
   const savedView = useStore((state: any) => state.views.get(path));
   const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
+  const mode = useStore((state: any) => state.tiles.get(path)?.mode) ?? "table";
   const liveTick = useStore((state: any) => state.liveTick);
 
   useEffect(() => {
@@ -39,15 +41,18 @@ export function Tile({ path }: TileProps) {
     return <div>{loadState === "error" ? `Failed to load ${path}` : "Loading…"}</div>;
   }
 
-  const representation = chosen ?? table.representation;
+  const charts = chartReps(table);
+  const representation =
+    mode === "visualization" && charts.length > 0
+      ? charts.includes(chosen) ? chosen : charts[0]
+      : Representation.Grid;
   return (
     <div>
-      <RepresentationSwitcher table={table} tileId={path} />
-      <Button label="expand" onClick={() => setSearchParams({ modal: path })} />
-      <Button
-        label="save view"
-        onClick={() => saveView(path, { id: path, ...table, source_path: path })}
-      />
+      <div className="toolbar">
+        <RepresentationSwitcher table={table} tileId={path} />
+        <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
+        <Button icon="save" ghost title="save view" onClick={() => saveView(path, { id: path, ...table, source_path: path })} />
+      </div>
       {render(table, representation)}
     </div>
   );

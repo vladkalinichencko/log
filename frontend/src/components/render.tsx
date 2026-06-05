@@ -1,13 +1,11 @@
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
 import { TableView } from "./TableView";
-import { ListView } from "./ListView";
 import { LineChartView } from "./LineChartView";
 import { HeatmapView } from "./HeatmapView";
 import { HistogramView } from "./HistogramView";
 
 const RENDERERS = {
   [Representation.Grid]: TableView,
-  [Representation.List]: ListView,
   [Representation.Line]: LineChartView,
   [Representation.Heatmap]: HeatmapView,
   [Representation.Histogram]: HistogramView,
@@ -16,7 +14,7 @@ const RENDERERS = {
 const isNumber = (cell: Cell) => cell.type === CellType.Number;
 
 export function applicable(table: Table): Representation[] {
-  const reps = [Representation.Grid, Representation.List];
+  const reps = [Representation.Grid];
   const rows = table.cells;
   if (rows.length === 0) return reps;
 
@@ -29,6 +27,10 @@ export function applicable(table: Table): Representation[] {
   }
   if (table.kind === TableKind.Grid && allNumeric) reps.push(Representation.Heatmap);
   return reps;
+}
+
+export function chartReps(table: Table): Representation[] {
+  return applicable(table).filter((r) => r !== Representation.Grid);
 }
 
 export function render(table: Table, representation: Representation) {

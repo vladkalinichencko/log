@@ -12,7 +12,7 @@
 
 1. **Infrastructure as one-line calls** the researcher makes from inside their own hand-written training loop — checkpointing, distributed wrapping, LR schedules, step/sample tracking, resume, and a combined log-and-advance call — so loop boilerplate shrinks from hundreds of lines to roughly fifteen. `log` is a toolkit, not a framework: the user always owns `for batch in loader: ...`; `log` never inverts control, never owns the loop, never auto-computes during training.
 
-2. **Observability** by writing human-readable files (`.json`, `.jsonl`, `.npy`, `.pt`) into a `runs/` directory that a local read-only web UI renders. In the UI **every piece of data — scalars, tensors, run comparisons, statistics, the run list itself — is one type: a `Table`.** A folder on disk is a `Table` that contains `Table`s, so the on-disk tree *is* the table tree. Every screen is one `Table` rendered in a chosen representation (grid of cells, list, line chart, heatmap); switching representation turns a list into a chart without changing the data. The UI is a single-page application (SPA): one HTML page, React swaps screens client-side via the router, the backend is a local read-only JSON + WebSocket server.
+2. **Observability** by writing human-readable files (`.json`, `.jsonl`, `.npy`, `.pt`) into a `runs/` directory that a local read-only web UI renders. In the UI **every piece of data — scalars, tensors, run comparisons, statistics, the run list itself — is one type: a `Table`.** A folder on disk is a `Table` that contains `Table`s, so the on-disk tree *is* the table tree. Every screen is one `Table` rendered in a chosen representation (grid of cells, line chart, heatmap); switching representation turns a table into a chart without changing the data. The UI is a single-page application (SPA): one HTML page, React swaps screens client-side via the router, the backend is a local read-only JSON + WebSocket server.
 
 ---
 
@@ -70,7 +70,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 *Observability:*
 - Backend: read-only file storage, SQLite derived index, file watcher, WebSocket push, table engine (the `.`-path merge language), statistics.
-- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / list / line / heatmap / histogram` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `scatter` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
+- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `scatter` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
 - Every UI edit creates derived columns / derived state in `views/<id>.json`; source files immutable.
 - Publication export via `log.export.figure`.
 - The three structural performance seams (Section 8, *Performance constraints*; ADR-016) ship here, since v1 is the first tier that handles real-scale data: memory-mapped `.npy` reads in `read_table`, server-side series downsampling, hand-rolled row windowing. (Hover prefetch is a later v1+ optimization, not part of this tier.)
@@ -281,7 +281,6 @@ log/
         LineChartView.tsx         # Plotly line chart
         HeatmapView.tsx           # Plotly heatmap
         HistogramView.tsx         # Plotly histogram (value distribution)
-        ListView.tsx              # list representation
         Button.tsx                # base button component (uses button_fsm)
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
@@ -290,7 +289,7 @@ log/
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx
-        representations.test.tsx  # line / heatmap / list render components
+        representations.test.tsx  # chartSpec mapping + applicable + switcher
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close

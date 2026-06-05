@@ -17,7 +17,6 @@ export enum TableKind {
 
 export enum Representation {
   Grid = "grid",
-  List = "list",
   Line = "line",
   Heatmap = "heatmap",
   Histogram = "histogram",

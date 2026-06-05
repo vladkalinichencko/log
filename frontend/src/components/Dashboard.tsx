@@ -19,7 +19,7 @@ export function Dashboard() {
             className="tile"
             style={{ width: tile?.w ?? 400, height: tile?.h ?? 300 }}
           >
-            <Button label="unpin" onClick={() => unpin(path)} />
+            <Button icon="pin" ghost title="unpin" onClick={() => unpin(path)} />
             <Tile path={path} />
             <ResizeHandle onResize={(dw, dh) => resize(path, dw, dh)} />
           </div>

@@ -2,8 +2,13 @@ import back from "../assets/icons/back.svg";
 import forward from "../assets/icons/forward.svg";
 import plus from "../assets/icons/plus.svg";
 import trash from "../assets/icons/trash.svg";
+import pin from "../assets/icons/pin.svg";
+import save from "../assets/icons/save.svg";
+import expand from "../assets/icons/expand.svg";
+import table from "../assets/icons/table.svg";
+import chart from "../assets/icons/chart.svg";
 
-const ICONS = { back, forward, plus, trash };
+const ICONS = { back, forward, plus, trash, pin, save, expand, table, chart };
 
 interface IconProps {
   name: keyof typeof ICONS;

@@ -127,6 +127,28 @@ button.ghost.armed {
   background: var(--gray-200);
 }
 
+.toggle {
+  display: inline-flex;
+}
+
+.toggle button {
+  border-radius: 0;
+  border-right: none;
+}
+
+.toggle button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.toggle button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  border-right: 1px solid var(--gray-200);
+}
+
+button.active {
+  background: var(--gray-200);
+}
+
 .icon {
   width: 16px;
   height: 16px;

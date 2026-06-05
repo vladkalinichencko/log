@@ -47,7 +47,7 @@ describe("TableView", () => {
       column_names: null,
       row_names: null,
       cells: [[{ type: CellType.TableRef, value: "proj", ref: "proj" }]],
-      representation: Representation.List,
+      representation: Representation.Grid,
       source_path: null,
     };
     renderR(<TableView table={folder} />);

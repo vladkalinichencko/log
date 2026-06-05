@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { ListView } from "../components/ListView";
 import { RepresentationSwitcher } from "../components/RepresentationSwitcher";
 import { chartSpec } from "../components/chartSpec";
 import { applicable } from "../components/render";
@@ -41,18 +39,6 @@ describe("representations", () => {
     expect(trace.z).toEqual([[0, 1], [2, 3]]);
   });
 
-  it("list view renders each cell value", () => {
-    const folder = table(TableKind.Folder, Representation.List, [
-      [{ type: CellType.TableRef, value: "proj", ref: "proj" }],
-    ]);
-    render(
-      <MemoryRouter>
-        <ListView table={folder} />
-      </MemoryRouter>
-    );
-    expect(screen.getByText("proj")).toBeTruthy();
-  });
-
   it("applicable derives representations from table shape", () => {
     const col = table(TableKind.Column, Representation.Line, [[num("1")]]);
     expect(applicable(col)).toContain(Representation.Line);
@@ -77,18 +63,21 @@ describe("representations", () => {
     expect(applicable(col)).toContain(Representation.Histogram);
   });
 
-  it("switcher sets the tile representation on click", () => {
+  it("switcher toggle sets the tile mode", () => {
+    const s = () => useStore.getState() as any;
     const col = table(TableKind.Column, Representation.Line, [[num("1")]]);
     render(<RepresentationSwitcher table={col} tileId="t1" />);
-    fireEvent.click(screen.getByText("grid"));
-    expect((useStore.getState() as any).tiles.get("t1").representation).toBe("grid");
+    fireEvent.click(screen.getByTitle("visualization"));
+    expect(s().tiles.get("t1").mode).toBe("visualization");
+    fireEvent.click(screen.getByTitle("table"));
+    expect(s().tiles.get("t1").mode).toBe("table");
   });
 
   it("switcher visualization mode picks a chart via the dropdown", () => {
     const s = () => useStore.getState() as any;
     const col = table(TableKind.Column, Representation.Line, [[num("1")]], ["loss"]);
     render(<RepresentationSwitcher table={col} tileId="t2" />);
-    fireEvent.click(screen.getByText("visualization"));
+    fireEvent.click(screen.getByTitle("visualization"));
     expect(s().tiles.get("t2").mode).toBe("visualization");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "line" } });
     expect(s().tiles.get("t2").representation).toBe("line");

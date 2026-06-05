@@ -32,7 +32,9 @@ export function TableView({ table }: TableViewProps) {
                   <DotMenu onDelete={() => removeColumn(tableId, c)} />
                 </th>
               ))}
-              <th></th>
+              <th>
+                <AddControl title="add column" onClick={() => addColumn(tableId)} />
+              </th>
             </tr>
           </thead>
         )}
@@ -56,8 +58,7 @@ export function TableView({ table }: TableViewProps) {
           ))}
         </tbody>
       </table>
-      <AddControl label="＋ column" onClick={() => addColumn(tableId)} />
-      <AddControl label="＋ row" onClick={() => addRow(tableId)} />
+      <AddControl title="add row" onClick={() => addRow(tableId)} />
     </div>
   );
 }

@@ -1,38 +1,29 @@
 import { useState } from "react";
 import { deleteConfirmFsm } from "../fsm/deleteConfirmFsm";
+import { Icon } from "./Icon";
 
 interface DotMenuProps {
   onDelete: () => void;
 }
 
 export function DotMenu({ onDelete }: DotMenuProps) {
-  const [open, setOpen] = useState(false);
   const [state, setState] = useState(deleteConfirmFsm.initial);
+  const armed = state === "confirm";
 
-  if (!open) {
-    return (
-      <span style={{ cursor: "pointer" }} onClick={() => setOpen(true)}>
-        ⋯
-      </span>
-    );
-  }
-  if (state === "idle") {
-    return (
-      <span style={{ cursor: "pointer" }} onClick={() => setState(deleteConfirmFsm.next(state, "delete"))}>
-        delete
-      </span>
-    );
-  }
   return (
-    <span
-      style={{ cursor: "pointer" }}
+    <button
+      className={armed ? "ghost armed" : "ghost"}
+      title={armed ? "click again to delete" : "delete"}
       onClick={() => {
-        setState(deleteConfirmFsm.next(state, "confirmed"));
-        setOpen(false);
-        onDelete();
+        if (armed) {
+          setState(deleteConfirmFsm.next(state, "confirmed"));
+          onDelete();
+        } else {
+          setState(deleteConfirmFsm.next(state, "delete"));
+        }
       }}
     >
-      confirm?
-    </span>
+      <Icon name="trash" />
+    </button>
   );
 }

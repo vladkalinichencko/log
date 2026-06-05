@@ -83,7 +83,7 @@ describe("TableView", () => {
     };
     s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
-    fireEvent.click(screen.getByText("＋ row"));
+    fireEvent.click(screen.getByTitle("add row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
   });
 
@@ -100,9 +100,9 @@ describe("TableView", () => {
     };
     s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
-    fireEvent.click(screen.getAllByText("⋯")[0]);
-    fireEvent.click(screen.getByText("delete"));
-    fireEvent.click(screen.getByText("confirm?"));
+    const trash = screen.getAllByTitle("delete")[0];
+    fireEvent.click(trash);
+    fireEvent.click(trash);
     expect(s().tables.get("g3").column_names).toEqual(["b"]);
   });
 

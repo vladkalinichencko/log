@@ -1,10 +1,10 @@
 import { Button } from "./Button";
 
 interface AddControlProps {
-  label: string;
+  title: string;
   onClick: () => void;
 }
 
-export function AddControl({ label, onClick }: AddControlProps) {
-  return <Button label={label} onClick={onClick} />;
+export function AddControl({ title, onClick }: AddControlProps) {
+  return <Button icon="plus" ghost title={title} onClick={onClick} />;
 }

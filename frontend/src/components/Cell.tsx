@@ -19,7 +19,7 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
 
   if (cell.type === CellType.TableRef && cell.ref) {
     return (
-      <span style={{ cursor: "pointer" }} onClick={() => navigate(`/${cell.ref}`)}>
+      <span className="cell link" onClick={() => navigate(`/${cell.ref}`)}>
         {cell.value}
       </span>
     );
@@ -43,6 +43,7 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   if (editState === "editing") {
     return (
       <input
+        className="cell-input"
         type="text"
         value={editValue}
         onChange={(e) => setEditValue(e.target.value)}
@@ -52,5 +53,9 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
     );
   }
 
-  return <span onDoubleClick={handleDoubleClick}>{cell.value}</span>;
+  return (
+    <span className="cell" onDoubleClick={handleDoubleClick}>
+      {cell.value}
+    </span>
+  );
 }

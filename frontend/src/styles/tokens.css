@@ -47,7 +47,6 @@ caption {
 th,
 td {
   border: 1px solid var(--gray-200);
-  padding: calc(var(--space) / 1.5) var(--space);
   text-align: left;
   vertical-align: middle;
 }
@@ -60,6 +59,27 @@ th {
 
 tbody tr:hover {
   background: var(--gray-50);
+}
+
+.cell {
+  display: block;
+  padding: calc(var(--space) / 1.5) var(--space);
+}
+
+.cell.link {
+  cursor: pointer;
+}
+
+.cell-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--space) / 1.5) var(--space);
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
 }
 
 ul {
@@ -91,12 +111,52 @@ button:active {
   background: var(--gray-200);
 }
 
+button.ghost {
+  padding: calc(var(--space) / 2);
+  border: none;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+button.ghost:hover {
+  background: var(--gray-100);
+}
+
+button.ghost.armed {
+  background: var(--gray-200);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 input {
   font: inherit;
   padding: calc(var(--space) / 1.5) var(--space);
   border: 1px solid var(--gray-400);
   border-radius: var(--radius);
   background: var(--gray-0);
+}
+
+select {
+  font: inherit;
+  padding: calc(var(--space) / 1.5) var(--space);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-0);
+  color: var(--gray-900);
+  cursor: pointer;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+  padding: calc(var(--space) * 1.5);
 }
 
 .modal {

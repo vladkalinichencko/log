@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useStore } from "../store/store";
 import { search_selector } from "../store/selectors/searchSelectors";
 import { fetchPaths } from "../api/client";
+import { Button } from "./Button";
 
 export function NavBar() {
   const navigate = useNavigate();
@@ -27,9 +28,9 @@ export function NavBar() {
   };
 
   return (
-    <div>
-      <button onClick={() => navigate(-1)}>←</button>
-      <button onClick={() => navigate(1)}>→</button>
+    <div className="toolbar">
+      <Button icon="back" ghost title="back" onClick={() => navigate(-1)} />
+      <Button icon="forward" ghost title="forward" onClick={() => navigate(1)} />
       <nav>
         <span style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
           Home

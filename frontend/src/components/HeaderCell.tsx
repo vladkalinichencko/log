@@ -13,6 +13,7 @@ export function HeaderCell({ name, onRename }: HeaderCellProps) {
   if (state === "editing") {
     return (
       <input
+        className="cell-input"
         value={value}
         autoFocus
         onChange={(e) => setValue(e.target.value)}
@@ -28,5 +29,9 @@ export function HeaderCell({ name, onRename }: HeaderCellProps) {
       />
     );
   }
-  return <span onDoubleClick={() => setState(cellEditFsm.next(state, "dblclick"))}>{name}</span>;
+  return (
+    <span className="cell" onDoubleClick={() => setState(cellEditFsm.next(state, "dblclick"))}>
+      {name}
+    </span>
+  );
 }

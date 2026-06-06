@@ -28,7 +28,7 @@ export function NavBar() {
   };
 
   return (
-    <div className="toolbar">
+    <div className="group">
       <Button icon="back" ghost title="back" onClick={() => navigate(-1)} />
       <Button icon="forward" ghost title="forward" onClick={() => navigate(1)} />
       <nav>
@@ -47,16 +47,22 @@ export function NavBar() {
           </span>
         ))}
       </nav>
-      <input
-        placeholder="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {matches.map((path: string) => (
-        <div key={path} style={{ cursor: "pointer" }} onClick={() => go(path)}>
-          {path}
-        </div>
-      ))}
+      <div className="search">
+        <input
+          placeholder="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {matches.length > 0 && (
+          <div className="menu">
+            {matches.map((path: string) => (
+              <div key={path} onClick={() => go(path)}>
+                {path}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

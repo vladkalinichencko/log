@@ -19,7 +19,7 @@ export function RepresentationSwitcher({ table, tileId }: RepresentationSwitcher
   const isViz = mode === "visualization";
 
   return (
-    <div className="toolbar">
+    <div className="group">
       <div className="toggle">
         <Button icon="table" title="table" active={!isViz} onClick={() => setMode(tileId, "table")} />
         <Button icon="chart" title="visualization" active={isViz} onClick={() => setMode(tileId, "visualization")} />

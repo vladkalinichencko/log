@@ -54,13 +54,17 @@ export function App() {
 
   return (
     <div>
-      <NavBar />
-      <div className="toolbar">
-        <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
-        <Button icon="save" ghost title="save workspace" onClick={save} />
+      <div className="bar">
+        <NavBar />
+        <div className="group">
+          <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
+          <Button icon="save" ghost title="save workspace" onClick={save} />
+        </div>
       </div>
-      <Tile path={currentPath} />
-      <Dashboard />
+      <div className="content">
+        <Tile path={currentPath} />
+        <Dashboard />
+      </div>
       <Modal />
     </div>
   );

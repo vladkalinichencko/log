@@ -48,10 +48,14 @@ export function Tile({ path }: TileProps) {
       : Representation.Grid;
   return (
     <div>
-      <div className="toolbar">
-        <RepresentationSwitcher table={table} tileId={path} />
-        <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
-        <Button icon="save" ghost title="save view" onClick={() => saveView(path, { id: path, ...table, source_path: path })} />
+      <div className="bar">
+        <div className="group">
+          <RepresentationSwitcher table={table} tileId={path} />
+        </div>
+        <div className="group">
+          <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
+          <Button icon="save" ghost title="save view" onClick={() => saveView(path, { id: path, ...table, source_path: path })} />
+        </div>
       </div>
       {render(table, representation)}
     </div>

@@ -6,16 +6,17 @@ import { render, chartReps } from "./render";
 import { Representation } from "../types/domain";
 import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
-import { fetchTable, saveView } from "../api/client";
+import { fetchTable, fetchViews, saveView } from "../api/client";
 
 interface TileProps {
   path: string;
 }
 
 export function Tile({ path }: TileProps) {
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loadState, setLoadState] = useState(loadFsm.initial);
   const loadTable = useStore((state: any) => state.tables_loadTable);
+  const setViews = useStore((state: any) => state.tables_setViews);
   const table = useStore((state: any) => state.tables.get(path));
   const savedView = useStore((state: any) => state.views.get(path));
   const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
@@ -29,35 +30,54 @@ export function Tile({ path }: TileProps) {
       setLoadState((s) => loadFsm.next(s, "success"));
       return;
     }
+    let stale = false;
     fetchTable(path)
       .then((loaded) => {
+        if (stale) return;
         loadTable(path, loaded);
         setLoadState((s) => loadFsm.next(s, "success"));
       })
-      .catch(() => setLoadState((s) => loadFsm.next(s, "failure")));
-  }, [path, liveTick]);
+      .catch(() => {
+        if (stale) return;
+        setLoadState((s) => loadFsm.next(s, "failure"));
+      });
+    return () => {
+      stale = true;
+    };
+  }, [path, liveTick, savedView]);
 
-  if (loadState !== "loaded" || !table) {
-    return <div>{loadState === "error" ? `Failed to load ${path}` : "Loading…"}</div>;
-  }
+  if (loadState === "error") return <div>Failed to load {path}</div>;
+  if (!table) return <div>Loading…</div>;
 
+  const expanded = searchParams.get("modal") === path;
   const charts = chartReps(table);
   const representation =
     mode === "visualization" && charts.length > 0
       ? charts.includes(chosen) ? chosen : charts[0]
       : Representation.Grid;
   return (
-    <div>
+    <div className="tile-body">
       <div className="bar">
         <div className="group">
           <RepresentationSwitcher table={table} tileId={path} />
         </div>
         <div className="group">
-          <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
-          <Button icon="save" ghost title="save view" onClick={() => saveView(path, { id: path, ...table, source_path: path })} />
+          {!expanded && (
+            <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
+          )}
+          <Button
+            icon="save"
+            ghost
+            title="save view"
+            onClick={() =>
+              saveView(path, { id: path, ...table, source_path: path })
+                .then(() => fetchViews().then(setViews))
+                .catch((err) => console.error("Failed to save view:", err))
+            }
+          />
         </div>
       </div>
-      {render(table, representation)}
+      <div className="tile-content">{render(table, representation)}</div>
     </div>
   );
 }

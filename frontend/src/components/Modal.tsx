@@ -8,7 +8,10 @@ export function Modal() {
   if (path === null) return null;
   return (
     <div className="modal">
-      <Button label="close" onClick={() => setSearchParams({})} />
+      <div className="bar">
+        <span />
+        <Button icon="close" ghost title="close" onClick={() => setSearchParams({})} />
+      </div>
       <Tile path={path} />
     </div>
   );

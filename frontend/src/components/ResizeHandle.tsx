@@ -25,5 +25,5 @@ export function ResizeHandle({ onResize }: ResizeHandleProps) {
     window.addEventListener("mouseup", up);
   };
 
-  return <div style={{ width: 12, height: 12, cursor: "nwse-resize" }} onMouseDown={onMouseDown} />;
+  return <div style={{ width: 12, height: 12, cursor: "nwse-resize", alignSelf: "flex-end" }} onMouseDown={onMouseDown} />;
 }

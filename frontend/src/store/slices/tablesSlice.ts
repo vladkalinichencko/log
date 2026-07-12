@@ -1,12 +1,26 @@
 import { Table, Cell, CellType } from "../../types/domain";
 
+interface Edit {
+  tableId: string;
+  table: Table;
+}
+
 export interface TablesState {
   tables: Map<string, Table>;
   views: Map<string, Table>;
-  editHistory: Table[];
+  editHistory: Edit[];
 }
 
 const emptyCell = (): Cell => ({ type: CellType.Empty, value: "", ref: null });
+
+const applyEdit = (state: any, tableId: string, change: (table: Table) => Table) => {
+  const table = state.tables.get(tableId);
+  if (!table) return {};
+  return {
+    tables: new Map<string, Table>(state.tables).set(tableId, change(table)),
+    editHistory: [...state.editHistory, { tableId, table }],
+  };
+};
 
 export const createTablesSlice = (set: any) => ({
   tables: new Map<string, Table>(),
@@ -24,92 +38,80 @@ export const createTablesSlice = (set: any) => ({
     })),
 
   tables_editCell: (tableId: string, r: number, c: number, value: string) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        const cells: Cell[][] = table.cells.map((row: Cell[], ri: number) =>
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: table.cells.map((row: Cell[], ri: number) =>
           row.map((cell: Cell, ci: number) =>
             ri === r && ci === c ? { ...cell, value } : cell
           )
-        );
-        tables.set(tableId, { ...table, cells });
-      }
-      return { tables };
-    }),
+        ),
+      }))
+    ),
 
   tables_addRow: (tableId: string) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        const newRow: Cell[] = (table.cells[0] ?? []).map(() => emptyCell());
-        tables.set(tableId, { ...table, cells: [...table.cells, newRow] });
-      }
-      return { tables };
-    }),
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: [...table.cells, (table.cells[0] ?? []).map(() => emptyCell())],
+      }))
+    ),
 
   tables_addColumn: (tableId: string) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        const cells: Cell[][] = table.cells.map((row: Cell[]) => [
-          ...row,
-          emptyCell(),
-        ]);
-        tables.set(tableId, { ...table, cells });
-      }
-      return { tables };
-    }),
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: table.cells.map((row: Cell[]) => [...row, emptyCell()]),
+      }))
+    ),
 
   tables_removeRow: (tableId: string, r: number) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        const cells = table.cells.filter((_: Cell[], ri: number) => ri !== r);
-        const row_names = table.row_names
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: table.cells.filter((_: Cell[], ri: number) => ri !== r),
+        row_names: table.row_names
           ? table.row_names.filter((_: string, ri: number) => ri !== r)
-          : null;
-        tables.set(tableId, { ...table, cells, row_names });
-      }
-      return { tables };
-    }),
+          : null,
+      }))
+    ),
 
   tables_removeColumn: (tableId: string, c: number) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        const cells = table.cells.map((row: Cell[]) =>
-          row.filter((_: Cell, ci: number) => ci !== c)
-        );
-        const column_names = table.column_names
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: table.cells.map((row: Cell[]) => row.filter((_: Cell, ci: number) => ci !== c)),
+        column_names: table.column_names
           ? table.column_names.filter((_: string, ci: number) => ci !== c)
-          : null;
-        tables.set(tableId, { ...table, cells, column_names });
-      }
-      return { tables };
-    }),
+          : null,
+      }))
+    ),
 
   tables_editName: (tableId: string, kind: "table" | "row" | "col", index: number, name: string) =>
-    set((state: any) => {
-      const tables = new Map<string, Table>(state.tables);
-      const table = tables.get(tableId);
-      if (table) {
-        if (kind === "table") tables.set(tableId, { ...table, name });
-        else if (kind === "col" && table.column_names) {
-          const column_names = table.column_names.map((n: string, ci: number) => (ci === index ? name : n));
-          tables.set(tableId, { ...table, column_names });
-        } else if (kind === "row" && table.row_names) {
-          const row_names = table.row_names.map((n: string, ri: number) => (ri === index ? name : n));
-          tables.set(tableId, { ...table, row_names });
-        }
-      }
-      return { tables };
-    }),
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => {
+        if (kind === "table") return { ...table, name };
+        if (kind === "col" && table.column_names)
+          return {
+            ...table,
+            column_names: table.column_names.map((n: string, ci: number) => (ci === index ? name : n)),
+          };
+        if (kind === "row" && table.row_names)
+          return {
+            ...table,
+            row_names: table.row_names.map((n: string, ri: number) => (ri === index ? name : n)),
+          };
+        return table;
+      })
+    ),
 
   tables_undo: () =>
-    set((state: any) => state),
+    set((state: any) => {
+      const last = state.editHistory[state.editHistory.length - 1];
+      if (!last) return {};
+      return {
+        tables: new Map<string, Table>(state.tables).set(last.tableId, last.table),
+        editHistory: state.editHistory.slice(0, -1),
+      };
+    }),
 });

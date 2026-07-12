@@ -18,6 +18,19 @@ export function App() {
   const setViews = useStore((state: any) => state.tables_setViews);
   const liveBump = useStore((state: any) => state.live_bump);
   const connectionEvent = useStore((state: any) => state.connection_event);
+  const undo = useStore((state: any) => state.tables_undo);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     fetchWorkspaces()
@@ -31,12 +44,31 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const socket = connectWebSocket((msg) => {
-      if (msg.type === "run_updated") liveBump();
-    });
-    socket.onopen = () => connectionEvent("open");
-    socket.onclose = () => connectionEvent("close");
-    return () => socket.close();
+    let socket: WebSocket;
+    let retryDelay = 1000;
+    let retryTimer = 0;
+    let unmounted = false;
+    const connect = () => {
+      socket = connectWebSocket((msg) => {
+        if (msg.type === "run_updated") liveBump();
+      });
+      socket.onopen = () => {
+        retryDelay = 1000;
+        connectionEvent("open");
+      };
+      socket.onclose = () => {
+        if (unmounted) return;
+        connectionEvent("close");
+        retryTimer = window.setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+      };
+    };
+    connect();
+    return () => {
+      unmounted = true;
+      window.clearTimeout(retryTimer);
+      socket.close();
+    };
   }, []);
 
   const save = () =>

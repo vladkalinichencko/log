@@ -10,7 +10,7 @@ describe("Modal", () => {
         <Modal />
       </MemoryRouter>
     );
-    expect(screen.queryByText("close")).toBeNull();
+    expect(screen.queryByTitle("close")).toBeNull();
   });
 
   it("opens fullscreen when ?modal= is set", () => {
@@ -19,6 +19,6 @@ describe("Modal", () => {
         <Modal />
       </MemoryRouter>
     );
-    expect(screen.getByText("close")).toBeTruthy();
+    expect(screen.getByTitle("close")).toBeTruthy();
   });
 });

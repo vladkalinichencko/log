@@ -55,6 +55,12 @@ th {
   background: var(--gray-100);
   color: var(--gray-600);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+th .cell {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 tbody tr:hover {
@@ -226,14 +232,42 @@ select {
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: auto;
   padding: var(--space);
+  display: flex;
+  flex-direction: column;
 }
 
 .tile {
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   background: var(--gray-0);
-  overflow: auto;
+  overflow: hidden;
   margin: var(--space);
+  display: flex;
+  flex-direction: column;
+}
+
+.tile-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tile-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tile-content > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.content > .tile-body > .tile-content {
+  min-height: 320px;
 }

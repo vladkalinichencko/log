@@ -53,6 +53,9 @@ def _child_dirs(storage: StoragePort, path: str) -> list[str]:
     )
 
 
+DERIVED_STATE_DIRS = {"views", "workspaces"}
+
+
 def read_table(path: str, storage: StoragePort) -> Table:
     segments = path.split(".") if path else []
 
@@ -60,6 +63,7 @@ def read_table(path: str, storage: StoragePort) -> Table:
         cells = [
             [Cell(type=CellType.table_ref, value=name, ref=name)]
             for name in _child_dirs(storage, "")
+            if name not in DERIVED_STATE_DIRS
         ]
         return Table(
             name="Projects",

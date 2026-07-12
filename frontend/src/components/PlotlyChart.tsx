@@ -11,7 +11,7 @@ interface PlotlyChartProps {
 export function PlotlyChart({ data, layout }: PlotlyChartProps) {
   return (
     <Suspense fallback={<div>Loading chart…</div>}>
-      <Plot data={data} layout={layout} config={{ displayModeBar: false }} style={{ width: "100%", height: "320px" }} useResizeHandler />
+      <Plot data={data} layout={layout} config={{ displayModeBar: false }} style={{ width: "100%", height: "100%" }} useResizeHandler />
     </Suspense>
   );
 }

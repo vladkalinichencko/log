@@ -5,6 +5,7 @@ const INK = "#1c1c1c";
 const GRID = "#e6e6e6";
 
 const base: Partial<Layout> = {
+  autosize: true,
   paper_bgcolor: "white",
   plot_bgcolor: "white",
   font: { family: "system-ui, sans-serif", size: 12, color: INK },

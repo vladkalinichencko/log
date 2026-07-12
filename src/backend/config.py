@@ -7,7 +7,7 @@ from .adapters.local_file_storage import LocalFileStorage
 
 
 def get_runs_root() -> Path:
-    return Path(os.environ.get("LOG_RUNS_ROOT", "./runs"))
+    return Path(os.environ.get("LOG_RUNS_ROOT", "./runs")).resolve()
 
 
 def get_storage(runs_root: Path = Depends(get_runs_root)) -> LocalFileStorage:

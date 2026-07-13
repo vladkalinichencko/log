@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.adapters.local_file_storage import LocalFileStorage
-from backend.api.series import _downsample, get_scalar_series, get_tensor_series
+from backend.api.series import _downsample, get_scalar_series, get_tensor_series, get_tensor_steps
 
 
 def _storage(root):
@@ -52,3 +52,15 @@ def test_downsample_caps_and_keeps_extremes():
     dx, dy = _downsample(xs, ys, 2000)
     assert len(dx) <= 2000
     assert min(ys) in dy and max(ys) in dy
+
+
+def test_tensor_steps_lists_all_steps(tmp_path):
+    _series_run(tmp_path)
+    out = get_tensor_steps("p/r", "w", _storage(tmp_path))
+    assert out["steps"] == [0]
+
+
+def test_tensor_steps_missing_404(tmp_path):
+    _series_run(tmp_path)
+    with pytest.raises(HTTPException):
+        get_tensor_steps("p/r", "missing", _storage(tmp_path))

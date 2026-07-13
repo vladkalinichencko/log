@@ -11,6 +11,41 @@ export async function fetchTable(path: string): Promise<Table> {
   return response.json();
 }
 
+export async function fetchTensorSteps(run: string, path: string): Promise<number[] | null> {
+  const url = `${API_BASE}/api/series/tensor/steps?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}`;
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to fetch tensor steps: ${response.statusText}`);
+  }
+  return (await response.json()).steps;
+}
+
+export async function fetchTensorFrame(
+  run: string,
+  path: string,
+  step: number
+): Promise<{ shape: number[]; data: number[] }> {
+  const url = `${API_BASE}/api/series/tensor?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}&step=${step}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch tensor frame: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function evalTable(expression: string): Promise<Table> {
+  const response = await fetch(`${API_BASE}/api/tables/eval`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expression }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to evaluate expression: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function fetchRuns(): Promise<any[]> {
   const url = `${API_BASE}/api/runs`;
   const response = await fetch(url);

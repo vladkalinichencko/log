@@ -4,6 +4,7 @@ import { useStore } from "../store/store";
 import { search_selector } from "../store/selectors/searchSelectors";
 import { fetchPaths } from "../api/client";
 import { Button } from "./Button";
+import { Menu } from "./Menu";
 
 export function NavBar() {
   const navigate = useNavigate();
@@ -54,13 +55,7 @@ export function NavBar() {
           onChange={(e) => setQuery(e.target.value)}
         />
         {matches.length > 0 && (
-          <div className="menu">
-            {matches.map((path: string) => (
-              <div key={path} onClick={() => go(path)}>
-                {path}
-              </div>
-            ))}
-          </div>
+          <Menu items={matches.map((path: string) => ({ label: path, onPick: () => go(path) }))} />
         )}
       </div>
     </div>

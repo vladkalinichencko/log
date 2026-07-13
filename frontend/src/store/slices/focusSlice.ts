@@ -1,9 +1,15 @@
+export interface FocusTarget {
+  tableId: string;
+  r: number;
+  c: number;
+}
+
 export interface FocusState {
-  focusedPath: string | null;
+  focused: FocusTarget | null;
 }
 
 export const createFocusSlice = (set: any) => ({
-  focusedPath: null,
+  focused: null,
 
-  focus_setTarget: (path: string | null) => set({ focusedPath: path }),
+  focus_setTarget: (target: FocusTarget | null) => set({ focused: target }),
 });

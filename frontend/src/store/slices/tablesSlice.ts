@@ -13,6 +13,17 @@ export interface TablesState {
 
 const emptyCell = (): Cell => ({ type: CellType.Empty, value: "", ref: null });
 
+const NUMBER = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
+
+const valueCell = (value: string): Cell => ({
+  type: NUMBER.test(value) ? CellType.Number : CellType.String,
+  value,
+  ref: null,
+});
+
+const padNames = (names: string[] | null, length: number) =>
+  names ? [...names, ...Array.from({ length: Math.max(0, length - names.length) }, () => "")] : null;
+
 const applyEdit = (state: any, tableId: string, change: (table: Table) => Table) => {
   const table = state.tables.get(tableId);
   if (!table) return {};
@@ -102,6 +113,33 @@ export const createTablesSlice = (set: any) => ({
             row_names: table.row_names.map((n: string, ri: number) => (ri === index ? name : n)),
           };
         return table;
+      })
+    ),
+
+  tables_replace: (tableId: string, table: Table) =>
+    set((state: any) => applyEdit(state, tableId, () => ({ ...table, source_path: tableId }))),
+
+  tables_pasteBlock: (tableId: string, r: number, c: number, block: string[][]) =>
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => {
+        const width = Math.max(
+          table.cells[0]?.length ?? 0,
+          c + Math.max(...block.map((row: string[]) => row.length))
+        );
+        const height = Math.max(table.cells.length, r + block.length);
+        const cells: Cell[][] = Array.from({ length: height }, (_, ri) =>
+          Array.from({ length: width }, (_, ci) => {
+            const pasted = block[ri - r]?.[ci - c];
+            if (pasted !== undefined) return valueCell(pasted);
+            return table.cells[ri]?.[ci] ?? emptyCell();
+          })
+        );
+        return {
+          ...table,
+          cells,
+          column_names: padNames(table.column_names, width),
+          row_names: padNames(table.row_names, height),
+        };
       })
     ),
 

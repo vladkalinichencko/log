@@ -19,8 +19,10 @@ describe("tableSelectors", () => {
     expect(table_selector(state, "missing")).toBeUndefined();
   });
 
-  it("isFocused compares against the focused path", () => {
-    expect(isFocused({ focusedPath: "p.run" }, "p.run")).toBe(true);
-    expect(isFocused({ focusedPath: "p.run" }, "p.other")).toBe(false);
+  it("isFocused compares against the focused cell", () => {
+    const state = { focused: { tableId: "p.run", r: 1, c: 2 } };
+    expect(isFocused(state, "p.run", 1, 2)).toBe(true);
+    expect(isFocused(state, "p.run", 0, 2)).toBe(false);
+    expect(isFocused({ focused: null }, "p.run", 1, 2)).toBe(false);
   });
 });

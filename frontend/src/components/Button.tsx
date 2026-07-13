@@ -2,7 +2,7 @@ import { useState } from "react";
 import { buttonFsm } from "../fsm/buttonFsm";
 import { Icon } from "./Icon";
 
-type IconName = "back" | "forward" | "plus" | "trash" | "pin" | "save" | "expand" | "table" | "chart" | "close";
+type IconName = "back" | "forward" | "plus" | "trash" | "pin" | "save" | "expand" | "table" | "chart" | "close" | "play" | "pause";
 
 interface ButtonProps {
   label?: string;

@@ -40,11 +40,16 @@ FUNCTIONS: dict[str, Function] = {
     "max": Function("aggregation", lambda col: float(np.max(col))),
     "count": Function("aggregation", lambda col: float(len(col))),
     "std": Function("aggregation", lambda col: float(np.std(col))),
+    "median": Function("aggregation", lambda col: float(np.median(col))),
+    "var": Function("aggregation", lambda col: float(np.var(col))),
+    "norm": Function("aggregation", lambda col: float(np.linalg.norm(col))),
     "rolling_mean": Function("transform", _rolling_mean),
     "zscore": Function("transform", _zscore),
     "abs": Function("transform", lambda col: np.abs(col).tolist()),
     "log": Function("transform", lambda col: np.log(col).tolist()),
     "sqrt": Function("transform", lambda col: np.sqrt(col).tolist()),
+    "cumsum": Function("transform", lambda col: np.cumsum(col).tolist()),
+    "diff": Function("transform", lambda col: np.diff(col, prepend=col[0]).tolist()),
 }
 
 _COMPARE = {

@@ -53,6 +53,22 @@ def get_scalar_series(
     return {"x": xs, "y": ys}
 
 
+@router.get("/api/series/tensor/steps")
+def get_tensor_steps(
+    run: str, path: str, storage: StoragePort = Depends(get_storage)
+) -> dict:
+    project, name = run.split("/", 1)
+    run_dir = f"{project}/{name}"
+    steps = []
+    for epoch_dir in _epoch_dirs(storage, run_dir):
+        for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl"):
+            if row["path"] == path:
+                steps.append(row["step"])
+    if not steps:
+        raise HTTPException(status_code=404, detail="SERIES_NOT_FOUND")
+    return {"steps": sorted(steps)}
+
+
 @router.get("/api/series/tensor")
 def get_tensor_series(
     run: str, path: str, step: int, storage: StoragePort = Depends(get_storage)

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Cell as CellData, CellType } from "../types/domain";
 import { cellEditFsm } from "../fsm/cellEditFsm";
+import { isFocused } from "../store/selectors/tableSelectors";
 import { useStore } from "../store/store";
 
 interface CellProps {
@@ -13,6 +14,8 @@ interface CellProps {
 
 export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   const editCell = useStore((state: any) => state.tables_editCell);
+  const setTarget = useStore((state: any) => state.focus_setTarget);
+  const selected = useStore((state: any) => isFocused(state, tableId, rowIndex, colIndex));
   const navigate = useNavigate();
   const [editState, setEditState] = useState(cellEditFsm.initial);
   const [editValue, setEditValue] = useState(cell.value);
@@ -54,7 +57,11 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   }
 
   return (
-    <span className="cell" onDoubleClick={handleDoubleClick}>
+    <span
+      className={selected ? "cell selected" : "cell"}
+      onClick={() => setTarget({ tableId, r: rowIndex, c: colIndex })}
+      onDoubleClick={handleDoubleClick}
+    >
       {cell.value}
     </span>
   );

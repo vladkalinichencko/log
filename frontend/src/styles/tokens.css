@@ -76,6 +76,11 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+.cell.selected {
+  outline: 2px solid var(--gray-600);
+  outline-offset: -2px;
+}
+
 .cell-input {
   display: block;
   width: 100%;
@@ -169,6 +174,13 @@ input {
   background: var(--gray-0);
 }
 
+input[type="range"] {
+  border: none;
+  padding: 0;
+  background: none;
+  accent-color: var(--gray-900);
+}
+
 select {
   font: inherit;
   padding: calc(var(--space) / 1.5) var(--space);
@@ -192,6 +204,16 @@ select {
   display: flex;
   align-items: center;
   gap: var(--space);
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.error {
+  color: var(--gray-600);
+  white-space: nowrap;
 }
 
 .content {
@@ -219,6 +241,7 @@ select {
 .menu > div {
   padding: calc(var(--space) / 1.5) var(--space);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .menu > div:hover {

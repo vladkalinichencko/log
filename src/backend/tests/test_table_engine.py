@@ -87,3 +87,18 @@ def test_join_nested_pipeline(tmp_path):
 def test_bad_expression_raises(tmp_path):
     with pytest.raises(ExpressionError):
         _eval("notable(x)", tmp_path)
+
+
+def test_statistics_registry_additions():
+    assert FUNCTIONS["median"].fn([1, 2, 9]) == 2.0
+    assert FUNCTIONS["var"].fn([1, 1, 1]) == 0.0
+    assert FUNCTIONS["norm"].fn([3, 4]) == 5.0
+    assert FUNCTIONS["cumsum"].fn([1, 2, 3]) == [1, 3, 6]
+    assert FUNCTIONS["diff"].fn([1, 4, 9]) == [0, 3, 5]
+
+
+def test_derive_with_new_statistics(tmp_path):
+    _series(tmp_path, values=(1.0, 4.0, 9.0))
+    t = _eval("table(p.r.epoch_0000.loss) | derive(d = diff(loss)) | select(step, d)", tmp_path)
+    assert [row[1].value for row in t.cells] == ["0.0", "3.0", "5.0"]
+    assert t.column_names == ["step", "d"]

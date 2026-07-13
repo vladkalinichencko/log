@@ -81,7 +81,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 ### 3.4 v3 — scale, structure, cluster ops
 
-Auto-FSDP by model size; multi-rank coordination; heartbeat/hang detection; cluster overview tile; per-rank timeline; NCCL ops timeline; memory-per-rank tile; hang alerts; checkpoint-save progress; architecture visualization via torch.fx (hierarchical grid); per-rank subdirectories `rank_<N>/`; environment/dependency snapshot files under `env/`; console capture `logs/console.txt`; system profiler `logs/system.jsonl`; n-dimensional tables; live playback / timeline scrubbing; RL-specific tiles.
+Auto-FSDP by model size; multi-rank coordination; heartbeat/hang detection; cluster overview tile; per-rank timeline; NCCL ops timeline; memory-per-rank tile; hang alerts; checkpoint-save progress; architecture visualization via torch.fx (hierarchical grid); per-rank subdirectories `rank_<N>/`; environment/dependency snapshot files under `env/`; console capture `logs/console.txt`; system profiler `logs/system.jsonl`; n-dimensional tables;  RL-specific tiles.
 
 ### 3.5 Never built (philosophy)
 
@@ -259,7 +259,8 @@ log/
         buttonFsm.ts              # button_fsm derived from baseFsm
         loadFsm.ts                # load_fsm (idle/loading/loaded/error) derived from baseFsm
         cellEditFsm.ts            # cellEdit_fsm derived from baseFsm
-        deleteConfirmFsm.ts       # deleteConfirm_fsm derived from baseFsm
+        menuFsm.ts                # menu_fsm derived from baseFsm
+        playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
         searchFsm.ts              # search_fsm derived from baseFsm
         resizeFsm.ts              # resize_fsm (idle/dragging) derived from baseFsm
@@ -271,9 +272,9 @@ log/
         Modal.tsx                 # fullscreen route-backed tile (?modal=path)
         TableView.tsx             # semantic <table> representation
         Cell.tsx                  # one cell (uses cellEdit_fsm)
-        HeaderCell.tsx            # column/row name cell (edit + dot-menu)
-        DotMenu.tsx               # corner ⋯ menu (uses deleteConfirm_fsm)
-        AddControl.tsx            # the ＋ control (uses button_fsm)
+        HeaderCell.tsx            # column/row name cell (double-click edit)
+        Menu.tsx                  # one menu component: search dropdown + right-click context menu
+        Player.tsx                # frame player over tensor steps (player_fsm)
         Toolbar.tsx               # thin action bar
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
@@ -677,7 +678,7 @@ flowchart TD
     ST["store.ts (Zustand single tree)"]
     RD["slices/*: feature_reducer + feature_state"]
     SEL["selectors/*: feature_selector (memoized)"]
-    FSM["fsm/baseFsm.ts -> button_fsm, load_fsm, cellEdit_fsm, deleteConfirm_fsm, connection_fsm, search_fsm"]
+    FSM["fsm/baseFsm.ts -> button_fsm, load_fsm, cellEdit_fsm, menu_fsm, player_fsm, connection_fsm, search_fsm"]
     CMP["components/*.tsx"]
     DS -->|dispatch| RD --> ST
     ST --> SEL --> CMP
@@ -691,7 +692,8 @@ The one FSM factory and its derivations:
 - `button_fsm` = `makeFsm(["idle","hover","pressed","pending","done","error"], …)`. Every button and every `＋`/toolbar/representation control derives from this.
 - `load_fsm` = `makeFsm(["idle","loading","loaded","error"], …)`. Replaces a query library: every async fetch tracks its state here.
 - `cellEdit_fsm` = `makeFsm(["display","editing"], …)`. `display --dblclick--> editing`, `editing --enter/esc--> display`.
-- `deleteConfirm_fsm` = `makeFsm(["idle","confirm"], …)`. First "delete" click → `confirm`; second → emits delete.
+- `menu_fsm` = `makeFsm(["closed","open"], …)`. Right-click → `open`; pick / click-away → `closed`.
+- `player_fsm` = `makeFsm(["paused","playing"], …)`. Play → `playing`; pause or last frame → `paused`.
 - `connection_fsm` = `makeFsm(["connected","reconnecting"], …)` with max backoff 30s.
 - `search_fsm` = `makeFsm(["empty","typing","results","noResults"], …)`.
 
@@ -700,7 +702,7 @@ Per-feature function set (one row = one feature, all four shapes present where a
 | Feature | `_state` | `_reducer` | `_selector` | FSM | Component |
 |---|---|---|---|---|---|
 | route/drill | the URL itself (`react-router-dom`) — no store slice; `currentPath = location.pathname` | — | — | `NavBar` (`useNavigate` back/forward + breadcrumb), `App` (`useLocation` → `currentPath`), `Cell` (`useNavigate` to drill) |
-| tables/edits | `tables_state` | `tables_reducer` | `table_selector` | `cellEdit_fsm`, `deleteConfirm_fsm` | `TableView`, `Cell`, `HeaderCell`, `DotMenu`, `AddControl` |
+| tables/edits | `tables_state` | `tables_reducer` | `table_selector` | `cellEdit_fsm`, `menu_fsm` | `TableView`, `Cell`, `HeaderCell`, `Menu` |
 | tiles/representation | `tiles_state` | `tiles_reducer` | `tile_selector` | `button_fsm` | `RepresentationSwitcher` → `render` (§7.4) → `TableView`/`ListView`/`LineChartView`/`HeatmapView` |
 | search | `search_state` | `search_reducer` | `search_selector` | `search_fsm` | `NavBar` search box |
 | focus/scroll | `focus_state` | `focus_reducer` | `isFocused` | — | any focusable component |
@@ -976,6 +978,7 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | POST | `/api/tables/eval` | `{ expression: str }` | `Table` | 400 `TABLE_EXPRESSION_ERROR` |
 | GET | `/api/series/scalar` | `run`, `path`, `x?` | `{ x: number[], y: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor` | `run`, `path`, `step` | `{ shape: int[], dtype: str, data: number[] }` | 404 `SERIES_NOT_FOUND` |
+| GET | `/api/series/tensor/steps` | `run`, `path` | `{ steps: int[] }` (all logged steps of one tensor path, sorted) | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/views` | `run?` | `ViewDefinition[]` | — |
 | PUT | `/api/views/{id}` | `ViewDefinition` | `ViewDefinition` | 400 `INVALID_VIEW` |
 | DELETE | `/api/views/{id}` | — | `{ deleted: true }` | 404 `VIEW_NOT_FOUND` |
@@ -1021,8 +1024,8 @@ distinguished only by output:
 
 | Kind | Signature | Used by | Examples |
 |---|---|---|---|
-| `aggregation` | `column -> scalar` (collapses a column to a derived **row**) | `agg(name, by=col)` | `mean`, `sum`, `min`, `max`, `count`, `std` |
-| `transform` | `column -> column` (a derived **column**, same length) | `derive(name=...formula...)` | `rolling_mean`, `zscore`, `abs`, `log`, `sqrt` |
+| `aggregation` | `column -> scalar` (collapses a column to a derived **row**) | `agg(name, by=col)` | `mean`, `sum`, `min`, `max`, `count`, `std`, `median`, `var`, `norm` |
+| `transform` | `column -> column` (a derived **column**, same length) | `derive(name=...formula...)` | `rolling_mean`, `zscore`, `abs`, `log`, `sqrt`, `cumsum`, `diff` |
 | `test` | `columns -> result` (a small derived result table) | `test(name, a, b)` | `ttest`, `ks`, `pearson`, `mannwhitney`, `changepoint` `[v2]` |
 
 Adding a statistic is adding **one registry entry** — its name then works in its
@@ -1074,7 +1077,7 @@ connection_event(e: "open"|"close"|"retry"): void
 
 Selectors (pure, hand-memoized): `table_selector(state, tableId) -> Table`, `run_selector(state) -> RunSummary[]`, `search_selector(state) -> string[]` (matching `.`-paths), `isFocused(state, path) -> boolean`, `tile_selector(state, tileId) -> {table, representation}`.
 
-FSM hooks: every `Button` mounts a `button_fsm`; every `Cell` a `cellEdit_fsm`; every `DotMenu` a `deleteConfirm_fsm`; every async fetch a `load_fsm`; the websocket a `connection_fsm`; the search box a `search_fsm`; every `ResizeHandle` a `resize_fsm`. All derive from `makeFsm` (Section 7.3); none is re-invented.
+FSM hooks: every `Button` mounts a `button_fsm`; every `Cell` a `cellEdit_fsm`; every context `Menu` a `menu_fsm`; every `Player` a `player_fsm`; every async fetch a `load_fsm`; the websocket a `connection_fsm`; the search box a `search_fsm`; every `ResizeHandle` a `resize_fsm`. All derive from `makeFsm` (Section 7.3); none is re-invented.
 
 ---
 
@@ -1281,12 +1284,11 @@ A `Table` rendered as a grid carries:
 - **Row-name header column** — rendered only if `row_names` is non-`null`; each name editable by double-click. `[v1]`
 - **Value cells** — a grid of divs; each shows its value. Numbers are rounded to fit; on hover the full value appears as an **overlay above the cell** (never by widening the cell). Double-click → the cell becomes a text input; Enter commits + deselects; Esc cancels + deselects. (`Cell` + `cellEdit_fsm`.) `[v0]` edit; `[v1]` hover-overlay + rounding.
 - **Scalar table** — just the table name, no grid, until the user presses **＋**. No "1×1 frame". `[v1]`
-- **＋ controls** — one on the right edge (add column) and one on the bottom edge (add row), Excel-like. (`AddControl` + `button_fsm`.) `[v0]`
-- **Corner dot-menu (⋯)** on a row/column header — a tiny menu with "delete"; first click on "delete" relabels it to "confirm?"; second click deletes; Ctrl+Z restores. (`DotMenu` + `deleteConfirm_fsm`.) `[v1]`
+- **Right-click context menu** on any cell or header — add row / add column / delete row / delete column, at the pointer, replacing the browser menu; deletes apply immediately, Ctrl+Z restores. (`Menu` + `menu_fsm`; the same `Menu` renders the search dropdown.) `[v0]` *(supersedes the ＋ edge controls and the corner dot-menu — owner decision 2026-07-14.)*
 - **Table-reference cell** — a table icon + the referenced table's name; click drills in. It also renders the referenced `Table` **in place** as a small grid of plain divs (W&B-style preview). `[v0]` clickable reference + plain-div in-cell preview; `[v2]` in-cell mini *chart*.
 - **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; in table mode a grid/list switch; in visualization mode a nested chart-type dropdown (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` all representations + chart dropdown.
 - **Expand button** — on every tile (table or chart); opens the tile fullscreen as a route-backed modal (Section 11.2a). `[v1]`
-- **Toolbar** — a thin bar with table-wide actions: new table, merge/formula, aggregate, search. Minimal. `[v1]`
+- **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). `[v1]`
 - **Search box** — in the top bar; searches table names and `.`-paths; a result focuses + scrolls-to + highlights the matching table/cell. `[v1]`
 - **Top nav bar** — back/forward arrows + breadcrumb of the drill-path; the only cross-screen navigation. `[v0]`
 
@@ -1299,18 +1301,20 @@ A table is **viewed** in the dashboard and **edited** in a modal — the same `T
 
 Every stateful element above is an explicit FSM named `<element>_fsm`, derived from `baseFsm` (Section 7.3). Buttons get `cursor: pointer` on hover; no other motion.
 
+**Frame player over logged tensor steps** `[v1]` *(pulled into scope from the v2+ list — owner decision 2026-07-14)*: when a tile's path resolves to a tensor logged at more than one step (`/api/series/tensor/steps`), a player bar (play/pause + a step slider, `Player` + `player_fsm`) appears under the table; scrubbing or playing fetches that step's frame (`/api/series/tensor`) and re-renders the same tile through the same `render(table, representation)` — the heatmap becomes an animation of training time.
+
 ### 11.4 Exhaustive table operations (carry verbatim)
 
 For a `Table` these are essentially all operations that exist:
 
 1. Edit cell value (double-click → input; Enter = commit + deselect; Esc = cancel + deselect). `[v0]`
 2. Edit column name / row name (double-click). `[v1]`
-3. Add row (＋ bottom) / add column (＋ right). `[v0]`
-4. Remove row / remove column (dot-menu → delete → confirm-on-second-click). `[v1]`
+3. Add row / add column (right-click context menu). `[v0]`
+4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]`
 6. Zoom — Excel-like. `[v1]`
 7. Select a cell / drag-select a range / select a whole row / a whole column. `[v0]` single-cell; `[v1]` range/row/column.
-8. Copy / cut / paste cells, rows, columns (Excel-compatible TSV). `[v1]`
+8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the selected cell and grows the table to fit; one undoable edit). `[v1]` — paste + single-cell copy shipped; cut and range copy pending.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`
 11. Undo (Ctrl+Z). Redo (Ctrl+Y) is `[v2]`. `[v0]` undo.
@@ -1410,7 +1414,7 @@ Each criterion is human-verifiable without reading code (inspect files in `runs/
 
 **UI: editing immutability**
 - Given the user double-clicks a value cell, types a number, presses Enter, then the cell shows the new value, the cell deselects, and no byte of any source `metrics.jsonl` changes (verifiable by file hash before/after). Pressing Esc instead leaves the original value.
-- Given the user deletes a column via the dot-menu, then the first click shows "confirm?" and only the second click removes the column; Ctrl+Z restores it.
+- Given the user deletes a column via the right-click context menu, then the column is removed immediately and Ctrl+Z restores it.
 
 **UI: live**
 - Given a run actively appending to `metrics.jsonl`, when the user has its line representation open, then the chart extends within 2 seconds of each append (no page reload).

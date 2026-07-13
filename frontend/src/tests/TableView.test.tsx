@@ -70,7 +70,7 @@ describe("TableView", () => {
     expect(screen.getByText("beta")).toBeTruthy();
   });
 
-  it("＋ row adds a row to the stored table", () => {
+  it("context menu on a cell adds a row", () => {
     const s = () => useStore.getState() as any;
     const grid: Table = {
       name: "g",
@@ -83,11 +83,12 @@ describe("TableView", () => {
     };
     s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
-    fireEvent.click(screen.getByTitle("add row"));
+    fireEvent.contextMenu(screen.getByText("1"));
+    fireEvent.click(screen.getByText("add row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
   });
 
-  it("DotMenu deletes a column after two confirmations", () => {
+  it("context menu on a column header deletes the column (Ctrl+Z is the safety)", () => {
     const s = () => useStore.getState() as any;
     const grid: Table = {
       name: "g",
@@ -100,9 +101,8 @@ describe("TableView", () => {
     };
     s().tables_loadTable(grid.source_path, grid);
     renderR(<TableView table={grid} />);
-    const trash = screen.getAllByTitle("delete")[0];
-    fireEvent.click(trash);
-    fireEvent.click(trash);
+    fireEvent.contextMenu(screen.getByText("a"));
+    fireEvent.click(screen.getByText("delete column"));
     expect(s().tables.get("g3").column_names).toEqual(["b"]);
   });
 

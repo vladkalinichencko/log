@@ -8,8 +8,10 @@ import expand from "../assets/icons/expand.svg";
 import table from "../assets/icons/table.svg";
 import chart from "../assets/icons/chart.svg";
 import close from "../assets/icons/close.svg";
+import play from "../assets/icons/play.svg";
+import pause from "../assets/icons/pause.svg";
 
-const ICONS = { back, forward, plus, trash, pin, save, expand, table, chart, close };
+const ICONS = { back, forward, plus, trash, pin, save, expand, table, chart, close, play, pause };
 
 interface IconProps {
   name: keyof typeof ICONS;

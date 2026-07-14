@@ -89,7 +89,7 @@ export function Tile({ path }: TileProps) {
         <div className="group">
           <RepresentationSwitcher table={table} tileId={path} />
         </div>
-        <Toolbar path={path} />
+        <Toolbar path={path} table={table} />
         <div className="group">
           {!expanded && (
             <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />

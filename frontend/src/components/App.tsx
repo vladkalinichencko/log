@@ -6,7 +6,7 @@ import { Dashboard } from "./Dashboard";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
 import { useStore } from "../store/store";
-import { fetchWorkspaces, fetchViews, saveWorkspace } from "../api/client";
+import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace } from "../api/client";
 import { connectWebSocket } from "../api/websocket";
 
 export function App() {
@@ -16,6 +16,7 @@ export function App() {
   const tiles = useStore((state: any) => state.tiles);
   const loadWorkspace = useStore((state: any) => state.tiles_loadWorkspace);
   const setViews = useStore((state: any) => state.tables_setViews);
+  const setFunctions = useStore((state: any) => state.tables_setFunctions);
   const liveBump = useStore((state: any) => state.live_bump);
   const connectionEvent = useStore((state: any) => state.connection_event);
   const undo = useStore((state: any) => state.tables_undo);
@@ -41,6 +42,9 @@ export function App() {
     fetchViews()
       .then(setViews)
       .catch((err) => console.error("Failed to load views:", err));
+    fetchFunctions()
+      .then(setFunctions)
+      .catch((err) => console.error("Failed to load functions:", err));
   }, []);
 
   useEffect(() => {

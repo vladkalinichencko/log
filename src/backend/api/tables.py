@@ -1,13 +1,27 @@
+import inspect
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..config import get_storage
 from ..domain.models import CellType, Table
 from ..domain.read_table import read_table
-from ..domain.table_engine import ExpressionError, evaluate
+from ..domain.table_engine import FUNCTIONS, ExpressionError, evaluate
 from ..ports.storage_port import StoragePort
 
 router = APIRouter()
+
+
+@router.get("/api/tables/functions")
+def list_functions() -> list[dict]:
+    return [
+        {
+            "name": name,
+            "kind": fn.kind,
+            "windowed": len(inspect.signature(fn.fn).parameters) > 1,
+        }
+        for name, fn in FUNCTIONS.items()
+    ]
 
 
 @router.get("/api/paths")

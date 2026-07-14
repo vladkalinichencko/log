@@ -3,15 +3,21 @@ import { TableView } from "./TableView";
 import { LineChartView } from "./LineChartView";
 import { HeatmapView } from "./HeatmapView";
 import { HistogramView } from "./HistogramView";
+import { ScatterView } from "./ScatterView";
+import { TrajectoryView } from "./TrajectoryView";
 
 const RENDERERS = {
   [Representation.Grid]: TableView,
   [Representation.Line]: LineChartView,
   [Representation.Heatmap]: HeatmapView,
   [Representation.Histogram]: HistogramView,
+  [Representation.Scatter]: ScatterView,
+  [Representation.Trajectory]: TrajectoryView,
 };
 
 const isNumber = (cell: Cell) => cell.type === CellType.Number;
+
+export const TRAJECTORY_COLUMNS = ["step", "point", "x", "y"];
 
 export function applicable(table: Table): Representation[] {
   const reps = [Representation.Grid];
@@ -20,12 +26,23 @@ export function applicable(table: Table): Representation[] {
 
   const lastColumnNumeric = rows.every((row) => row.length > 0 && isNumber(row[row.length - 1]));
   const allNumeric = rows.every((row) => row.length > 0 && row.every(isNumber));
+  const isTrajectory =
+    allNumeric &&
+    table.column_names !== null &&
+    table.column_names.join() === TRAJECTORY_COLUMNS.join();
 
+  if (isTrajectory) {
+    reps.push(Representation.Trajectory);
+    return reps;
+  }
   if (table.kind === TableKind.Column && lastColumnNumeric) {
     reps.push(Representation.Line);
     reps.push(Representation.Histogram);
   }
-  if (table.kind === TableKind.Grid && allNumeric) reps.push(Representation.Heatmap);
+  if (table.kind === TableKind.Grid && allNumeric) {
+    if (rows[0].length === 2) reps.push(Representation.Scatter);
+    reps.push(Representation.Heatmap);
+  }
   return reps;
 }
 

@@ -11,6 +11,14 @@ export async function fetchTable(path: string): Promise<Table> {
   return response.json();
 }
 
+export async function fetchFunctions(): Promise<any[]> {
+  const response = await fetch(`${API_BASE}/api/tables/functions`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch functions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function fetchTensorSteps(run: string, path: string): Promise<number[] | null> {
   const url = `${API_BASE}/api/series/tensor/steps?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}`;
   const response = await fetch(url);

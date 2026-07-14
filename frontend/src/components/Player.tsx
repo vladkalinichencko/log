@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { playerFsm } from "../fsm/playerFsm";
+import { trailFsm } from "../fsm/trailFsm";
+import { TRAJECTORY_COLUMNS } from "./render";
 import { fetchTensorFrame } from "../api/client";
 import { useStore } from "../store/store";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
@@ -12,49 +14,87 @@ interface PlayerProps {
   steps: number[];
 }
 
-interface Frame {
+export interface Frame {
   shape: number[];
   data: number[];
 }
 
-function frameTable(name: string, tileId: string, frame: Frame): Table {
+const numberCell = (value: number): Cell => ({
+  type: CellType.Number,
+  value: String(value),
+  ref: null,
+});
+
+const gridTable = (name: string, tileId: string, column_names: string[] | null, cells: Cell[][]): Table => ({
+  name,
+  kind: TableKind.Grid,
+  column_names,
+  row_names: null,
+  cells,
+  representation: Representation.Grid,
+  source_path: tileId,
+});
+
+export function frameTable(name: string, tileId: string, frame: Frame): Table {
   const rows = frame.shape[0] ?? 1;
   const cols = frame.shape[1] ?? frame.data.length;
-  const cells: Cell[][] = Array.from({ length: rows }, (_, r) =>
-    Array.from({ length: cols }, (_, c) => ({
-      type: CellType.Number,
-      value: String(frame.data[r * cols + c]),
-      ref: null,
-    }))
+  const cells = Array.from({ length: rows }, (_, r) =>
+    Array.from({ length: cols }, (_, c) => numberCell(frame.data[r * cols + c]))
   );
-  return {
-    name,
-    kind: TableKind.Grid,
-    column_names: null,
-    row_names: null,
-    cells,
-    representation: Representation.Grid,
-    source_path: tileId,
-  };
+  return gridTable(name, tileId, null, cells);
+}
+
+export function trajectoryTable(
+  name: string,
+  tileId: string,
+  steps: number[],
+  frames: Frame[],
+  uptoIndex: number
+): Table {
+  const cells: Cell[][] = [];
+  for (let i = 0; i <= uptoIndex; i++) {
+    const points = frames[i].shape[0] ?? 1;
+    for (let p = 0; p < points; p++) {
+      cells.push([
+        numberCell(steps[i]),
+        numberCell(p),
+        numberCell(frames[i].data[p * 2]),
+        numberCell(frames[i].data[p * 2 + 1]),
+      ]);
+    }
+  }
+  return gridTable(name, tileId, [...TRAJECTORY_COLUMNS], cells);
 }
 
 export function Player({ path, run, tensorPath, steps }: PlayerProps) {
   const loadTable = useStore((state: any) => state.tables_loadTable);
+  const [frames, setFrames] = useState<Frame[] | null>(null);
   const [playState, setPlayState] = useState(playerFsm.initial);
+  const [trailState, setTrailState] = useState(trailFsm.initial);
   const [index, setIndex] = useState(steps.length - 1);
 
   useEffect(() => {
     let stale = false;
-    fetchTensorFrame(run, tensorPath, steps[index])
-      .then((frame) => {
-        if (stale) return;
-        loadTable(path, frameTable(`${tensorPath} @ step ${steps[index]}`, path, frame));
+    Promise.all(steps.map((step) => fetchTensorFrame(run, tensorPath, step)))
+      .then((list) => {
+        if (!stale) setFrames(list);
       })
-      .catch((err) => console.error("Failed to fetch frame:", err));
+      .catch((err) => console.error("Failed to fetch frames:", err));
     return () => {
       stale = true;
     };
-  }, [index]);
+  }, [run, tensorPath]);
+
+  useEffect(() => {
+    if (!frames) return;
+    const name = `${tensorPath} @ step ${steps[index]}`;
+    loadTable(
+      path,
+      trailState === "on"
+        ? trajectoryTable(name, path, steps, frames, index)
+        : frameTable(name, path, frames[index])
+    );
+  }, [index, frames, trailState]);
 
   useEffect(() => {
     if (playState !== "playing") return;
@@ -71,6 +111,7 @@ export function Player({ path, run, tensorPath, steps }: PlayerProps) {
   }, [index, playState]);
 
   const playing = playState === "playing";
+  const isPoints = frames !== null && frames.length > 0 && frames[0].shape[1] === 2;
   return (
     <div className="bar">
       <Button
@@ -82,6 +123,15 @@ export function Player({ path, run, tensorPath, steps }: PlayerProps) {
           setPlayState((s) => playerFsm.next(s, playing ? "pause" : "play"));
         }}
       />
+      {isPoints && (
+        <Button
+          icon="trail"
+          ghost
+          active={trailState === "on"}
+          title="trajectory"
+          onClick={() => setTrailState((s) => trailFsm.next(s, "toggle"))}
+        />
+      )}
       <input
         className="grow"
         type="range"

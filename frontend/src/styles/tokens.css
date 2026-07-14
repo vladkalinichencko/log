@@ -220,7 +220,7 @@ select {
   padding: calc(var(--space) * 1.5);
 }
 
-.search {
+.anchor {
   position: relative;
 }
 

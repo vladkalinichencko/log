@@ -102,3 +102,12 @@ def test_derive_with_new_statistics(tmp_path):
     t = _eval("table(p.r.epoch_0000.loss) | derive(d = diff(loss)) | select(step, d)", tmp_path)
     assert [row[1].value for row in t.cells] == ["0.0", "3.0", "5.0"]
     assert t.column_names == ["step", "d"]
+
+
+def test_functions_endpoint_mirrors_registry():
+    from backend.api.tables import list_functions
+
+    listed = {f["name"]: f for f in list_functions()}
+    assert listed.keys() == FUNCTIONS.keys()
+    assert listed["mean"] == {"name": "mean", "kind": "aggregation", "windowed": False}
+    assert listed["rolling_mean"] == {"name": "rolling_mean", "kind": "transform", "windowed": True}

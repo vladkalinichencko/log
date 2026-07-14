@@ -5,9 +5,16 @@ interface Edit {
   table: Table;
 }
 
+export interface TableFunction {
+  name: string;
+  kind: "aggregation" | "transform";
+  windowed: boolean;
+}
+
 export interface TablesState {
   tables: Map<string, Table>;
   views: Map<string, Table>;
+  functions: TableFunction[];
   editHistory: Edit[];
 }
 
@@ -36,6 +43,7 @@ const applyEdit = (state: any, tableId: string, change: (table: Table) => Table)
 export const createTablesSlice = (set: any) => ({
   tables: new Map<string, Table>(),
   views: new Map<string, Table>(),
+  functions: [],
   editHistory: [],
 
   tables_loadTable: (id: string, table: Table) =>
@@ -47,6 +55,8 @@ export const createTablesSlice = (set: any) => ({
     set(() => ({
       views: new Map<string, Table>(list.map((v) => [v.id, v])),
     })),
+
+  tables_setFunctions: (functions: TableFunction[]) => set({ functions }),
 
   tables_editCell: (tableId: string, r: number, c: number, value: string) =>
     set((state: any) =>

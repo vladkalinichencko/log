@@ -70,7 +70,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 *Observability:*
 - Backend: read-only file storage, SQLite derived index, file watcher, WebSocket push, table engine (the `.`-path merge language), statistics.
-- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `scatter` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
+- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram / scatter / trajectory` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
 - Every UI edit creates derived columns / derived state in `views/<id>.json`; source files immutable.
 - Publication export via `log.export.figure`.
 - The three structural performance seams (Section 8, *Performance constraints*; ADR-016) ship here, since v1 is the first tier that handles real-scale data: memory-mapped `.npy` reads in `read_table`, server-side series downsampling, hand-rolled row windowing. (Hover prefetch is a later v1+ optimization, not part of this tier.)
@@ -979,6 +979,7 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | GET | `/api/series/scalar` | `run`, `path`, `x?` | `{ x: number[], y: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor` | `run`, `path`, `step` | `{ shape: int[], dtype: str, data: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor/steps` | `run`, `path` | `{ steps: int[] }` (all logged steps of one tensor path, sorted) | 404 `SERIES_NOT_FOUND` |
+| GET | `/api/tables/functions` | — | `[{ name, kind, windowed }]` — the `FUNCTIONS` registry, one row per statistic | — |
 | GET | `/api/views` | `run?` | `ViewDefinition[]` | — |
 | PUT | `/api/views/{id}` | `ViewDefinition` | `ViewDefinition` | 400 `INVALID_VIEW` |
 | DELETE | `/api/views/{id}` | — | `{ deleted: true }` | 404 `VIEW_NOT_FOUND` |
@@ -1269,7 +1270,8 @@ The `Representation` enum is the open vocabulary of view components, each a `(pr
 | `heatmap` | 2-D numeric grid | v1 |
 | `histogram` | one numeric or categorical column | v1 |
 | `pie` | one categorical column with counts | v2 |
-| `scatter` | two numeric columns | v2 |
+| `scatter` | two numeric columns (an N×2 grid renders as a point set) | v1 |
+| `trajectory` | the stacked `(step, point, x, y)` table the frame player composes | v1 |
 | `box` / `violin`, parallel-coordinates, and other publication chart types | per type | v2+ |
 
 **Custom representations via Python extensions.** Beyond the built-ins, a user registers a renderer in code — a Python function `(table) -> figure` built on matplotlib/proplot — under a name that then appears in the visualization dropdown like any built-in (the same registry idea as the function registry, Section 9.13). This is how unusual chart types from papers are added without touching the core, and is the same path `log.export.figure` already uses for publication output. `[v2]`
@@ -1288,7 +1290,7 @@ A `Table` rendered as a grid carries:
 - **Table-reference cell** — a table icon + the referenced table's name; click drills in. It also renders the referenced `Table` **in place** as a small grid of plain divs (W&B-style preview). `[v0]` clickable reference + plain-div in-cell preview; `[v2]` in-cell mini *chart*.
 - **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; in table mode a grid/list switch; in visualization mode a nested chart-type dropdown (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` all representations + chart dropdown.
 - **Expand button** — on every tile (table or chart); opens the tile fullscreen as a route-backed modal (Section 11.2a). `[v1]`
-- **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). `[v1]`
+- **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). Next to the input, an **ƒ catalog button** (the same `Menu`) lists every registry function from `GET /api/tables/functions`; picking one fills the input with `derive(<fn>_<col> = <fn>(<col>[, 20]))` over the table's last column and applies it — a statistic is one click, and the generated expression stays visible and editable. `[v1]`
 - **Search box** — in the top bar; searches table names and `.`-paths; a result focuses + scrolls-to + highlights the matching table/cell. `[v1]`
 - **Top nav bar** — back/forward arrows + breadcrumb of the drill-path; the only cross-screen navigation. `[v0]`
 
@@ -1301,7 +1303,7 @@ A table is **viewed** in the dashboard and **edited** in a modal — the same `T
 
 Every stateful element above is an explicit FSM named `<element>_fsm`, derived from `baseFsm` (Section 7.3). Buttons get `cursor: pointer` on hover; no other motion.
 
-**Frame player over logged tensor steps** `[v1]` *(pulled into scope from the v2+ list — owner decision 2026-07-14)*: when a tile's path resolves to a tensor logged at more than one step (`/api/series/tensor/steps`), a player bar (play/pause + a step slider, `Player` + `player_fsm`) appears under the table; scrubbing or playing fetches that step's frame (`/api/series/tensor`) and re-renders the same tile through the same `render(table, representation)` — the heatmap becomes an animation of training time.
+**Frame player over logged tensor steps** `[v1]` *(pulled into scope from the v2+ list — owner decision 2026-07-14)*: when a tile's path resolves to a tensor logged at more than one step (`/api/series/tensor/steps`), a timeline bar (play/pause + a draggable step slider, `Player` + `player_fsm`) appears under the table. The player is **not video**: it fetches ALL frames once into a local stack and scrubbing is instant and local — the timeline slides through stacked data, each frame re-rendered live through the same `render(table, representation)`. For an N×2 tensor (a point set: embeddings, a t-SNE projection per step) a **trajectory toggle** (`trail_fsm`) stacks the frames up to the current step into one `(step, point, x, y)` table; the `trajectory` representation draws a muted trail per point with a head marker at the current frame, so scrubbing drags the trails through time. *(Level-1 note: the full-stack prefetch trades memory for instant scrubbing; fine at demo scale, revisit with windowed prefetch if a real run's stack is large.)*
 
 ### 11.4 Exhaustive table operations (carry verbatim)
 

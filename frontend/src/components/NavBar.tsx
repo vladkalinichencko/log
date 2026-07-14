@@ -48,7 +48,7 @@ export function NavBar() {
           </span>
         ))}
       </nav>
-      <div className="search">
+      <div className="anchor">
         <input
           placeholder="search"
           value={query}

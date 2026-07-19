@@ -1,7 +1,9 @@
 import { Table, Representation } from "../types/domain";
 import { chartReps } from "./render";
+import { useMenu } from "../fsm/useMenu";
 import { useStore } from "../store/store";
 import { Button } from "./Button";
+import { Menu } from "./Menu";
 
 interface RepresentationSwitcherProps {
   table: Table;
@@ -13,6 +15,7 @@ export function RepresentationSwitcher({ table, tileId }: RepresentationSwitcher
   const setMode = useStore((state: any) => state.tiles_setMode);
   const mode = useStore((state: any) => state.tiles.get(tileId)?.mode) ?? "table";
   const chosen = useStore((state: any) => state.tiles.get(tileId)?.representation);
+  const [pickerState, openPicker, closePicker] = useMenu();
 
   const charts = chartReps(table);
   if (charts.length === 0) return null;
@@ -25,13 +28,25 @@ export function RepresentationSwitcher({ table, tileId }: RepresentationSwitcher
         <Button icon="chart" title="visualization" active={isViz} onClick={() => setMode(tileId, "visualization")} />
       </div>
       {isViz && charts.length > 1 && (
-        <select value={chosen ?? charts[0]} onChange={(e) => setRepresentation(tileId, e.target.value as Representation)}>
-          {charts.map((rep) => (
-            <option key={rep} value={rep}>
-              {rep}
-            </option>
-          ))}
-        </select>
+        <div className="anchor" onClick={(e) => e.stopPropagation()}>
+          <Button
+            label={`${chosen && charts.includes(chosen) ? chosen : charts[0]} ▾`}
+            ghost
+            title="chart type"
+            onClick={() => (pickerState === "open" ? closePicker() : openPicker())}
+          />
+          {pickerState === "open" && (
+            <Menu
+              items={charts.map((rep) => ({
+                label: rep,
+                onPick: () => {
+                  setRepresentation(tileId, rep as Representation);
+                  closePicker();
+                },
+              }))}
+            />
+          )}
+        </div>
       )}
     </div>
   );

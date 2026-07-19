@@ -1,19 +1,30 @@
 import type { Data, Layout } from "plotly.js";
 import { Table } from "../types/domain";
 
-const INK = "#1c1c1c";
-const GRID = "#e6e6e6";
-const MUTED = "#b4b4b4";
+const token = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const base: Partial<Layout> = {
-  autosize: true,
-  paper_bgcolor: "white",
-  plot_bgcolor: "white",
-  font: { family: "system-ui, sans-serif", size: 12, color: INK },
-  margin: { l: 44, r: 16, t: 16, b: 32 },
-  xaxis: { gridcolor: GRID, zerolinecolor: GRID },
-  yaxis: { gridcolor: GRID, zerolinecolor: GRID },
-  showlegend: false,
+const theme = () => ({
+  ink: token("--gray-900"),
+  grid: token("--gray-200"),
+  muted: token("--gray-400"),
+  paper: token("--gray-0"),
+  accent: token("--accent"),
+  font: token("--font"),
+});
+
+const baseLayout = (): Partial<Layout> => {
+  const t = theme();
+  return {
+    autosize: true,
+    paper_bgcolor: t.paper,
+    plot_bgcolor: t.paper,
+    font: { family: t.font, size: 12, color: t.ink },
+    margin: { l: 44, r: 16, t: 16, b: 32 },
+    xaxis: { gridcolor: t.grid, zerolinecolor: t.grid },
+    yaxis: { gridcolor: t.grid, zerolinecolor: t.grid },
+    showlegend: false,
+  };
 };
 
 type Kind = "line" | "histogram" | "heatmap" | "scatter" | "trajectory";
@@ -25,25 +36,41 @@ function column(table: Table, index: number): number[] {
 export function chartSpec(table: Table, kind: Kind): { data: Data[]; layout: Partial<Layout> } {
   const cols = table.column_names ?? [];
   const last = (cols.length || 1) - 1;
+  const t = theme();
+  const base = baseLayout();
 
   if (kind === "line") {
     const xi = Math.max(0, cols.indexOf("step"));
+    const x = column(table, xi);
+    const palette = [t.accent, "#3b82f6", "#a855f7", "#34d399", "#f59e0b", t.muted];
+    const bookkeeping = ["samples_seen", "wall_time", "rank"];
+    const series = cols
+      .map((name, i) => ({ name, i }))
+      .filter(({ name, i }) => i !== xi && !bookkeeping.includes(name.replace(/_\d+$/, "")));
+    const picked = series.length > 0 ? series : [{ name: cols[last] ?? "", i: last }];
     return {
-      data: [{ x: column(table, xi), y: column(table, last), type: "scatter", mode: "lines", line: { color: INK } }],
-      layout: base,
+      data: picked.map(({ name, i }, order) => ({
+        x,
+        y: column(table, i),
+        name,
+        type: "scatter" as const,
+        mode: "lines" as const,
+        line: { color: palette[order % palette.length], width: 2 },
+      })),
+      layout: { ...base, showlegend: picked.length > 1 },
     };
   }
 
   if (kind === "histogram") {
     return {
-      data: [{ x: column(table, last), type: "histogram", marker: { color: "#6b6b6b" } }],
+      data: [{ x: column(table, last), type: "histogram", marker: { color: t.muted } }],
       layout: base,
     };
   }
 
   if (kind === "scatter") {
     return {
-      data: [{ x: column(table, 0), y: column(table, 1), type: "scatter", mode: "markers", marker: { color: INK, size: 5 } }],
+      data: [{ x: column(table, 0), y: column(table, 1), type: "scatter", mode: "markers", marker: { color: t.ink, size: 5 } }],
       layout: base,
     };
   }
@@ -73,8 +100,8 @@ export function chartSpec(table: Table, kind: Kind): { data: Data[]; layout: Par
     }
     return {
       data: [
-        { x: trailX, y: trailY, type: "scatter", mode: "lines", line: { color: MUTED, width: 1 } },
-        { x: headX, y: headY, type: "scatter", mode: "markers", marker: { color: INK, size: 6 } },
+        { x: trailX, y: trailY, type: "scatter", mode: "lines", line: { color: t.muted, width: 1 } },
+        { x: headX, y: headY, type: "scatter", mode: "markers", marker: { color: t.ink, size: 6 } },
       ],
       layout: base,
     };

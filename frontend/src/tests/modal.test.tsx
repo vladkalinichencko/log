@@ -1,24 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Modal } from "../components/Modal";
 
 describe("Modal", () => {
   it("is hidden without a modal param", () => {
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={["/x"]}>
         <Modal />
       </MemoryRouter>
     );
-    expect(screen.queryByTitle("close")).toBeNull();
+    expect(container.querySelector(".modal")).toBeNull();
   });
 
   it("opens fullscreen when ?modal= is set", () => {
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={["/x?modal=p.r"]}>
         <Modal />
       </MemoryRouter>
     );
-    expect(screen.getByTitle("close")).toBeTruthy();
+    expect(container.querySelector(".modal")).toBeTruthy();
   });
 });

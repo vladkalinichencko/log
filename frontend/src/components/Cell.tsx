@@ -10,9 +10,10 @@ interface CellProps {
   tableId: string;
   rowIndex: number;
   colIndex: number;
+  editable?: boolean;
 }
 
-export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
+export function Cell({ cell, tableId, rowIndex, colIndex, editable }: CellProps) {
   const editCell = useStore((state: any) => state.tables_editCell);
   const setTarget = useStore((state: any) => state.focus_setTarget);
   const selected = useStore((state: any) => isFocused(state, tableId, rowIndex, colIndex));
@@ -26,6 +27,10 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
         {cell.value}
       </span>
     );
+  }
+
+  if (!editable) {
+    return <span className="cell">{cell.value}</span>;
   }
 
   const handleDoubleClick = () => {
@@ -48,6 +53,7 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
       <input
         className="cell-input"
         type="text"
+        size={1}
         value={editValue}
         onChange={(e) => setEditValue(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -59,7 +65,7 @@ export function Cell({ cell, tableId, rowIndex, colIndex }: CellProps) {
   return (
     <span
       className={selected ? "cell selected" : "cell"}
-      onClick={() => setTarget({ tableId, r: rowIndex, c: colIndex })}
+      onClick={() => setTarget({ tableId, kind: "cell", r: rowIndex, c: colIndex })}
       onDoubleClick={handleDoubleClick}
     >
       {cell.value}

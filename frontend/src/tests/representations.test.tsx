@@ -79,7 +79,8 @@ describe("representations", () => {
     render(<RepresentationSwitcher table={col} tileId="t2" />);
     fireEvent.click(screen.getByTitle("visualization"));
     expect(s().tiles.get("t2").mode).toBe("visualization");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "line" } });
-    expect(s().tiles.get("t2").representation).toBe("line");
+    fireEvent.click(screen.getByTitle("chart type"));
+    fireEvent.click(screen.getByText("histogram"));
+    expect(s().tiles.get("t2").representation).toBe("histogram");
   });
 });

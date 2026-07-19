@@ -6,9 +6,9 @@ import { Player } from "./Player";
 import { Button } from "./Button";
 import { render, chartReps } from "./render";
 import { Representation } from "../types/domain";
-import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
-import { fetchTable, fetchTensorSteps, fetchViews, saveView } from "../api/client";
+import { useTable } from "./useTable";
+import { fetchTensorSteps } from "../api/client";
 
 interface TensorFrames {
   run: string;
@@ -20,18 +20,15 @@ const TENSOR_PATH = /^([^.]+)\.([^.]+)\.epoch_\d+\.(.+)$/;
 
 interface TileProps {
   path: string;
+  editor?: boolean;
+  titled?: boolean;
 }
 
-export function Tile({ path }: TileProps) {
+export function Tile({ path, editor, titled }: TileProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [loadState, setLoadState] = useState(loadFsm.initial);
-  const loadTable = useStore((state: any) => state.tables_loadTable);
-  const setViews = useStore((state: any) => state.tables_setViews);
-  const table = useStore((state: any) => state.tables.get(path));
-  const savedView = useStore((state: any) => state.views.get(path));
+  const { table, loadState } = useTable(path);
   const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
   const mode = useStore((state: any) => state.tiles.get(path)?.mode) ?? "table";
-  const liveTick = useStore((state: any) => state.liveTick);
   const [frames, setFrames] = useState<TensorFrames | null>(null);
 
   useEffect(() => {
@@ -51,29 +48,6 @@ export function Tile({ path }: TileProps) {
     };
   }, [path]);
 
-  useEffect(() => {
-    setLoadState(loadFsm.next(loadFsm.initial, "fetch"));
-    if (savedView) {
-      loadTable(path, savedView);
-      setLoadState((s) => loadFsm.next(s, "success"));
-      return;
-    }
-    let stale = false;
-    fetchTable(path)
-      .then((loaded) => {
-        if (stale) return;
-        loadTable(path, loaded);
-        setLoadState((s) => loadFsm.next(s, "success"));
-      })
-      .catch(() => {
-        if (stale) return;
-        setLoadState((s) => loadFsm.next(s, "failure"));
-      });
-    return () => {
-      stale = true;
-    };
-  }, [path, liveTick, savedView]);
-
   if (loadState === "error") return <div>Failed to load {path}</div>;
   if (!table) return <div>Loading…</div>;
 
@@ -88,25 +62,18 @@ export function Tile({ path }: TileProps) {
       <div className="bar">
         <div className="group">
           <RepresentationSwitcher table={table} tileId={path} />
+          {titled && <span className="tile-name">{table.name}</span>}
         </div>
-        <Toolbar path={path} table={table} />
+        {editor && <Toolbar path={path} table={table} />}
         <div className="group">
-          {!expanded && (
+          {expanded ? (
+            <Button icon="collapse" ghost title="collapse" onClick={() => setSearchParams({})} />
+          ) : (
             <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
           )}
-          <Button
-            icon="save"
-            ghost
-            title="save view"
-            onClick={() =>
-              saveView(path, { id: path, ...table, source_path: path })
-                .then(() => fetchViews().then(setViews))
-                .catch((err) => console.error("Failed to save view:", err))
-            }
-          />
         </div>
       </div>
-      <div className="tile-content">{render(table, representation)}</div>
+      <div className="tile-content">{render(table, representation, editor)}</div>
       {frames && frames.steps.length > 1 && (
         <Player path={path} run={frames.run} tensorPath={frames.tensorPath} steps={frames.steps} />
       )}

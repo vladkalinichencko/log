@@ -40,6 +40,7 @@ export function applicable(table: Table): Representation[] {
     reps.push(Representation.Histogram);
   }
   if (table.kind === TableKind.Grid && allNumeric) {
+    if (table.column_names && rows[0].length >= 2) reps.push(Representation.Line);
     if (rows[0].length === 2) reps.push(Representation.Scatter);
     reps.push(Representation.Heatmap);
   }
@@ -50,7 +51,10 @@ export function chartReps(table: Table): Representation[] {
   return applicable(table).filter((r) => r !== Representation.Grid);
 }
 
-export function render(table: Table, representation: Representation) {
+export function render(table: Table, representation: Representation, editable?: boolean) {
+  if (representation === Representation.Grid) {
+    return <TableView table={table} editable={editable} />;
+  }
   const View = RENDERERS[representation];
   return <View table={table} />;
 }

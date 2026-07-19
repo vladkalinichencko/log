@@ -41,6 +41,21 @@ describe("tablesSlice undo", () => {
     expect(s().tables.get("t").cells[0][0].value).toBe("1");
   });
 
+  it("redo re-applies an undone edit and a new edit clears the future", () => {
+    const s = () => useStore.getState() as any;
+    s().tables_loadTable("t", table());
+    s().tables_editCell("t", 0, 0, "9");
+    s().tables_undo();
+    expect(s().tables.get("t").cells[0][0].value).toBe("1");
+    s().tables_redo();
+    expect(s().tables.get("t").cells[0][0].value).toBe("9");
+    s().tables_undo();
+    s().tables_editCell("t", 0, 0, "5");
+    expect(s().editFuture.length).toBe(0);
+    s().tables_redo();
+    expect(s().tables.get("t").cells[0][0].value).toBe("5");
+  });
+
   it("does nothing when the history is empty", () => {
     const s = () => useStore.getState() as any;
     while (s().editHistory.length) s().tables_undo();

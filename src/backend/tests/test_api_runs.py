@@ -4,13 +4,11 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from backend.adapters.local_file_storage import LocalFileStorage
 from backend.adapters.sqlite_index import SqliteIndex
 from backend.main import app
 from backend.api.runs import (
     RenameRequest,
     delete_run,
-    get_run,
     get_runs,
     rename_names,
     rename_runs,
@@ -52,19 +50,6 @@ def test_status_filter(tmp_path):
     _make_run(tmp_path, "p1", "run_b", "running")
     _make_run(tmp_path, "p2", "run_c", "finished")
     assert _names(get_runs(_index(tmp_path), status="finished")) == {"run_a", "run_c"}
-
-
-def test_get_run_returns_a_folder_table(tmp_path):
-    _make_run(tmp_path, "p1", "run_a", "finished")
-    table = get_run("p1", "run_a", LocalFileStorage(tmp_path))
-    assert table["kind"] == "folder"
-    assert {c[0]["value"] for c in table["cells"]} >= {"config", "meta"}
-    assert "representation" in table and "source_path" in table
-
-
-def test_get_run_missing_raises_404(tmp_path):
-    with pytest.raises(HTTPException):
-        get_run("nope", "nope", LocalFileStorage(tmp_path))
 
 
 def test_delete_run_removes_dir(tmp_path):

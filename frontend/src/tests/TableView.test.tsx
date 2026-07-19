@@ -33,9 +33,9 @@ const table: Table = {
 };
 
 describe("TableView", () => {
-  it("renders the table name and every cell value", () => {
+  it("renders every cell value and the dimensions line", () => {
     renderR(<TableView table={table} />);
-    expect(screen.getByText("loss")).toBeTruthy();
+    expect(screen.getByText("2 cols × 1 rows")).toBeTruthy();
     expect(screen.getByText("2.5")).toBeTruthy();
     expect(screen.getByText("1.9")).toBeTruthy();
   });
@@ -70,7 +70,7 @@ describe("TableView", () => {
     expect(screen.getByText("beta")).toBeTruthy();
   });
 
-  it("context menu on a cell adds a row", () => {
+  it("the ＋ button adds a row", () => {
     const s = () => useStore.getState() as any;
     const grid: Table = {
       name: "g",
@@ -82,14 +82,12 @@ describe("TableView", () => {
       source_path: "g2",
     };
     s().tables_loadTable(grid.source_path, grid);
-    renderR(<TableView table={grid} />);
-    fireEvent.contextMenu(screen.getByText("1"));
-    fireEvent.click(screen.getByText("add row"));
+    renderR(<TableView table={grid} editable />);
+    fireEvent.click(screen.getByTitle("add row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
   });
 
-  it("context menu on a column header deletes the column (Ctrl+Z is the safety)", () => {
-    const s = () => useStore.getState() as any;
+  it("read-only view offers no edit controls, editor does", () => {
     const grid: Table = {
       name: "g",
       kind: TableKind.Grid,
@@ -99,11 +97,11 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "g3",
     };
-    s().tables_loadTable(grid.source_path, grid);
-    renderR(<TableView table={grid} />);
-    fireEvent.contextMenu(screen.getByText("a"));
-    fireEvent.click(screen.getByText("delete column"));
-    expect(s().tables.get("g3").column_names).toEqual(["b"]);
+    const readOnly = renderR(<TableView table={grid} />);
+    expect(readOnly.queryByTitle("add row")).toBeNull();
+    readOnly.unmount();
+    const editor = renderR(<TableView table={grid} editable />);
+    expect(editor.getByTitle("add row")).toBeTruthy();
   });
 
   it("double-click + Enter renames a column header", () => {
@@ -118,7 +116,7 @@ describe("TableView", () => {
       source_path: "g4",
     };
     s().tables_loadTable(grid.source_path, grid);
-    renderR(<TableView table={grid} />);
+    renderR(<TableView table={grid} editable />);
     fireEvent.doubleClick(screen.getByText("a"));
     const input = screen.getByDisplayValue("a");
     fireEvent.change(input, { target: { value: "alpha" } });

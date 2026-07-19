@@ -16,6 +16,7 @@ export interface TablesState {
   views: Map<string, Table>;
   functions: TableFunction[];
   editHistory: Edit[];
+  editFuture: Edit[];
 }
 
 const emptyCell = (): Cell => ({ type: CellType.Empty, value: "", ref: null });
@@ -37,6 +38,7 @@ const applyEdit = (state: any, tableId: string, change: (table: Table) => Table)
   return {
     tables: new Map<string, Table>(state.tables).set(tableId, change(table)),
     editHistory: [...state.editHistory, { tableId, table }],
+    editFuture: [],
   };
 };
 
@@ -45,6 +47,7 @@ export const createTablesSlice = (set: any) => ({
   views: new Map<string, Table>(),
   functions: [],
   editHistory: [],
+  editFuture: [],
 
   tables_loadTable: (id: string, table: Table) =>
     set((state: any) => ({
@@ -160,6 +163,18 @@ export const createTablesSlice = (set: any) => ({
       return {
         tables: new Map<string, Table>(state.tables).set(last.tableId, last.table),
         editHistory: state.editHistory.slice(0, -1),
+        editFuture: [...state.editFuture, { tableId: last.tableId, table: state.tables.get(last.tableId) }],
+      };
+    }),
+
+  tables_redo: () =>
+    set((state: any) => {
+      const next = state.editFuture[state.editFuture.length - 1];
+      if (!next) return {};
+      return {
+        tables: new Map<string, Table>(state.tables).set(next.tableId, next.table),
+        editFuture: state.editFuture.slice(0, -1),
+        editHistory: [...state.editHistory, { tableId: next.tableId, table: state.tables.get(next.tableId) }],
       };
     }),
 });

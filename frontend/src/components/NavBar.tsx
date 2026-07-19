@@ -28,19 +28,21 @@ export function NavBar() {
     setQuery("");
   };
 
+  const historyIndex = (window.history.state?.idx as number | undefined) ?? 0;
+
   return (
-    <div className="group">
-      <Button icon="back" ghost title="back" onClick={() => navigate(-1)} />
+    <div className="group grow">
+      <Button icon="back" ghost title="back" disabled={historyIndex === 0} onClick={() => navigate(-1)} />
       <Button icon="forward" ghost title="forward" onClick={() => navigate(1)} />
-      <nav>
-        <span style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
+      <nav className="fade-scroll-x">
+        <span className="link" onClick={() => navigate("/")}>
           Home
         </span>
         {segments.map((seg: string, i: number) => (
           <span key={i}>
-            {" / "}
+            {" › "}
             <span
-              style={{ cursor: "pointer" }}
+              className="link"
               onClick={() => navigate("/" + segments.slice(0, i + 1).join("."))}
             >
               {seg}
@@ -48,7 +50,7 @@ export function NavBar() {
           </span>
         ))}
       </nav>
-      <div className="anchor">
+      <div className="anchor push">
         <input
           placeholder="search"
           value={query}

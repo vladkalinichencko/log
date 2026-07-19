@@ -20,7 +20,7 @@ describe("tableSelectors", () => {
   });
 
   it("isFocused compares against the focused cell", () => {
-    const state = { focused: { tableId: "p.run", r: 1, c: 2 } };
+    const state = { focused: { tableId: "p.run", kind: "cell", r: 1, c: 2 } };
     expect(isFocused(state, "p.run", 1, 2)).toBe(true);
     expect(isFocused(state, "p.run", 0, 2)).toBe(false);
     expect(isFocused({ focused: null }, "p.run", 1, 2)).toBe(false);

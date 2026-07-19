@@ -1,5 +1,8 @@
+export type FocusKind = "cell" | "row" | "col";
+
 export interface FocusTarget {
   tableId: string;
+  kind: FocusKind;
   r: number;
   c: number;
 }

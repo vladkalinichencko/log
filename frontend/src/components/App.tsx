@@ -1,15 +1,17 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { NavBar } from "./NavBar";
-import { Tile } from "./Tile";
+import { MainView } from "./MainView";
 import { Dashboard } from "./Dashboard";
 import { Modal } from "./Modal";
+import { Settings } from "./Settings";
 import { Button } from "./Button";
 import { useStore } from "../store/store";
-import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace } from "../api/client";
+import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace, saveView } from "../api/client";
 import { connectWebSocket } from "../api/websocket";
 
 export function App() {
+  const navigate = useNavigate();
   const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
   const pin = useStore((state: any) => state.tiles_pin);
   const pinned = useStore((state: any) => state.pinned) as string[];
@@ -20,11 +22,24 @@ export function App() {
   const liveBump = useStore((state: any) => state.live_bump);
   const connectionEvent = useStore((state: any) => state.connection_event);
   const undo = useStore((state: any) => state.tables_undo);
+  const redo = useStore((state: any) => state.tables_redo);
+  const theme = useStore((state: any) => state.theme);
+
+  const accent = useStore((state: any) => state.accent);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.setProperty("--accent", accent);
+  }, [theme, accent]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && (key === "y" || (key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      } else if ((e.metaKey || e.ctrlKey) && key === "z") {
         e.preventDefault();
         undo();
       }
@@ -75,18 +90,47 @@ export function App() {
     };
   }, []);
 
-  const save = () =>
-    saveWorkspace("default", {
-      id: "default",
-      tiles: pinned.map((path) => ({
-        id: path,
-        table_path: path,
-        mode: tiles.get(path)?.mode ?? "table",
-        representation: tiles.get(path)?.representation,
-        w: tiles.get(path)?.w,
-        h: tiles.get(path)?.h,
-      })),
-    }).catch((err) => console.error("Failed to save workspace:", err));
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      saveWorkspace("default", {
+        id: "default",
+        tiles: pinned.map((path) => ({
+          id: path,
+          table_path: path,
+          mode: tiles.get(path)?.mode ?? "table",
+          representation: tiles.get(path)?.representation,
+          w: tiles.get(path)?.w,
+          h: tiles.get(path)?.h,
+        })),
+      }).catch((err) => console.error("Failed to save workspace:", err));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [pinned, tiles]);
+
+  useEffect(() => {
+    let timer = 0;
+    const unsubscribe = (useStore as any).subscribe((state: any, prev: any) => {
+      if (state.editHistory === prev.editHistory && state.editFuture === prev.editFuture) return;
+      const edited =
+        state.editHistory[state.editHistory.length - 1] ??
+        state.editFuture[state.editFuture.length - 1];
+      if (!edited) return;
+      const table = state.tables.get(edited.tableId);
+      if (!table) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        saveView(edited.tableId, { id: edited.tableId, ...table, source_path: edited.tableId })
+          .then(() => fetchViews().then(setViews))
+          .catch((err) => console.error("Failed to save view:", err));
+      }, 500);
+    });
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const heroTitle = currentPath.split(".").filter(Boolean).pop() ?? "Projects";
 
   return (
     <div>
@@ -94,12 +138,19 @@ export function App() {
         <NavBar />
         <div className="group">
           <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
-          <Button icon="save" ghost title="save workspace" onClick={save} />
+          <Button icon="gear" ghost title="settings" onClick={() => navigate("/settings")} />
         </div>
       </div>
       <div className="content">
-        <Tile path={currentPath} />
-        <Dashboard />
+        {currentPath === "settings" ? (
+          <Settings />
+        ) : (
+          <>
+            <h1>{heroTitle}</h1>
+            <MainView path={currentPath} />
+            <Dashboard />
+          </>
+        )}
       </div>
       <Modal />
     </div>

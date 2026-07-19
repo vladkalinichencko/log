@@ -33,7 +33,35 @@ function column(table: Table, index: number): number[] {
   return table.cells.map((row) => Number(row[index].value));
 }
 
-export function chartSpec(table: Table, kind: Kind): { data: Data[]; layout: Partial<Layout> } {
+export function downsampleSeries(
+  xs: number[],
+  ys: number[],
+  target = 2000
+): [number[], number[]] {
+  if (xs.length <= target) return [xs, ys];
+  const bucketSize = Math.ceil(xs.length / (target / 2));
+  const outX: number[] = [];
+  const outY: number[] = [];
+  for (let start = 0; start < xs.length; start += bucketSize) {
+    let low = start;
+    let high = start;
+    for (let i = start; i < Math.min(start + bucketSize, xs.length); i++) {
+      if (ys[i] < ys[low]) low = i;
+      if (ys[i] > ys[high]) high = i;
+    }
+    for (const i of [low, high].sort((a, b) => a - b)) {
+      outX.push(xs[i]);
+      outY.push(ys[i]);
+    }
+  }
+  return [outX, outY];
+}
+
+export function chartSpec(
+  table: Table,
+  kind: Kind,
+  window: [number, number] | null = null
+): { data: Data[]; layout: Partial<Layout> } {
   const cols = table.column_names ?? [];
   const last = (cols.length || 1) - 1;
   const t = theme();
@@ -49,15 +77,32 @@ export function chartSpec(table: Table, kind: Kind): { data: Data[]; layout: Par
       .filter(({ name, i }) => i !== xi && !bookkeeping.includes(name.replace(/_\d+$/, "")));
     const picked = series.length > 0 ? series : [{ name: cols[last] ?? "", i: last }];
     return {
-      data: picked.map(({ name, i }, order) => ({
-        x,
-        y: column(table, i),
-        name,
-        type: "scatter" as const,
-        mode: "lines" as const,
-        line: { color: palette[order % palette.length], width: 2 },
-      })),
-      layout: { ...base, showlegend: picked.length > 1 },
+      data: picked.map(({ name, i }, order) => {
+        const y = column(table, i);
+        const visible = window
+          ? x.reduce<number[]>((kept, value, index) => {
+              if (value >= window[0] && value <= window[1]) kept.push(index);
+              return kept;
+            }, [])
+          : x.map((_, index) => index);
+        const [xs, ys] = downsampleSeries(
+          visible.map((index) => x[index]),
+          visible.map((index) => y[index])
+        );
+        return {
+          x: xs,
+          y: ys,
+          name,
+          type: "scatter" as const,
+          mode: "lines" as const,
+          line: { color: palette[order % palette.length], width: 2 },
+        };
+      }),
+      layout: {
+        ...base,
+        showlegend: picked.length > 1,
+        xaxis: { ...base.xaxis, ...(window ? { range: window } : {}) },
+      },
     };
   }
 

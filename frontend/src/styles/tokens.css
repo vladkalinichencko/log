@@ -261,8 +261,7 @@ select {
   padding: var(--space) calc(var(--space) * 1.5);
 }
 
-.content .bar,
-.modal .bar {
+.content .bar {
   padding-left: 0;
   padding-right: 0;
 }
@@ -270,6 +269,26 @@ select {
 .tile .bar {
   padding-left: var(--space);
   padding-right: var(--space);
+}
+
+.tile .bar button,
+.tile .bar .toggle,
+.tile .bar .anchor {
+  opacity: 0;
+}
+
+.tile:hover .bar button,
+.tile:hover .bar .toggle,
+.tile:hover .bar .anchor {
+  opacity: 1;
+}
+
+.tile .table-wrap {
+  padding-left: var(--space);
+}
+
+.tile table {
+  width: 100%;
 }
 
 .group {
@@ -317,7 +336,35 @@ select {
 }
 
 .table-frame > button {
-  margin: var(--space) 0;
+  margin: var(--space);
+}
+
+.table-frame > div > button {
+  margin: 0 0 calc(var(--space) * 2);
+}
+
+.resize-handle {
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  align-self: flex-end;
+  flex: 0 0 auto;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--gray-400) 50%,
+    var(--gray-400) 60%,
+    transparent 60%,
+    transparent 75%,
+    var(--gray-400) 75%,
+    var(--gray-400) 85%,
+    transparent 85%
+  );
+}
+
+input.picking {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
 }
 
 .table-meta {
@@ -330,6 +377,9 @@ select {
   white-space: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.fade-scroll-x.scrollable {
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -354,6 +404,9 @@ select {
 .fade-scroll-y {
   overflow-y: auto;
   scrollbar-width: none;
+}
+
+.fade-scroll-y.scrollable {
   mask-image: linear-gradient(
     transparent,
     black calc(var(--space) * 1.5),
@@ -491,9 +544,12 @@ select {
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: var(--space);
   display: flex;
   flex-direction: column;
+}
+
+.modal .bar {
+  padding: var(--space);
 }
 
 .tile {

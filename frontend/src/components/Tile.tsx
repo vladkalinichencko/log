@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { RepresentationSwitcher } from "./RepresentationSwitcher";
 import { Toolbar } from "./Toolbar";
 import { Player } from "./Player";
@@ -26,6 +26,7 @@ interface TileProps {
 
 export function Tile({ path, editor, titled }: TileProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { table, loadState } = useTable(path);
   const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
   const mode = useStore((state: any) => state.tiles.get(path)?.mode) ?? "table";
@@ -62,7 +63,14 @@ export function Tile({ path, editor, titled }: TileProps) {
       <div className="bar">
         <div className="group">
           <RepresentationSwitcher table={table} tileId={path} />
-          {titled && <span className="tile-name">{table.name}</span>}
+          {titled &&
+            (editor ? (
+              <span className="tile-name">{table.name}</span>
+            ) : (
+              <span className="tile-name link" onClick={() => navigate("/" + path)}>
+                {table.name}
+              </span>
+            ))}
         </div>
         {editor && <Toolbar path={path} table={table} />}
         <div className="group">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon, IconName } from "./Icon";
 
 interface MenuItem {
@@ -22,7 +22,18 @@ interface MenuProps {
 export function Menu({ items, sections, at }: MenuProps) {
   const flat = sections ? sections.flatMap((section) => section.items) : items ?? [];
   const [active, setActive] = useState(-1);
+  const [shift, setShift] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!root.current) return;
+    const rect = root.current.getBoundingClientRect();
+    const overflow = rect.right - shift - (window.innerWidth - 8);
+    setShift(overflow > 0 ? -overflow : 0);
+    for (const pane of [root.current, ...root.current.querySelectorAll(".fade-scroll-y")]) {
+      pane.classList.toggle("scrollable", pane.scrollHeight > pane.clientHeight + 1);
+    }
+  }, [flat.length]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -60,7 +71,10 @@ export function Menu({ items, sections, at }: MenuProps) {
     </div>
   );
 
-  const position = at ? { position: "fixed" as const, left: at.x, top: at.y } : undefined;
+  const position = {
+    ...(at ? { position: "fixed" as const, left: at.x, top: at.y } : {}),
+    transform: shift ? `translateX(${shift}px)` : undefined,
+  };
   let offset = 0;
   if (sections) {
     return (

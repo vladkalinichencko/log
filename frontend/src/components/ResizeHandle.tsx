@@ -10,6 +10,8 @@ export function ResizeHandle({ onResize }: ResizeHandleProps) {
   const last = useRef({ x: 0, y: 0 });
 
   const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     last.current = { x: e.clientX, y: e.clientY };
     setState(resizeFsm.next(state, "down"));
     const move = (ev: MouseEvent) => {
@@ -25,5 +27,5 @@ export function ResizeHandle({ onResize }: ResizeHandleProps) {
     window.addEventListener("mouseup", up);
   };
 
-  return <div style={{ width: 12, height: 12, cursor: "nwse-resize", alignSelf: "flex-end" }} onMouseDown={onMouseDown} />;
+  return <div className="resize-handle" onMouseDown={onMouseDown} />;
 }

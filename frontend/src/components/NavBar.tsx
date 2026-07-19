@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useStore } from "../store/store";
 import { search_selector } from "../store/selectors/searchSelectors";
@@ -23,6 +23,14 @@ export function NavBar() {
       .catch((err) => console.error("Failed to fetch paths:", err));
   }, []);
 
+  const crumbs = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const nav = crumbs.current;
+    if (!nav) return;
+    nav.classList.toggle("scrollable", nav.scrollWidth > nav.clientWidth + 1);
+  }, [currentPath]);
+
   const go = (path: string) => {
     navigate("/" + path);
     setQuery("");
@@ -34,7 +42,7 @@ export function NavBar() {
     <div className="group grow">
       <Button icon="back" ghost title="back" disabled={historyIndex === 0} onClick={() => navigate(-1)} />
       <Button icon="forward" ghost title="forward" onClick={() => navigate(1)} />
-      <nav className="fade-scroll-x">
+      <nav className="fade-scroll-x" ref={crumbs}>
         <span className="link" onClick={() => navigate("/")}>
           Home
         </span>

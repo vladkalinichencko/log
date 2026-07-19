@@ -15,8 +15,9 @@ import fx from "../assets/icons/fx.svg";
 import trail from "../assets/icons/trail.svg";
 import rename from "../assets/icons/rename.svg";
 import gear from "../assets/icons/gear.svg";
+import reset from "../assets/icons/reset.svg";
 
-const ICONS = { back, forward, plus, trash, pin, save, expand, collapse, table, chart, close, play, pause, fx, trail, rename, gear };
+const ICONS = { back, forward, plus, trash, pin, save, expand, collapse, table, chart, close, play, pause, fx, trail, rename, gear, reset };
 
 export type IconName = keyof typeof ICONS;
 

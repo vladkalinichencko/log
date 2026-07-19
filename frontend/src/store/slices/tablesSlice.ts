@@ -54,6 +54,19 @@ export const createTablesSlice = (set: any) => ({
       tables: new Map<string, Table>(state.tables).set(id, table),
     })),
 
+  tables_loadView: (id: string, view: any) =>
+    set((state: any) => {
+      const { history, future, ...table } = view;
+      const others = (edits: Edit[]) => edits.filter((edit: Edit) => edit.tableId !== id);
+      const restored = (snapshots: Table[] | undefined) =>
+        (snapshots ?? []).map((snapshot: Table) => ({ tableId: id, table: snapshot }));
+      return {
+        tables: new Map<string, Table>(state.tables).set(id, table),
+        editHistory: [...others(state.editHistory), ...restored(history)],
+        editFuture: [...others(state.editFuture), ...restored(future)],
+      };
+    }),
+
   tables_setViews: (list: any[]) =>
     set(() => ({
       views: new Map<string, Table>(list.map((v) => [v.id, v])),

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Table, Cell } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
 import { HeaderCell } from "./HeaderCell";
@@ -19,8 +19,12 @@ export function TableView({ table, editable }: TableViewProps) {
   const addColumn = useStore((state: any) => state.tables_addColumn);
   const editName = useStore((state: any) => state.tables_editName);
   const pasteBlock = useStore((state: any) => state.tables_pasteBlock);
+  const replace = useStore((state: any) => state.tables_replace);
   const setTarget = useStore((state: any) => state.focus_setTarget);
   const focused = useStore((state: any) => state.focused);
+  const picking = useStore((state: any) => state.picking);
+  const pickColumn = useStore((state: any) => state.focus_pickColumn);
+  const [descending, setDescending] = useState<Record<string, boolean>>({});
   const tableRef = useRef<HTMLTableElement>(null);
 
   const selection = focused && focused.tableId === tableId ? focused : null;
@@ -72,6 +76,30 @@ export function TableView({ table, editable }: TableViewProps) {
     }
   };
 
+  const headerClick = (name: string, c: number) => {
+    if (!editable) return;
+    if (picking) {
+      pickColumn(name);
+      return;
+    }
+    const desc = descending[name] ?? false;
+    setDescending({ ...descending, [name]: !desc });
+    const value = (r: number) => table.cells[r][c].value;
+    const compare = (a: number, b: number) => {
+      const na = Number(value(a));
+      const nb = Number(value(b));
+      const ordered =
+        Number.isNaN(na) || Number.isNaN(nb) ? value(a).localeCompare(value(b)) : na - nb;
+      return desc ? -ordered : ordered;
+    };
+    const indices = table.cells.map((_: Cell[], r: number) => r).sort(compare);
+    replace(tableId, {
+      ...table,
+      cells: indices.map((r: number) => table.cells[r]),
+      row_names: table.row_names ? indices.map((r: number) => table.row_names![r]) : null,
+    });
+  };
+
   const rowSelected = (r: number) => selection?.kind === "row" && selection.r === r;
   const colSelected = (c: number) => selection?.kind === "col" && selection.c === c;
   const colClass = (r: number, c: number) => {
@@ -84,8 +112,8 @@ export function TableView({ table, editable }: TableViewProps) {
   const columns = table.cells[0]?.length ?? 0;
 
   return (
-    <div>
-      <div className="table-meta">{columns} cols × {table.cells.length} rows</div>
+    <div className="table-wrap">
+      {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
         <div>
           <table ref={tableRef}>
@@ -93,7 +121,7 @@ export function TableView({ table, editable }: TableViewProps) {
               <thead>
                 <tr>
                   {table.column_names.map((name: string, c: number) => (
-                    <th key={c} className={colClass(-1, c)}>
+                    <th key={c} className={colClass(-1, c)} onClick={() => headerClick(name, c)}>
                       {editable ? (
                         <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
                       ) : (

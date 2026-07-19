@@ -29,7 +29,7 @@ describe("tilesSlice pin/unpin", () => {
     expect(s().tiles.get("rt").w).toBe(450);
     expect(s().tiles.get("rt").h).toBe(350);
     s().tiles_resize("rt", -1000, -1000);
-    expect(s().tiles.get("rt").w).toBe(100);
-    expect(s().tiles.get("rt").h).toBe(80);
+    expect(s().tiles.get("rt").w).toBe(160);
+    expect(s().tiles.get("rt").h).toBe(120);
   });
 });

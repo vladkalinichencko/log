@@ -12,16 +12,50 @@ interface TileRecord {
 export interface TilesState {
   tiles: Map<string, TileRecord>;
   pinned: string[];
+  order: Map<string, string[]>;
 }
 
 const DEFAULT_W = 400;
 const DEFAULT_H = 300;
-const MIN_W = 100;
-const MIN_H = 80;
+const MIN_W = 160;
+const MIN_H = 120;
+const SNAP_FRACTIONS = [1 / 3, 1 / 2, 2 / 3, 1];
+const SNAP_DISTANCE = 40;
+
+export function snapWidth(width: number, containerWidth: number): number {
+  for (const fraction of SNAP_FRACTIONS) {
+    const target = containerWidth * fraction - 16;
+    if (Math.abs(width - target) <= SNAP_DISTANCE) return target;
+  }
+  return width;
+}
 
 export const createTilesSlice = (set: any) => ({
   tiles: new Map<string, TileRecord>(),
   pinned: [],
+  order: new Map<string, string[]>(),
+
+  tiles_setSize: (tileId: string, w: number, h: number) =>
+    set((state: any) => {
+      const tiles = new Map<string, TileRecord>(state.tiles);
+      tiles.set(tileId, {
+        ...tiles.get(tileId),
+        w: Math.max(MIN_W, w),
+        h: Math.max(MIN_H, h),
+      });
+      return { tiles };
+    }),
+
+  tiles_reorder: (parent: string, refs: string[], dragged: string, target: string) =>
+    set((state: any) => {
+      const current: string[] = state.order.get(parent) ?? refs;
+      const without = current.filter((ref: string) => ref !== dragged);
+      const at = without.indexOf(target);
+      without.splice(at < 0 ? without.length : at, 0, dragged);
+      const order = new Map<string, string[]>(state.order);
+      order.set(parent, without);
+      return { order };
+    }),
 
   tiles_setRepresentation: (tileId: string, representation: Representation) =>
     set((state: any) => {

@@ -9,8 +9,7 @@ export function Settings() {
   const setAccent = useStore((state: any) => state.settings_setAccent);
 
   return (
-    <div>
-      <h1>settings</h1>
+    <div className="content">
       <div className="group">
         <span>theme</span>
         <div className="toggle">

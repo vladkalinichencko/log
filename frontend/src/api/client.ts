@@ -118,6 +118,13 @@ export async function saveWorkspace(id: string, workspace: any): Promise<any> {
   return response.json();
 }
 
+export async function deleteView(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/views/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`Failed to delete view: ${response.statusText}`);
+  }
+}
+
 export async function fetchPaths(): Promise<string[]> {
   const response = await fetch(`${API_BASE}/api/paths`);
   if (!response.ok) {

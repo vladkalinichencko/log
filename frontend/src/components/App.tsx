@@ -1,17 +1,16 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { NavBar } from "./NavBar";
 import { MainView } from "./MainView";
 import { Dashboard } from "./Dashboard";
 import { Modal } from "./Modal";
-import { Settings } from "./Settings";
 import { Button } from "./Button";
 import { useStore } from "../store/store";
 import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace, saveView } from "../api/client";
 import { connectWebSocket } from "../api/websocket";
 
 export function App() {
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
   const pin = useStore((state: any) => state.tiles_pin);
   const pinned = useStore((state: any) => state.pinned) as string[];
@@ -117,9 +116,22 @@ export function App() {
       if (!edited) return;
       const table = state.tables.get(edited.tableId);
       if (!table) return;
+      const snapshots = (edits: any[]) =>
+        edits
+          .filter((edit: any) => edit.tableId === edited.tableId)
+          .slice(-20)
+          .map((edit: any) => edit.table);
+      const history = snapshots(state.editHistory);
+      const future = snapshots(state.editFuture);
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        saveView(edited.tableId, { id: edited.tableId, ...table, source_path: edited.tableId })
+        saveView(edited.tableId, {
+          id: edited.tableId,
+          ...table,
+          source_path: edited.tableId,
+          history,
+          future,
+        })
           .then(() => fetchViews().then(setViews))
           .catch((err) => console.error("Failed to save view:", err));
       }, 500);
@@ -138,19 +150,20 @@ export function App() {
         <NavBar />
         <div className="group">
           <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
-          <Button icon="gear" ghost title="settings" onClick={() => navigate("/settings")} />
+          <Button
+            icon="gear"
+            ghost
+            title="settings"
+            onClick={() =>
+              setSearchParams({ ...Object.fromEntries(searchParams), settings: "1" })
+            }
+          />
         </div>
       </div>
       <div className="content">
-        {currentPath === "settings" ? (
-          <Settings />
-        ) : (
-          <>
-            <h1>{heroTitle}</h1>
-            <MainView path={currentPath} />
-            <Dashboard />
-          </>
-        )}
+        <h1>{heroTitle}</h1>
+        <MainView path={currentPath} />
+        <Dashboard />
       </div>
       <Modal />
     </div>

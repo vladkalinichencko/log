@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadFsm } from "../fsm/loadFsm";
 import { useMenu } from "../fsm/useMenu";
-import { evalTable, deleteRun, renameRuns } from "../api/client";
+import { evalTable, deleteRun, renameRuns, deleteView, fetchViews } from "../api/client";
 import { exportCsv, exportJson } from "./exportTable";
 import { Button } from "./Button";
 import { Menu } from "./Menu";
@@ -10,6 +10,8 @@ import { Table, CellType } from "../types/domain";
 import { TableFunction } from "../store/slices/tablesSlice";
 import { ACCENTS } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
+
+export const COLUMN_PLACEHOLDER = "«col»";
 
 export function functionExpression(fn: TableFunction, column: string): string {
   const args = fn.windowed ? `${column}, 20` : column;
@@ -34,8 +36,14 @@ export function Toolbar({ path, table }: ToolbarProps) {
   const removeColumn = useStore((state: any) => state.tables_removeColumn);
   const setTarget = useStore((state: any) => state.focus_setTarget);
   const setAccent = useStore((state: any) => state.settings_setAccent);
+  const setViews = useStore((state: any) => state.tables_setViews);
+  const setPicking = useStore((state: any) => state.focus_setPicking);
+  const pickColumn = useStore((state: any) => state.focus_pickColumn);
+  const pickedColumn = useStore((state: any) => state.pickedColumn);
   const functions = useStore((state: any) => state.functions);
   const focused = useStore((state: any) => state.focused);
+  const paths = useStore((state: any) => state.paths);
+  const savedView = useStore((state: any) => state.views.get(path));
   const [expr, setExpr] = useState("");
   const suggestAnchor = useRef<HTMLDivElement>(null);
   const [evalState, setEvalState] = useState(loadFsm.initial);
@@ -43,6 +51,22 @@ export function Toolbar({ path, table }: ToolbarProps) {
   const [exportState, openExport, closeExport] = useMenu();
   const [confirmState, openConfirm, closeConfirm] = useMenu();
   const [renameState, openRename, closeRename] = useMenu();
+  const [compareState, openCompare, closeCompare] = useMenu();
+
+  useEffect(() => {
+    setPicking(expr.includes(COLUMN_PLACEHOLDER));
+    return () => setPicking(false);
+  }, [expr]);
+
+  useEffect(() => {
+    if (!pickedColumn) return;
+    if (expr.includes(COLUMN_PLACEHOLDER)) {
+      const filled = expr.replace(COLUMN_PLACEHOLDER, pickedColumn);
+      setExpr(filled);
+      if (!filled.includes(COLUMN_PLACEHOLDER)) run(filled);
+    }
+    pickColumn(null);
+  }, [pickedColumn]);
 
   const selection = focused && focused.tableId === path ? focused : null;
   const lineSelection = selection && selection.kind !== "cell" ? selection : null;
@@ -89,17 +113,16 @@ export function Toolbar({ path, table }: ToolbarProps) {
     closeRename();
   };
 
-  const targetColumn =
-    selection && selection.c >= 0
-      ? table.column_names?.[selection.c]
-      : table.column_names?.[table.column_names.length - 1];
+  const selectedColumn =
+    selection && selection.c >= 0 ? table.column_names?.[selection.c] ?? null : null;
 
-  const word = expr.match(/[A-Za-z_]\w*$/)?.[0] ?? "";
+  const word = expr.match(/[A-Za-z_][\w.]*$/)?.[0] ?? "";
   const suggestions =
     word.length > 0
       ? [
           ...(table.column_names ?? []),
           ...functions.map((fn: TableFunction) => fn.name),
+          ...paths,
         ]
           .filter((name) => name.startsWith(word) && name !== word)
           .slice(0, 8)
@@ -112,13 +135,29 @@ export function Toolbar({ path, table }: ToolbarProps) {
       .map((fn: TableFunction) => ({
         label: fn.name,
         onPick: () => {
-          const expression = functionExpression(fn, targetColumn ?? "");
+          const expression = functionExpression(fn, selectedColumn ?? COLUMN_PLACEHOLDER);
           setExpr(expression);
-          run(expression);
+          if (selectedColumn) run(expression);
           closeCatalog();
         },
       })),
   }));
+
+  const [metricProject, metricRun, ...metricRest] = path.split(".");
+  const metricTail = metricRest.join(".");
+  const compareRuns =
+    metricRest.length > 0
+      ? paths.filter((other: string) => {
+          const [project, run_, ...rest] = other.split(".");
+          return project === metricProject && run_ !== metricRun && rest.join(".") === metricTail;
+        })
+      : [];
+
+  const resetToSource = () => {
+    deleteView(path)
+      .then(() => fetchViews().then(setViews))
+      .catch((err) => console.error("Failed to reset view:", err));
+  };
 
   return (
     <div className="group grow">
@@ -144,16 +183,46 @@ export function Toolbar({ path, table }: ToolbarProps) {
         />
         {renameState === "open" && <RenamePanel onApply={renameSelection} />}
       </div>
-      {selection && targetColumn && functions.length > 0 && (
+      {selection && table.column_names && functions.length > 0 && (
         <div className="anchor" onClick={(e) => e.stopPropagation()}>
           <Button icon="fx" ghost title="apply statistic" onClick={openCatalog} />
           {catalogState === "open" && <Menu sections={catalogSections} />}
         </div>
       )}
+      {compareRuns.length > 0 && (
+        <div className="anchor" onClick={(e) => e.stopPropagation()}>
+          <Button
+            icon="chart"
+            ghost
+            title="compare with run"
+            onClick={() => (compareState === "open" ? closeCompare() : openCompare())}
+          />
+          {compareState === "open" && (
+            <Menu
+              items={compareRuns.map((other: string) => ({
+                label: other.split(".")[1],
+                onPick: () => {
+                  const expression = `join(table(${other}), on = step)`;
+                  setExpr(expression);
+                  run(expression);
+                  closeCompare();
+                },
+              }))}
+            />
+          )}
+        </div>
+      )}
+      <Button
+        icon="reset"
+        ghost
+        title="reset to source"
+        disabled={!savedView}
+        onClick={resetToSource}
+      />
       {selection && (
         <div className="anchor grow" ref={suggestAnchor}>
           <input
-            className="grow"
+            className={expr.includes(COLUMN_PLACEHOLDER) ? "grow picking" : "grow"}
             placeholder="formula: derive(z = zscore(loss, 100)) | select(step, z)"
             value={expr}
             onChange={(e) => setExpr(e.target.value)}

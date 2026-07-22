@@ -62,7 +62,6 @@ export function Tile({ path, editor, titled }: TileProps) {
     <div className="tile-body">
       <div className="bar">
         <div className="group">
-          <RepresentationSwitcher table={table} tileId={path} />
           {titled &&
             (editor ? (
               <span className="tile-name">{table.name}</span>
@@ -71,6 +70,7 @@ export function Tile({ path, editor, titled }: TileProps) {
                 {table.name}
               </span>
             ))}
+          <RepresentationSwitcher table={table} tileId={path} />
         </div>
         {editor && <Toolbar path={path} table={table} />}
         <div className="group">

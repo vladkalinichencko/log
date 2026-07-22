@@ -40,5 +40,8 @@ describe("InlineView", () => {
     expect(screen.getByText("demo")).toBeTruthy();
     expect(screen.getByTitle("expand")).toBeTruthy();
     expect(screen.getByTitle("table")).toBeTruthy();
+    const title = screen.getByText("demo");
+    const switcher = screen.getByTitle("table").closest(".toggle");
+    expect(title.compareDocumentPosition(switcher!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

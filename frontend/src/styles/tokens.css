@@ -425,10 +425,9 @@ input.picking {
   display: none;
 }
 
-.tile-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+.inline-view {
+  width: 100%;
+  margin: 0;
 }
 
 .tile-name {

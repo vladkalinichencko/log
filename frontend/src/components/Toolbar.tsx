@@ -10,6 +10,7 @@ import { Table, CellType } from "../types/domain";
 import { TableFunction } from "../store/slices/tablesSlice";
 import { ACCENTS } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
+import { formula_selector } from "../store/selectors/searchSelectors";
 
 export const COLUMN_PLACEHOLDER = "«col»";
 
@@ -116,17 +117,11 @@ export function Toolbar({ path, table }: ToolbarProps) {
   const selectedColumn =
     selection && selection.c >= 0 ? table.column_names?.[selection.c] ?? null : null;
 
-  const word = expr.match(/[A-Za-z_][\w.]*$/)?.[0] ?? "";
-  const suggestions =
-    word.length > 0
-      ? [
-          ...(table.column_names ?? []),
-          ...functions.map((fn: TableFunction) => fn.name),
-          ...paths,
-        ]
-          .filter((name) => name.startsWith(word) && name !== word)
-          .slice(0, 8)
-      : [];
+  const { word, suggestions } = formula_selector(
+    { functions, paths },
+    expr,
+    table.column_names ?? []
+  );
 
   const catalogSections = ["aggregation", "transform"].map((kind) => ({
     title: kind,

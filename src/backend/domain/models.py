@@ -21,11 +21,13 @@ class TableKind(str, Enum):
 
 
 class Representation(str, Enum):
+    inline = "inline"
     grid = "grid"
-    list = "list"
     line = "line"
     heatmap = "heatmap"
     histogram = "histogram"
+    scatter = "scatter"
+    trajectory = "trajectory"
 
 
 @dataclass

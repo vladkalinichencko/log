@@ -79,9 +79,13 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 `log.mix`, `log.combine_losses`, `log.eval_loop`, `log.batch_safe`, `@log.metric`, `log.poll_commands`, `log.sample_dataset`, the `log.dataset` module; UI → code control channel via `runs/<run>/_commands/`; hot-swap hyperparameters; on-demand checkpoint from UI; connected/node-graph tiles; in-cell rendering of a referenced `Table` as a mini *chart* (the v0 in-cell render is a plain-div grid; rendering it as a small line/heatmap inside the cell is v2); dataset viewer, dataset coverage, on-the-fly PCA/UMAP/SAE, viz-time auto-compute + `runs/<run>/_viz_cache/`; torch.profiler trace import + flamegraph; `dataset_sample.pt`, `dataset_coverage.jsonl`; gifs/videos of charts (`log.export.animate`); a real "duplicate table" action; a dedicated merge UI; remote SSH viewer. *(Redo, originally listed here, moved to v1 — Section 11.4 #11, ADR-018.)*
 
+Configuration files join the same `log.run` boundary: `config` may be a mapping or a `.json`/`.yaml`/`.yml` path, and all three normalize to the existing `config.json` record before the run starts. Saved table views encode visible columns, column order, filters, and ordered sorts in the URL, so a bookmark or copied URL restores the same view. Multi-selected runs feed one comparison buffer; comparison produces a derived `Table`, never a separate entity type.
+
 ### 3.4 v3 — scale, structure, cluster ops
 
 Auto-FSDP by model size; multi-rank coordination; heartbeat/hang detection; cluster overview tile; per-rank timeline; NCCL ops timeline; memory-per-rank tile; hang alerts; checkpoint-save progress; architecture visualization via torch.fx (hierarchical grid); per-rank subdirectories `rank_<N>/`; environment/dependency snapshot files under `env/`; console capture `logs/console.txt`; system profiler `logs/system.jsonl`; n-dimensional tables;  RL-specific tiles.
+
+Execution orchestration uses immutable run history: cloning a run creates an editable draft whose config and input-model reference may change; executing or enqueueing that draft creates a new run. A CLI executes a draft by id. Workers pull drafts from named queues, and resource budgets are expressed by assigning workers to queues. "Reset to draft" never rewrites a historical run; it forks that run into a new draft.
 
 ### 3.5 Never built (philosophy)
 
@@ -108,6 +112,7 @@ For every dependency: one line on what it does and what specifically breaks or m
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
 | proplot | A thin styling layer over matplotlib that supplies journal/`"nature"` presets for `log.export.figure(renderer=...)`. Without it we hand-write the journal style dictionaries. |
+| PyYAML `[v2]` | Parses `.yaml`/`.yml` config files at the `log.run` boundary. JSON remains stdlib; without PyYAML we would own a YAML parser. |
 
 Standard library only for: threading, queue, **sqlite3** (derived index — ADR-003), pathlib, os, **json** (no `orjson`; stdlib `json` is fast enough for single-user read responses), hashlib, subprocess (git hash), tempfile, dataclasses, math (LR schedules), fnmatch (glob paths), weakref (ADR-008).
 
@@ -271,6 +276,7 @@ log/
         Dashboard.tsx             # grid of pinned Tiles
         Modal.tsx                 # fullscreen route-backed tile (?modal=path)
         TableView.tsx             # semantic <table> representation
+        InlineView.tsx            # parent table whose table_ref cells render read-only child tiles
         Cell.tsx                  # one cell (uses cellEdit_fsm)
         HeaderCell.tsx            # column/row name cell (double-click edit)
         Menu.tsx                  # one menu component: search dropdown + right-click context menu
@@ -290,6 +296,7 @@ log/
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx
+        inlineView.test.tsx       # parent stays a table; child controls live inside its row
         representations.test.tsx  # chartSpec mapping + applicable + switcher
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
@@ -372,10 +379,13 @@ classDiagram
     }
     class Representation {
         <<enumeration>>
+        inline
         grid
-        list
         line
         heatmap
+        histogram
+        scatter
+        trajectory
     }
     Table "1" --> "*" Cell : cells
     Table --> TableKind : kind
@@ -386,7 +396,7 @@ classDiagram
 Field rules:
 - `column_names` / `row_names`: `null` when the table has none; a header row/column is rendered only when its names list is non-`null`.
 - `kind`: `scalar` = no cells until grown (rendered as just the name); `row` = 1×N; `column` = N×1; `grid` = N×M (Excel); `folder` = a table whose cells are `table_ref`s to child tables. n-D is `[v3]` and not represented here.
-- `representation`: default set by `read_table` per table role — folders, key/value tables, and tensor grids default to `grid` (rendered by `TableView`, which carries headers + drill); a scalar series defaults to `line`. The UI may switch it via `applicable(table)` (§11.1), which offers `list` as the flat alternative to `grid`.
+- `representation`: default set by `read_table` per table role — folders, key/value tables, and tensor grids default to `grid`; a scalar series defaults to `line`. `inline` is context-only: `MainView` uses it for a parent table so each `table_ref` cell contains the child's read-only tile; it is not offered in the user's chart picker.
 - `source_path`: the `.`-path this table was read from (e.g. `default.run3.epoch_0000.loss`); `null` for a table that exists only as derived/in-memory state.
 - `Cell.value`: in v0/v1 every value is stored as a **string**; `type` records the intended type for later typed display.
 - `Cell.ref`: for `tensor_ref` and `table_ref`, the `.`-path of the target; `null` otherwise.
@@ -520,7 +530,7 @@ Field-level rules:
 - `MetricRow.scalars`: object mapping scalar name → number. Each numeric `log.log(name, value)` merges into the row for that `(step, rank)`.
 - `TensorIndexRow.dtype`: NumPy dtype string (e.g. `"float32"`).
 - `Tile.mode`: one of `"table"`, `"visualization"` (Section 11.2a).
-- `Tile.representation`: in table mode one of `"grid"`, `"list"`; in visualization mode one of `"line"`, `"heatmap"`, `"histogram"` (extends as chart types are added).
+- `Tile.representation`: `"grid"` in table mode; in visualization mode one of `"line"`, `"heatmap"`, `"histogram"`, `"scatter"`, `"trajectory"` (extends as chart types are added). `"inline"` is chosen only by `MainView`, not stored as a tile choice.
 - `Filter.op`: one of `"eq"`, `"ne"`, `"gt"`, `"gte"`, `"lt"`, `"lte"`, `"contains"`.
 - `Sort.direction`: one of `"asc"`, `"desc"`.
 
@@ -716,15 +726,17 @@ Per-feature function set (one row = one feature, all four shapes present where a
 
 | `Representation` | Component | Draws |
 |---|---|---|
-| `grid` | `TableView` | editable grid of plain divs |
-| `list` | `ListView` | one record per row, stacked |
+| `inline` | `InlineView` | semantic parent table; each `table_ref` cell contains the child tile + controls |
+| `grid` | `TableView` | semantic HTML table; editable only in the modal |
 | `line` | `LineChartView` | Plotly line |
 | `heatmap` | `HeatmapView` | Plotly heatmap |
-| `histogram` *(added when histogram ships, §3.3)* | `HistogramView` | Plotly histogram |
+| `histogram` | `HistogramView` | Plotly histogram |
+| `scatter` | `ScatterView` | Plotly point set |
+| `trajectory` | `TrajectoryView` | Plotly point trails through tensor frames |
 
-Mechanically: `render` is `function render(table, representation) { const View = RENDERERS[representation]; return <View table={table} /> }`. Adding a representation is adding **one row** to `RENDERERS` plus one component file — nothing else in the app changes. Every component in the right column reads nothing but its `table` prop; none fetches, none touches the store directly.
+Mechanically, `render` selects one row from `RENDERERS`; `grid` additionally receives the modal's `editable` flag. Leaf renderers read only the `table` prop and never fetch. `InlineView` is the deliberate composition row: it reads saved tile order/size, then gives each child path to the existing `Tile`, which owns loading and controls.
 
-Four call sites pass through this one function and differ *only* in which table and which representation they hand it: the main screen (§11.1), a tile (§11.2a), an in-cell `table_ref` preview (§3.1), and the fullscreen route-modal (§11.2a). The `RepresentationSwitcher` (table mode) and the chart-type dropdown (visualization mode, §11.2a) each do exactly one thing — dispatch a new `Representation` into this same map. That is why a list and a chart are provably "the same data drawn differently": they are the same `render` call with one argument changed.
+The main screen, each tile, and the fullscreen route-modal all pass through this function. `MainView` chooses `inline` for a parent table; a tile's table/visualization switch and chart picker change only the representation sent to the same dispatch, without refetching the data.
 
 ---
 
@@ -797,7 +809,7 @@ Ownership and forbidden imports:
 | **Row windowing** | The grid renderer mounts only the ~40 visible rows + a buffer, not all 100k — hand-rolled (~40 lines), the library in §4.3 only if that drops frames. | The grid component must be built around a windowed list, not a full `.map`. |
 | **Hover prefetch** *(v1+ later)* | On breadcrumb/tile hover, fire the likely-next `read_table` fetch early so the click feels instant. | Pure optimization — changes no interface — so it is a safe later add. |
 
-The first three ship with v1 (the version that first handles real-scale data); the fourth is a later optimization. See ADR-016. The v0 walking skeleton, which renders one trivial scalar table as plain divs, needs none of them.
+The first three ship with v1 (the version that first handles real-scale data); the fourth is a later optimization. See ADR-016. The v0 walking skeleton, which renders one trivial semantic table, needs none of them.
 
 ---
 
@@ -1232,13 +1244,13 @@ sequenceDiagram
 
 ## 11. UI specification
 
-The UI is a single-page application. One HTML page; `react-router-dom` swaps screens client-side; the backend is a local read-only JSON + WebSocket server. Everything here is **v1** unless tagged. v0 builds only the subset named in Section 3.1, laid out as plain left-aligned stacked divs with no styling.
+The UI is a single-page application. One HTML page; `react-router-dom` swaps screens client-side; the backend is a local read-only JSON + WebSocket server. Everything here is **v1** unless tagged. Semantic HTML expresses the data structure; CSS tokens supply the minimal visual system.
 
 ### 11.1 Core model: a screen is a `Table` in a representation
 
-"All projects", "the runs of a project", "a run's config", "the tables of a run", and "a single metric" are all `Table`s (Section 6.2), and this holds at **every** level — not just leaf metrics. Any of them can be rendered in any representation its shape supports: a list and a line chart are the same `Table` rendered two ways; switching representation calls a different render component (Section 7.4) over identical data, with no refetch. You can, literally, render the projects list as a histogram — the UI is **one renderer × many representations**, applied uniformly to any table on any level. There are no bespoke screens; there is one `render(table, representation)`.
+"All projects", "the runs of a project", "a run's config", "the tables of a run", and "a single metric" are all `Table`s (Section 6.2), and this holds at **every** level. A table and a chart are the same data rendered two ways; switching representation calls a different component (Section 7.4) over the identical `Table`, without refetching. A project/run list with a numeric last column can render as a histogram. There are no bespoke screen-domain types; there is one `render(table, representation)`.
 
-**Applicable representations are a pure function of the table's shape:** `applicable(table) -> Representation[]`, derived from `kind` and column types — any table supports `grid`/`list`; a numeric column over an x column supports `line`; a 2-D numeric grid supports `heatmap`; one numeric/categorical column supports `histogram`/`pie`; two numeric columns support `scatter`. The visualization dropdown (Section 11.2a) offers exactly `applicable(table)` and nothing inapplicable. `applicable` is the one place that knows shape→representation; adding a representation adds it here and in `RENDERERS` (Section 7.4), nowhere else.
+**Applicable representations are a pure function of the table's shape:** `applicable(table) -> Representation[]`, derived from `kind` and column types — any table supports `grid`; a numeric column over an x column supports `line`; a 2-D numeric grid supports `heatmap`; a numeric last column supports `histogram` even when the table is a folder/run list; two numeric columns support `scatter`. The visualization dropdown offers exactly these user-selectable representations. `inline` is selected by `MainView` from context, not by `applicable`, because it describes parent→child composition rather than a chart choice.
 
 ### 11.2 Navigation = drilling into a `Table`
 
@@ -1249,14 +1261,14 @@ Opening a child table by clicking a `table_ref` cell **replaces the current view
 ### 11.2a Tile, table/visualization toggle, fullscreen route-modal
 
 A rendered `Table` lives inside a **tile** (a rectangle). The tile has a **mode toggle** with two modes:
-- **Table mode** — shows the table itself. The table has selectable *table representations* (`grid`, `list`). `[v0]` toggle present; `[v1]` both representations.
+- **Table mode** — shows the semantic table through `grid`. `[v0]`
 - **Visualization mode** — shows a chart of the same `Table`. A **dropdown with sub-items** selects the chart type (`line`, `heatmap`, `histogram`, and more as added); the dropdown is nested because there are many possible charts. `[v1]`
 
 Every tile — in either mode — has an **expand button** that opens the tile **fullscreen as a route-backed modal**: it covers the screen except a thin margin, looks like a modal, **and changes the URL** so the fullscreen view is addressable/shareable and the browser Back button closes it. A "route-backed modal" means the modal's open/closed state lives in the URL (a `?modal=<path>` search param, via `react-router-dom`'s `useSearchParams`), not a transient popup flag — so it is shareable and back-button-closable, which is why it does not have the focus-trap/disclosure problems of an ad-hoc modal. The expand button is on **both** the table tile and the chart tile. `[v1]`
 
 Automatic statistics (rolling mean, z-score spike, min/max, etc.) are computed as **derived rows/columns on the `Table`** via the formula language (Section 9.13) and then shown in whichever mode is active — i.e. a statistic is added to the table as an aggregate row/column, and visualization mode charts it like any other column. (This keeps "everything is a `Table`": a statistic is a derived column, not a separate chart feature.) `[v1]`
 
-Data-model note: this introduces a tile **mode** (`table` | `visualization`) alongside the existing `Representation` enum; the chart-type dropdown values extend `Representation` (currently `grid`/`list`/`line`/`heatmap`) with `histogram` and future types. `Tile` (Section 6.3) already carries `representation`; a `mode` field is added there.
+Data-model note: a tile has **mode** (`table` | `visualization`) alongside `Representation`; the chart picker chooses among applicable visualization representations. `inline` remains a context-only parent representation.
 
 ### 11.2b Representation catalog
 
@@ -1264,8 +1276,8 @@ The `Representation` enum is the open vocabulary of view components, each a `(pr
 
 | Representation | Table shape it needs | Tier |
 |---|---|---|
+| `inline` | a parent table containing `table_ref` cells; context-only main-view representation | v1 |
 | `grid` | any | v0 |
-| `list` | any | v1 |
 | `line` | numeric column(s) over an x column | v1 |
 | `heatmap` | 2-D numeric grid | v1 |
 | `histogram` | one numeric or categorical column | v1 |
@@ -1287,8 +1299,8 @@ A `Table` rendered as a grid carries:
 - **Value cells** — a grid of divs; each shows its value. Numbers are rounded to fit; on hover the full value appears as an **overlay above the cell** (never by widening the cell). Double-click → the cell becomes a text input; Enter commits + deselects; Esc cancels + deselects. (`Cell` + `cellEdit_fsm`.) `[v0]` edit; `[v1]` hover-overlay + rounding.
 - **Scalar table** — just the table name, no grid, until the user presses **＋**. No "1×1 frame". `[v1]`
 - **No context menus.** One minimal per-tile toolbar instead: icons (add row, add column, trash, rename, ƒ, formula, export) are gray/inactive until something is selected. Clicking the table's true outer edge (the outermost divider, not a header cell or a manufactured handle column) selects the whole row or column, drawn as one outline centered on the border (expanding onto neighboring cells, not inset). Deleting shows a second, one-item menu ("confirm") in place of the first — not a modal — before applying; Ctrl+Z still restores. Renaming a single cell/header stays inline (double-click); renaming across a multi-selection (Ctrl/Shift/drag-select, pending range selection — Section 11.4 #7) opens a modal with prefix/suffix/find-replace fields. (`Menu` + `menu_fsm` render the confirm step; the same `Menu` renders the search dropdown.) `[v1]` *(supersedes the earlier right-click context menu, which itself had superseded the ＋ edge controls and corner dot-menu — owner decision 2026-07-19: context menus hide the available actions until you right-click the right thing; a toolbar keeps them visible and discoverable.)*
-- **Table-reference cell** — a table icon + the referenced table's name; click drills in. It also renders the referenced `Table` **in place** as a small grid of plain divs (W&B-style preview). `[v0]` clickable reference + plain-div in-cell preview; `[v2]` in-cell mini *chart*.
-- **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; in table mode a grid/list switch; in visualization mode a nested chart-type dropdown (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` all representations + chart dropdown.
+- **Table-reference cell** — inside `InlineView`, the cell contains the referenced table's read-only `Tile`; its linked title drills in, while its switcher, Expand, and resize handle operate locally. `[v1]`
+- **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; table mode uses `grid`, while visualization mode opens the chart-type menu (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` chart picker.
 - **Expand button** — on every tile (table or chart); opens the tile fullscreen as a route-backed modal (Section 11.2a). `[v1]`
 - **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). Next to the input, an **ƒ catalog button** (the same `Menu`) lists every registry function from `GET /api/tables/functions`; picking one fills the input with `derive(<fn>_<col> = <fn>(<col>[, 20]))` over the table's last column and applies it — a statistic is one click, and the generated expression stays visible and editable. `[v1]`
 - **Search box** — in the top bar; searches table names and `.`-paths; a result focuses + scrolls-to + highlights the matching table/cell. `[v1]`
@@ -1298,7 +1310,7 @@ A `Table` rendered as a grid carries:
 
 A table is **viewed** in the dashboard and **edited** in a modal — the same `Table`, two windows.
 
-- **Viewer = a dashboard grid of tiles, and every drill level defaults to this, not to an editor.** Any folder-shaped `Table` (all projects, a project's runs, a run's tables, an epoch's metrics) renders as a flex-wrap grid of small read-only cards, one per child — the owner's worked example: "projects" renders as one long table with a single row `demo`, the same way a real logging service would show it, and it's *inside* the `demo` card that the controls below live; a leaf `Table` on its own renders as one card. This mirrors how MLflow's Scalars tab shows several small linked tables/plots at once. A card is not editable and does not show full metadata — only its table/chart toggle (top-left), name, expand (top-right), and a resize tail (bottom-right) — because the recurring mistake this corrects was rendering a fully-editable table with all its controls at *every* level, so drilling in always landed on the same editor screen. Tiles are resized to fixed snap sizes tied to window fractions (a third, a half, full-width, …) with a minimum tied to the table's own size — not freely dragged to an arbitrary size — and can additionally be reordered via drag-and-drop. Each tile is one `render(table, representation)`; the arrangement (positions + sizes + order + each tile's mode/representation) is saved as a `workspaces/<id>.json` (Section 6.3). The dashboard is for *viewing and composing*, not editing. `[v1]` *(card-grid-as-default and snap-resize supersede the earlier freely-resized-widget model — owner decision 2026-07-19/20.)*
+- **Viewer = the parent `Table` rendered through `InlineView`, and every drill level defaults to this, not to an editor.** The outer structure remains a real semantic table: `Projects` is literally one long table with one `demo` row. Inside that row's `table_ref` cell sits the `demo` table's read-only tile, with table/chart toggle, linked name, Expand, and resize tail; the row's other cells keep the parent table's metadata such as status and `samples_seen`. A leaf `Table` renders as one read-only tile. Tiles snap to window fractions, reorder by dragging rows, and persist mode/representation/size/order in the workspace. Editing stays absent from this representation and exists only in the modal. `[v1]`
 - **Editor = the route-backed modal (Section 11.2a).** Expanding a tile opens it fullscreen as a modal that **changes the URL** (shareable, back-button-closable) and is where the table is *edited* — cells, columns, formulas, aggregations. Following a `table_ref` from **inside** the modal opens the next table as another route-backed modal (each push changes the URL), so a chain of linked tables is navigable and shareable. Plain viewing/composing happens in the dashboard; editing and link-following happen in the modal. `[v1]`
 
 Every stateful element above is an explicit FSM named `<element>_fsm`, derived from `baseFsm` (Section 7.3). Buttons get `cursor: pointer` on hover; no other motion.
@@ -1320,8 +1332,10 @@ For a `Table` these are essentially all operations that exist:
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`
 11. Undo (Ctrl+Z), redo (Ctrl+Shift+Z / Ctrl+Y). `[v0]` undo; `[v1]` redo + persistence (ADR-018) — history survives closing and reopening a view, not just tab memory.
-12. Change representation (grid / line / list / heatmap). `[v0]` switch.
+12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
+14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
+15. Filter rows, hide/reorder columns, and encode those view choices in the URL. `[v2]`
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 
@@ -1334,6 +1348,12 @@ Every value is stored as a string in v0/v1; the `CellType` enum (`empty`, `strin
 ### 11.6 Three viewports
 
 Every screen accounts for desktop, iPad, and mobile from the start (the layout adapts; no separate mobile app). v0 ignores layout entirely (stacked divs); responsive layout is `[v1]`.
+
+### 11.7 Run comparison and execution workflow
+
+`[v2]` Selecting run rows adds them to one bottom comparison buffer. Compare builds a derived `Table` with three sections that remain ordinary tables: config/parameter differences, same-named metric series aligned by step, and result children present in either run. Logs, artifacts, metrics, and debug samples stay child tables in the same hierarchy rather than becoming product-specific tabs. Plotly's built-in hover/zoom/scale/legend controls stay available; one legend click toggles a series and a double-click isolates it.
+
+`[v3]` Clone creates a draft table from a run definition, including an editable input-model/checkpoint reference. Execute now or enqueue sends that draft to a named queue and creates a new immutable run; `log-agent execute --id <draft-id>` is the CLI form. Workers consume named queues, so assigning workers to queues is the resource-budget mechanism. Resetting a completed or failed run is rejected because history is immutable; "retry as draft" is the explicit replacement.
 
 ---
 
@@ -1438,7 +1458,7 @@ Each criterion is human-verifiable without reading code (inspect files in `runs/
 Build stages are separate from feature tiers (Section 3). A stage leaves a system that runs end to end. Stage 0 is the walking skeleton.
 
 **Stage 0 — walking skeleton.** Every module/file in Section 5 exists; the system starts end to end; logic is stubbed except the minimal real spine.
-- Real: `log.run` + `log.log` (scalar only) → writer thread → `config.json`/`meta.json`/`metrics.jsonl`. Backend `read_table` for the run-list and one scalar `Table`; `GET /api/runs`, `GET /api/table`. Frontend boots, fetches one `Table`, renders a grid of plain divs, supports cell-edit / add-remove row+column / select / representation-switch against in-memory state (no persistence), top nav bar drill.
+- Real: `log.run` + `log.log` (scalar only) → writer thread → `config.json`/`meta.json`/`metrics.jsonl`. Backend `read_table` for the run-list and one scalar `Table`; `GET /api/runs`, `GET /api/table`. Frontend boots, fetches one `Table`, renders semantic table markup, supports cell-edit / add-remove row+column / select / representation-switch against in-memory state (no persistence), top nav bar drill.
 - Stubbed: `watch`, `track`, `distribute`, `checkpoint`, `resume_state`, schedules, `tick`, `export.figure` exist with exact signatures and raise `NotImplementedError`. SQLite index, file watcher, WebSocket, and the table engine *parser* (`evaluate`/`parse`) exist as importable no-ops. The function registry (`table_engine.py` `FUNCTIONS`, §7.2/§9.13) is real from v0 — its functions are pure one-liners, so stubbing them would be pointless; only the parser that calls them is deferred.
 - Done when: importing `log` exposes the full Section 9.1 surface; the acceptance criteria "Run registration" (finished), "Scalar logging" (single row), and "UI: Table as the screen" (run list renders, drill replaces view) pass.
 - Tests: unit on `atomic_write_bytes`, `append_jsonl`, `read_table` (run-list + scalar); integration on `GET /api/runs` and `GET /api/table`; one end-to-end smoke test (run a tiny decorated script, start backend, assert the run appears via the API). Frontend unit on `tables_reducer`, `cellEdit_fsm`, `makeFsm`; component test on `TableView` rendering a grid.
@@ -1455,7 +1475,7 @@ Build stages are separate from feature tiers (Section 3). A stage leaves a syste
 - Done when: "Merge language", "UI: live", "Workspace/view persistence" pass at the API level.
 - Tests: unit on the parser/evaluator and each statistic; integration per endpoint; one watcher→WS smoke test.
 
-**Stage 4 — frontend representations + operations.** All four representations (grid/line/heatmap/list), the full element inventory and operation set (Section 11), search/focus-scroll, view/workspace persistence wired through reducers, the async-state (intent/pending/confirmed) rule, three-viewport layout.
+**Stage 4 — frontend representations + operations.** The representation dispatch (inline/grid/line/heatmap/histogram/scatter/trajectory), the full element inventory and operation set (Section 11), search/focus-scroll, view/workspace persistence wired through reducers, the async-state (intent/pending/confirmed) rule, three-viewport layout.
 - Done when: every remaining acceptance criterion passes in the browser.
 - Tests: unit per reducer/selector/FSM; component tests per representation; one end-to-end (write → backend → render → edit → switch representation).
 
@@ -1557,7 +1577,7 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 
 ### ADR-016: Performance = build the seam, never load more than the screen shows
 
-**Decision**: Three performance techniques are mandatory structural constraints built into their interface the moment it first handles real-scale data — v1, when tensors, series, and large tables ship (Section 8, *Performance constraints*): memory-mapped tensor reads in `read_table`, downsampled chart rendering, and row windowing in the grid renderer. Hover prefetch is a deferred later optimization. The v0 walking skeleton (one trivial scalar table, plain divs) needs none of them.
+**Decision**: Three performance techniques are mandatory structural constraints built into their interface the moment it first handles real-scale data — v1, when tensors, series, and large tables ship (Section 8, *Performance constraints*): memory-mapped tensor reads in `read_table`, downsampled chart rendering, and row windowing in the grid renderer. Hover prefetch is a deferred later optimization. The v0 walking skeleton (one trivial semantic table) needs none of them.
 **Why**: Each of the three changes an interface — the way a tensor is opened, the shape of what a chart renders, the way the grid mounts rows — so it cannot be retrofitted without breaking callers; a run with a 4 GB tensor or a 2M-point series is simply unopenable without them. The governing rule is one sentence: never materialize more than the viewport can display. Prefetch changes no interface, so it is a pure later speed-up.
 **Alternatives considered**: full-load everything and optimize when it hurts (rejected — the first real training run breaks it, and the fixes are interface changes, not tweaks); a virtualization library for the grid (acceptable, but windowing is ~40 lines hand-rolled and matches ADR-013's drop-the-dependency stance).
 **Consequences**: `read_table`, chart rendering, and the grid renderer each carry a small amount of structure from the first version. In return the system opens arbitrarily large runs, and the one rule ("never load more than the screen shows") is auditable per component.
@@ -1577,4 +1597,3 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Why**: The owner ruled out reset-to-source as an undo mechanism — "ты не идёшь в кнопку сохранения, чтобы отменить изменения" — undo/redo is the correct path, and it must survive a closed tab, not just live in memory. A view is already autosaved on every edit, so writing a bounded snapshot array into the same file costs nothing new structurally. For tables up to a few thousand cells, N=20 full-table snapshots is kilobytes and no measurable overhead.
 **Alternatives considered**: an append-only log of *reversible operations* (an op-log) instead of full snapshots — strictly more scalable (each entry is one small diff, not a full table copy) but a real architectural step (needs an inverse for every mutator, a replay path, and a compaction policy); rejected *for now* only because no table in this project is yet large enough to make full-snapshot storage expensive. Keeping history in tab memory only (the pre-`84217a0` state) — rejected outright, it violates "survives closing and reopening".
 **Consequences**: Snapshot storage is `O(N × table size)` per view file — fine at current scale, and revisit once a genuinely large table exists (the escalation path is the op-log above, not a bigger N). Every `tables_*` mutator must keep going through the shared `applyEdit` helper (Section 10, existing rule) so no mutation bypasses the snapshot capture.
-

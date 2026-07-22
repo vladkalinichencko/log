@@ -5,6 +5,7 @@ import { HeatmapView } from "./HeatmapView";
 import { HistogramView } from "./HistogramView";
 import { ScatterView } from "./ScatterView";
 import { TrajectoryView } from "./TrajectoryView";
+import { InlineView } from "./InlineView";
 
 const RENDERERS = {
   [Representation.Grid]: TableView,
@@ -13,6 +14,7 @@ const RENDERERS = {
   [Representation.Histogram]: HistogramView,
   [Representation.Scatter]: ScatterView,
   [Representation.Trajectory]: TrajectoryView,
+  [Representation.Inline]: InlineView,
 };
 
 const isNumber = (cell: Cell) => cell.type === CellType.Number;
@@ -35,9 +37,9 @@ export function applicable(table: Table): Representation[] {
     reps.push(Representation.Trajectory);
     return reps;
   }
+  if (lastColumnNumeric && table.kind !== TableKind.Grid) reps.push(Representation.Histogram);
   if (table.kind === TableKind.Column && lastColumnNumeric) {
     reps.push(Representation.Line);
-    reps.push(Representation.Histogram);
   }
   if (table.kind === TableKind.Grid && allNumeric) {
     if (table.column_names && rows[0].length >= 2) reps.push(Representation.Line);
@@ -48,7 +50,7 @@ export function applicable(table: Table): Representation[] {
 }
 
 export function chartReps(table: Table): Representation[] {
-  return applicable(table).filter((r) => r !== Representation.Grid);
+  return applicable(table).filter((r) => r !== Representation.Grid && r !== Representation.Inline);
 }
 
 export function render(table: Table, representation: Representation, editable?: boolean) {

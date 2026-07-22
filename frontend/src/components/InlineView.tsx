@@ -10,6 +10,7 @@ export function InlineView({ table }: { table: Table }) {
   const tiles = useStore((state: any) => state.tiles);
   const order = useStore((state: any) => state.order);
   const setSize = useStore((state: any) => state.tiles_setSize);
+  const resize = useStore((state: any) => state.tiles_resize);
   const reorder = useStore((state: any) => state.tiles_reorder);
   const dragged = useRef<string | null>(null);
   const parent = table.source_path ?? "";
@@ -63,7 +64,8 @@ export function InlineView({ table }: { table: Table }) {
                     <div className="tile" style={{ width, height }}>
                       <Tile path={ref} titled />
                       <ResizeHandle
-                        onResize={(dw, dh) =>
+                        onResize={(dw, dh) => resize(ref, dw, dh)}
+                        onResizeEnd={(dw, dh) =>
                           setSize(ref, snapWidth(width + dw, window.innerWidth - 24), height + dh)
                         }
                       />

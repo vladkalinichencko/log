@@ -439,6 +439,19 @@ input.picking {
   margin: 0;
 }
 
+.inline-view > tbody > tr,
+.inline-view > tbody > tr:hover {
+  background: transparent;
+}
+
+.inline-view > tbody > tr > td {
+  border: 0;
+}
+
+.inline-view .tile {
+  margin: 0;
+}
+
 .tile-name {
   font-size: 18px;
   font-weight: 600;

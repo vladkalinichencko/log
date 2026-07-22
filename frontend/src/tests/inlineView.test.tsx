@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
 import { useStore } from "../store/store";
@@ -31,6 +31,7 @@ const demo: Table = {
 
 describe("InlineView", () => {
   it("keeps the parent as a table and renders child controls inside its row", async () => {
+    (useStore.getState() as any).tiles_setSize("demo", 400, 300);
     (useStore.getState() as any).tables_setViews([
       { id: "", ...projects },
       { id: "demo", ...demo },
@@ -43,5 +44,14 @@ describe("InlineView", () => {
     const title = screen.getByText("demo");
     const switcher = screen.getByTitle("table").closest(".toggle");
     expect(title.compareDocumentPosition(switcher!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    const handle = document.querySelector(".resize-handle")!;
+    fireEvent.mouseDown(handle, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(window, { clientX: 101, clientY: 101 });
+    expect((useStore.getState() as any).tiles.get("demo").w).toBe(401);
+    fireEvent.mouseMove(window, { clientX: 145, clientY: 145 });
+    expect((useStore.getState() as any).tiles.get("demo").w).toBe(445);
+    fireEvent.mouseUp(window, { clientX: 145, clientY: 145 });
+    expect((useStore.getState() as any).tiles.get("demo").w).toBe(484);
   });
 });

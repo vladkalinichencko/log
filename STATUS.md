@@ -17,9 +17,9 @@ flowchart LR
   subgraph front["Frontend (real)"]
     API --> CL["client.fetchTable"]
     CL --> MAIN["MainView"]
-    MAIN --> IV["InlineView<br/>parent table"]
+    MAIN --> COL["collection TableView<br/>refs stay links"]
+    MAIN --> IV["detail InlineView<br/>flex-wrap previews"]
     IV --> T["child Tile (load_fsm)"]
-    MAIN --> T
     T --> SW["RepresentationSwitcher (applicable)"]
     T --> RND["render → Table / Line / Heatmap / Histogram / Scatter / Trajectory"]
     CELL["Cell table_ref click"] --> NAVG["useNavigate → URL"] --> T
@@ -46,7 +46,7 @@ flowchart LR
 | `StoragePort` + `LocalFileStorage` routing for `read_table` + `table_engine` | **real** | §7.2, §8. `read_table(path, storage)` and `evaluate(expr, storage)` now do all IO through the port; handlers inject it via `Depends(get_storage)`. The mmap-vs-`bytes` tension is resolved by a `read_array(path)` port method — the adapter does `np.load(root/path, mmap_mode="r")`, so the domain stays Path-free and tensors are still memory-mapped (ADR-016). Port surface: `read`/`read_array`/`list_dir`/`is_dir`/`exists`. |
 | Frontend: store + 5 slices, makeFsm + 9 FSMs (button/load/cellEdit/connection/search/resize/menu/player/trail) | **real** | §7.3; route slice removed (URL is state via react-router); deleteConfirm_fsm removed with the dot-menu |
 | `Tile` (load_fsm fetch), `App`, `NavBar`, `render`+`applicable`, `RepresentationSwitcher`, `Button` | **real** | §7.4, §11.1, §11.2a |
-| `InlineView`: semantic parent table whose `table_ref` cells contain read-only child tiles | **real** | §7.4/§11.4; Projects stays a one-row `demo` table, while `demo` owns its switcher/Expand/snap-resize/reorder controls; editor remains modal-only |
+| Collection/detail composition | **real** | §7.4/§11.4; root/project paths render one full-width table with `table_ref` links, while run/deeper folders render independent flex-wrap preview tiles with switcher/Expand/snap-resize/reorder; no recursive table-in-table DOM |
 | Views: `TableView` (`<table>`), `ListView` (`<ul>/<li>`), `LineChartView`/`HeatmapView`/`HistogramView` (Plotly) | **real** | §11.2b; charts via one `chartSpec(table, kind)` → Plotly figure, each view a one-liner `<Plot/>` behind the same `render` dispatch (ADR-006 revised) |
 | Design system: `styles/tokens.css` (monochrome) | **real** | ADR-012; design tokens (`--space`/`--radius`/gray scale/`--shadow`) via element selectors + `.modal`/`.tile`; semantic tags (`<table>/<th>/<td>`, `<ul>/<li>`, `<button>`, `<caption>`, `<h3>`); hover/active via CSS pseudo-classes, no animation |
 | `GET /api/runs/{p}/{run}` (folder Table), `DELETE /api/runs/{p}/{run}` | **real** | §9.12 |
@@ -83,6 +83,7 @@ Two different kinds of "not done" below: items never started (design/scope not s
 - **Auto-save views on edit** — view persistence works via a manual "save view"; auto-persisting every edit (store subscription) is deferred.
 - **Full run-vs-run comparison (MLflow/ClearML-style)** — the flow is now specified, but not built: multi-select run rows → bottom comparison buffer → one derived comparison `Table` containing config/parameter diff, same-name metrics aligned by step, and result children present in either run. Comparison stays derived/persistable like any view; interrupted-run splicing remains the separate `concat` operation.
 - **Spreadsheet parity implementation** — the gap is now analysed in `PRODUCT-IDEAS.md` §4 and specified in §11.4: selection → range copy/cut → row/column resize → Shift multi-sort + filters are the first dependency chain; zoom, find/replace, hide/reorder/freeze, and fill/drag follow. Pivot-style summaries reuse `agg/join`; merged cells, macros/VBA, and decorative formatting are rejected from the ML baseline.
+- **Collection-table UX** — the visible top search is path/entity navigation, not row filtering. The next coherent slice is a table-local toolbar with typed filters and active chips, then column resize, Shift multi-sort, column chooser/reorder/freeze, and URL persistence of the whole view.
 - **Full placeholder visual treatment** — the picking-mode placeholder fill (`84217a0`) is a minimal version; the owner specified it should look unmistakably like a placeholder (colored/glowing/underlined) and that clicking it should show a "stuck to the cursor" affordance that then transfers onto the chosen cell/column in that selection's color — not built yet, only the functional fill-on-click exists.
 - **Remaining mockup-derived items** — hover-reveal of tile controls (icons visible only on hover, per the mockups), enforcing edit-only-in-the-modal on the main view (currently just convention, not enforced), an epoch timeline strip under the hero chart, and an export dialog with real color pickers + live preview (the export menu's section scaffold exists, content is still a template).
 - **(none for the §8 read path — Stage 3 complete.)** Every read of run data now flows through `StoragePort`. The only direct filesystem access left in `api/` is **writes**: `views.py`/`workspaces.py` (the backend's own JSON config store) and `runs.py` rename/delete (run-dir mutations). The §7.2 `StoragePort` is read-only (`read`/`read_array`/`list_dir`/`is_dir`/`exists`) — it models no write/rename, so these are a different category, not a read-path gap.
@@ -97,6 +98,8 @@ Two different kinds of "not done" below: items never started (design/scope not s
 `http://localhost:8000` — один процесс: FastAPI отдаёт и API, и собранный фронт (`frontend/dist`, catch-all route → `index.html`, so deep links work). Живёт под launchd (`~/Library/LaunchAgents/com.log.viewer.plist`, `KeepAlive` + `RunAtLoad`): переживает перезагрузку мака и рестартует при падении; лог в `/tmp/com.log.viewer.log`. После изменений фронта: `cd frontend && npx vite build`; после изменений бэка: `launchctl kickstart -k gui/$UID/com.log.viewer`. Vite на `:3000` остаётся только для разработки.
 
 ## Changelog (newest first — commit → what became real)
+
+- `HEAD` — **Normal collection → detail → editor flow.** Home and project pages now render one full-width semantic table whose `table_ref` cells remain links; run/detail folders render a labelled, divided flex-wrap section of independent 320×300 preview tiles. This removes recursive table-in-table rendering, lets tiles sit side by side and reorder, keeps resize/Expand local to each preview, and gives every level a named section with a count. Filter/column-width controls remain the next table-specific slice rather than being confused with global path search.
 
 - `HEAD` — **Invisible parent chrome + stable resize.** `InlineView` remains the semantic parent `Table`, but its composition row/cell has no visible border, hover fill, or child margin, so Projects no longer draws a second full-width box around `demo`. Resize now moves freely from incremental pointer deltas and calls `snapWidth` once on mouse-up; the previous stale-width snap on every mousemove caused the tile to jump back and forth around a snap threshold. The same release-snap contract is used by inline and dashboard tiles. Verified live: a real drag landed cleanly on the half-window width (579.5 px), outer cell border 0/background transparent, no console errors.
 

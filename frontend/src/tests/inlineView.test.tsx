@@ -29,29 +29,72 @@ const demo: Table = {
   source_path: "demo",
 };
 
+const run: Table = {
+  name: "baseline",
+  kind: TableKind.Folder,
+  column_names: null,
+  row_names: null,
+  cells: [
+    [{ type: CellType.TableRef, value: "config", ref: "demo.baseline.config" }],
+    [{ type: CellType.TableRef, value: "meta", ref: "demo.baseline.meta" }],
+  ],
+  representation: Representation.Grid,
+  source_path: "demo.baseline",
+};
+
 describe("InlineView", () => {
-  it("keeps the parent as a table and renders child controls inside its row", async () => {
-    (useStore.getState() as any).tiles_setSize("demo", 400, 300);
+  it("renders collection references as links instead of nested tables", async () => {
     (useStore.getState() as any).tables_setViews([
       { id: "", ...projects },
       { id: "demo", ...demo },
     ]);
     render(<MemoryRouter><MainView path="" /></MemoryRouter>);
-    expect((await screen.findAllByRole("table")).length).toBe(2);
+    expect((await screen.findAllByRole("table")).length).toBe(1);
+    expect(screen.getByText("All projects")).toBeTruthy();
     expect(screen.getByText("demo")).toBeTruthy();
-    expect(screen.getByTitle("expand")).toBeTruthy();
-    expect(screen.getByTitle("table")).toBeTruthy();
-    const title = screen.getByText("demo");
-    const switcher = screen.getByTitle("table").closest(".toggle");
-    expect(title.compareDocumentPosition(switcher!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTitle("expand")).toBeNull();
+  });
 
-    const handle = document.querySelector(".resize-handle")!;
+  it("lays out a run's child tables as independent resizable tiles", async () => {
+    (useStore.getState() as any).tables_setViews([
+      { id: "demo.baseline", ...run },
+      { id: "demo.baseline.config", ...demo, name: "config", source_path: "demo.baseline.config" },
+      { id: "demo.baseline.meta", ...demo, name: "meta", source_path: "demo.baseline.meta" },
+    ]);
+    render(<MemoryRouter><MainView path="demo.baseline" /></MemoryRouter>);
+    expect(await screen.findByText("Tables")).toBeTruthy();
+    expect(document.querySelectorAll(".tile-grid > .tile")).toHaveLength(2);
+    expect(screen.getAllByTitle("expand")).toHaveLength(2);
+
+    const handle = document.querySelectorAll(".resize-handle")[0];
     fireEvent.mouseDown(handle, { clientX: 100, clientY: 100 });
     fireEvent.mouseMove(window, { clientX: 101, clientY: 101 });
-    expect((useStore.getState() as any).tiles.get("demo").w).toBe(401);
+    expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(321);
     fireEvent.mouseMove(window, { clientX: 145, clientY: 145 });
-    expect((useStore.getState() as any).tiles.get("demo").w).toBe(445);
+    expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(365);
     fireEvent.mouseUp(window, { clientX: 145, clientY: 145 });
-    expect((useStore.getState() as any).tiles.get("demo").w).toBe(484);
+    expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(365);
+
+    const tiles = document.querySelectorAll(".tile-grid > .tile");
+    fireEvent.dragStart(tiles[0]);
+    fireEvent.drop(tiles[1]);
+    expect((useStore.getState() as any).order.get("demo.baseline")).toEqual([
+      "demo.baseline.meta",
+      "demo.baseline.config",
+    ]);
+  });
+
+  it("renders a deep leaf directly", async () => {
+    (useStore.getState() as any).tables_setViews([{
+      id: "demo.baseline.config",
+      ...demo,
+      name: "config",
+      cells: [[{ type: CellType.String, value: "mlp", ref: null }]],
+      source_path: "demo.baseline.config",
+    }]);
+    render(<MemoryRouter><MainView path="demo.baseline.config" /></MemoryRouter>);
+    expect(await screen.findByRole("table")).toBeTruthy();
+    expect(screen.getByText("Data")).toBeTruthy();
+    expect(document.querySelector(".tile-grid")).toBeNull();
   });
 });

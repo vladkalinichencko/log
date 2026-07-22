@@ -434,21 +434,35 @@ input.picking {
   display: none;
 }
 
-.inline-view {
+.data-section {
+  margin-top: calc(var(--space) * 2);
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space);
+  border-bottom: 1px solid var(--gray-200);
+  margin-bottom: var(--space);
+  padding-bottom: var(--space);
+}
+
+.section-heading h2 {
+  font-size: 20px;
+}
+
+.data-section > .table-wrap table {
   width: 100%;
-  margin: 0;
 }
 
-.inline-view > tbody > tr,
-.inline-view > tbody > tr:hover {
-  background: transparent;
+.tile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space);
 }
 
-.inline-view > tbody > tr > td {
-  border: 0;
-}
-
-.inline-view .tile {
+.tile-grid .tile {
   margin: 0;
 }
 

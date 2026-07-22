@@ -1,9 +1,8 @@
 import { useRef } from "react";
-import { Table, Cell, CellType } from "../types/domain";
+import { Table, CellType } from "../types/domain";
 import { useStore } from "../store/store";
 import { Tile } from "./Tile";
 import { ResizeHandle } from "./ResizeHandle";
-import { Cell as CellView } from "./Cell";
 import { snapWidth } from "../store/slices/tilesSlice";
 
 export function InlineView({ table }: { table: Table }) {
@@ -15,37 +14,24 @@ export function InlineView({ table }: { table: Table }) {
   const dragged = useRef<string | null>(null);
   const parent = table.source_path ?? "";
   const refs = table.cells
-    .map((row: Cell[]) => row.find((cell: Cell) => cell.type === CellType.TableRef)?.ref)
+    .map((row) => row.find((cell) => cell.type === CellType.TableRef)?.ref)
     .filter((ref): ref is string => Boolean(ref));
   const saved: string[] = order.get(parent) ?? [];
   const ordered = [
     ...saved.filter((ref) => refs.includes(ref)),
     ...refs.filter((ref) => !saved.includes(ref)),
   ];
-  const rows = ordered.map(
-    (ref) => table.cells.find((row) => row.some((cell) => cell.ref === ref))!
-  );
-
   return (
-    <table className="inline-view">
-      {table.column_names && (
-        <thead>
-          <tr>
-            {table.column_names.map((name, column) => (
-              <th key={column}><span className="cell">{name}</span></th>
-            ))}
-          </tr>
-        </thead>
-      )}
-      <tbody>
-        {rows.map((row, r) => {
-          const ref = row.find((cell) => cell.type === CellType.TableRef)?.ref!;
+    <div className="tile-grid">
+      {ordered.map((ref) => {
           const tile = tiles.get(ref);
-          const width = tile?.w ?? 400;
+          const width = tile?.w ?? 320;
           const height = tile?.h ?? 300;
           return (
-            <tr
+            <div
               key={ref}
+              className="tile"
+              style={{ width, height }}
               draggable
               onDragStart={() => {
                 dragged.current = ref;
@@ -53,32 +39,21 @@ export function InlineView({ table }: { table: Table }) {
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => {
                 if (dragged.current && dragged.current !== ref) {
-                  reorder(parent, refs, dragged.current, ref);
+                  reorder(parent, ordered, dragged.current, ref);
                 }
                 dragged.current = null;
               }}
             >
-              {row.map((cell, c) => (
-                <td key={c}>
-                  {cell.ref === ref ? (
-                    <div className="tile" style={{ width, height }}>
-                      <Tile path={ref} titled />
-                      <ResizeHandle
-                        onResize={(dw, dh) => resize(ref, dw, dh)}
-                        onResizeEnd={(dw, dh) =>
-                          setSize(ref, snapWidth(width + dw, window.innerWidth - 24), height + dh)
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <CellView cell={cell} tableId={parent} rowIndex={r} colIndex={c} />
-                  )}
-                </td>
-              ))}
-            </tr>
+              <Tile path={ref} titled />
+              <ResizeHandle
+                onResize={(dw, dh) => resize(ref, dw, dh)}
+                onResizeEnd={(dw, dh) =>
+                  setSize(ref, snapWidth(width + dw, window.innerWidth - 24), height + dh)
+                }
+              />
+            </div>
           );
         })}
-      </tbody>
-    </table>
+    </div>
   );
 }

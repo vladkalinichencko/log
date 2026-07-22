@@ -15,7 +15,7 @@ export interface TilesState {
   order: Map<string, string[]>;
 }
 
-const DEFAULT_W = 400;
+const DEFAULT_W = 320;
 const DEFAULT_H = 300;
 const MIN_W = 160;
 const MIN_H = 120;
@@ -49,9 +49,11 @@ export const createTilesSlice = (set: any) => ({
   tiles_reorder: (parent: string, refs: string[], dragged: string, target: string) =>
     set((state: any) => {
       const current: string[] = state.order.get(parent) ?? refs;
+      const movingForward = current.indexOf(dragged) < current.indexOf(target);
       const without = current.filter((ref: string) => ref !== dragged);
-      const at = without.indexOf(target);
-      without.splice(at < 0 ? without.length : at, 0, dragged);
+      const targetIndex = without.indexOf(target);
+      const at = targetIndex < 0 ? without.length : targetIndex + (movingForward ? 1 : 0);
+      without.splice(at, 0, dragged);
       const order = new Map<string, string[]>(state.order);
       order.set(parent, without);
       return { order };

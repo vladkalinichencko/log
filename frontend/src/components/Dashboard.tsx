@@ -15,7 +15,7 @@ export function Dashboard() {
     <div style={{ display: "flex", flexWrap: "wrap" }}>
       {pinned.map((path) => {
         const tile = tiles.get(path);
-        const width = tile?.w ?? 400;
+        const width = tile?.w ?? 320;
         const height = tile?.h ?? 300;
         return (
           <div

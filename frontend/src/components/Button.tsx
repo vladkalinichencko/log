@@ -9,7 +9,7 @@ interface ButtonProps {
   active?: boolean;
   disabled?: boolean;
   title?: string;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 export function Button({ label, icon, ghost, active, disabled, title, onClick }: ButtonProps) {
@@ -24,9 +24,9 @@ export function Button({ label, icon, ghost, active, disabled, title, onClick }:
       onMouseLeave={() => setState(buttonFsm.next(state, "mouseleave"))}
       onMouseDown={() => setState(buttonFsm.next(state, "mousedown"))}
       onMouseUp={() => setState(buttonFsm.next(state, "mouseup"))}
-      onClick={() => {
+      onClick={(event) => {
         setState(buttonFsm.next(state, "click"));
-        onClick();
+        onClick(event);
       }}
     >
       {icon ? <Icon name={icon} /> : label}

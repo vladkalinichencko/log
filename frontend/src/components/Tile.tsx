@@ -53,6 +53,11 @@ export function Tile({ path, editor, titled }: TileProps) {
   if (!table) return <div>Loading…</div>;
 
   const expanded = searchParams.get("modal") === path;
+  const setModal = (nextPath: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    nextPath ? next.set("modal", nextPath) : next.delete("modal");
+    setSearchParams(next);
+  };
   const charts = chartReps(table);
   const representation =
     mode === "visualization" && charts.length > 0
@@ -75,9 +80,9 @@ export function Tile({ path, editor, titled }: TileProps) {
         {editor && <Toolbar path={path} table={table} />}
         <div className="group">
           {expanded ? (
-            <Button icon="collapse" ghost title="collapse" onClick={() => setSearchParams({})} />
+            <Button icon="collapse" ghost title="collapse" onClick={() => setModal(null)} />
           ) : (
-            <Button icon="expand" ghost title="expand" onClick={() => setSearchParams({ modal: path })} />
+            <Button icon="expand" ghost title="expand" onClick={() => setModal(path)} />
           )}
         </div>
       </div>

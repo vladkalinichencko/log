@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Table, Cell } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
 import { HeaderCell } from "./HeaderCell";
 import { Button } from "./Button";
+import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { parsePaste } from "./parsePaste";
 import { useStore } from "../store/store";
+import {
+  filter_clauses,
+  parse_sorts,
+  parse_widths,
+  serialize_sorts,
+  serialize_widths,
+  table_view_selector,
+  TableSort,
+} from "../store/selectors/tableViewSelectors";
 
 const EDGE = 6;
 
@@ -14,20 +25,76 @@ interface TableViewProps {
 }
 
 export function TableView({ table, editable }: TableViewProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const tableId = table.source_path || table.name;
   const addRow = useStore((state: any) => state.tables_addRow);
   const addColumn = useStore((state: any) => state.tables_addColumn);
   const editName = useStore((state: any) => state.tables_editName);
   const pasteBlock = useStore((state: any) => state.tables_pasteBlock);
-  const replace = useStore((state: any) => state.tables_replace);
   const setTarget = useStore((state: any) => state.focus_setTarget);
   const focused = useStore((state: any) => state.focused);
   const picking = useStore((state: any) => state.picking);
   const pickColumn = useStore((state: any) => state.focus_pickColumn);
-  const [descending, setDescending] = useState<Record<string, boolean>>({});
   const tableRef = useRef<HTMLTableElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const paramsRef = useRef<{ value: URLSearchParams; requested: string | null }>({
+    value: searchParams,
+    requested: null,
+  });
+  const filterKey = `filter.${tableId}`;
+  const sortKey = `sort.${tableId}`;
+  const widthKey = `width.${tableId}`;
+  const query = searchParams.get(filterKey) ?? "";
+  const sorts = parse_sorts(searchParams.get(sortKey));
+  const widths = parse_widths(searchParams.get(widthKey));
+  const view = table_view_selector(table, query, sorts);
 
   const selection = focused && focused.tableId === tableId ? focused : null;
+
+  useEffect(() => {
+    const current = searchParams.toString();
+    if (paramsRef.current.requested === null || paramsRef.current.requested === current) {
+      paramsRef.current = { value: searchParams, requested: null };
+    }
+  }, [searchParams]);
+
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(paramsRef.current.value);
+    value ? next.set(key, value) : next.delete(key);
+    paramsRef.current = { value: next, requested: next.toString() };
+    setSearchParams(next, { replace: true });
+  };
+
+  const cycleSort = (column: number, additive: boolean) => {
+    const at = sorts.findIndex((sort) => sort.column === column);
+    const current = sorts[at];
+    let next: TableSort[];
+    if (!current) {
+      next = additive ? [...sorts, { column, direction: "asc" }] : [{ column, direction: "asc" }];
+    } else if (current.direction === "asc") {
+      const descending: TableSort = { column, direction: "desc" };
+      next = additive
+        ? sorts.map((sort, index) => index === at ? descending : sort)
+        : [descending];
+    } else {
+      next = additive ? sorts.filter((_, index) => index !== at) : [];
+    }
+    setParam(sortKey, serialize_sorts(next));
+  };
+
+  const beginFilter = (name: string) => {
+    const next = [...filter_clauses(query), `${name}=`].join(", ");
+    setParam(filterKey, next);
+    filterRef.current?.focus();
+  };
+
+  const removeFilter = (index: number) => {
+    setParam(filterKey, view.clauses.filter((_, clause) => clause !== index).join(", "));
+  };
+
+  const setWidth = (column: number, width: number) => {
+    setParam(widthKey, serialize_widths({ ...widths, [column]: width }));
+  };
 
   useEffect(() => {
     if (!editable || !selection || selection.kind !== "cell") return;
@@ -76,30 +143,6 @@ export function TableView({ table, editable }: TableViewProps) {
     }
   };
 
-  const headerClick = (name: string, c: number) => {
-    if (!editable) return;
-    if (picking) {
-      pickColumn(name);
-      return;
-    }
-    const desc = descending[name] ?? false;
-    setDescending({ ...descending, [name]: !desc });
-    const value = (r: number) => table.cells[r][c].value;
-    const compare = (a: number, b: number) => {
-      const na = Number(value(a));
-      const nb = Number(value(b));
-      const ordered =
-        Number.isNaN(na) || Number.isNaN(nb) ? value(a).localeCompare(value(b)) : na - nb;
-      return desc ? -ordered : ordered;
-    };
-    const indices = table.cells.map((_: Cell[], r: number) => r).sort(compare);
-    replace(tableId, {
-      ...table,
-      cells: indices.map((r: number) => table.cells[r]),
-      row_names: table.row_names ? indices.map((r: number) => table.row_names![r]) : null,
-    });
-  };
-
   const rowSelected = (r: number) => selection?.kind === "row" && selection.r === r;
   const colSelected = (c: number) => selection?.kind === "col" && selection.c === c;
   const colClass = (r: number, c: number) => {
@@ -113,46 +156,108 @@ export function TableView({ table, editable }: TableViewProps) {
 
   return (
     <div className="table-wrap">
+      <div className="table-filter">
+        <input
+          ref={filterRef}
+          aria-label={`Filter rows in ${table.name}`}
+          placeholder="Filter rows…"
+          title="Plain text searches every cell. Use column=value, column~text, or numeric comparisons; separate conditions with commas."
+          value={query}
+          onChange={(event) => setParam(filterKey, event.target.value)}
+        />
+        <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
+      </div>
+      {view.clauses.length > 0 && (
+        <div className="filter-chips">
+          {view.clauses.map((clause, index) => (
+            <Button
+              key={`${clause}-${index}`}
+              label={`${clause} ×`}
+              title={`Remove filter: ${clause}`}
+              onClick={() => removeFilter(index)}
+            />
+          ))}
+        </div>
+      )}
+      {view.error && <div className="table-filter-error">{view.error}</div>}
       {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
         <div>
-          <table ref={tableRef}>
+          <table className="table-view" ref={tableRef}>
+            <colgroup>
+              {table.row_names && <col />}
+              {Array.from({ length: columns }, (_, column) => (
+                <col key={column} style={widths[column] ? { width: widths[column] } : undefined} />
+              ))}
+            </colgroup>
             {table.column_names && (
               <thead>
                 <tr>
-                  {table.column_names.map((name: string, c: number) => (
-                    <th key={c} className={colClass(-1, c)} onClick={() => headerClick(name, c)}>
-                      {editable ? (
-                        <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
-                      ) : (
-                        <span className="cell">{name}</span>
-                      )}
-                    </th>
-                  ))}
+                  {table.column_names.map((name: string, c: number) => {
+                    const sortIndex = sorts.findIndex((sort) => sort.column === c);
+                    const sort = sorts[sortIndex];
+                    return (
+                      <th
+                        key={c}
+                        className={colClass(-1, c)}
+                        style={widths[c] ? { width: widths[c] } : undefined}
+                        onClick={() => picking && pickColumn(name)}
+                      >
+                        <div className="column-header">
+                          {editable ? (
+                            <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
+                          ) : (
+                            <span className="cell">{name}</span>
+                          )}
+                          <div className="column-actions">
+                            <Button
+                              label={sort ? `${sort.direction === "asc" ? "↑" : "↓"}${sortIndex + 1}` : "↕"}
+                              ghost
+                              title={`Sort by ${name}; Shift-click adds a sort key`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                cycleSort(c, event.shiftKey);
+                              }}
+                            />
+                            <Button
+                              icon="filter"
+                              ghost
+                              title={`Filter ${name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                beginFilter(name);
+                              }}
+                            />
+                          </div>
+                          <ColumnResizeHandle onResize={(width) => setWidth(c, width)} />
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
             )}
             <tbody>
-              {table.cells.map((row: Cell[], r: number) => (
-                <tr key={r} className={rowSelected(r) ? "selected" : undefined}>
+              {view.rows.map((row) => (
+                <tr key={row.index} className={rowSelected(row.index) ? "selected" : undefined}>
                   {table.row_names && (
-                    <th className={colClass(r, -2)}>
+                    <th className={colClass(row.index, -2)}>
                       {editable ? (
                         <HeaderCell
-                          name={table.row_names[r]}
-                          onRename={(n) => editName(tableId, "row", r, n)}
+                          name={row.rowName!}
+                          onRename={(n) => editName(tableId, "row", row.index, n)}
                         />
                       ) : (
-                        <span className="cell">{table.row_names[r]}</span>
+                        <span className="cell">{row.rowName}</span>
                       )}
                     </th>
                   )}
-                  {row.map((cell: Cell, c: number) => (
-                    <td key={c} className={colClass(r, c)}>
+                  {row.cells.map((cell: Cell, c: number) => (
+                    <td key={c} className={colClass(row.index, c)}>
                       <CellComponent
                         cell={cell}
                         tableId={tableId}
-                        rowIndex={r}
+                        rowIndex={row.index}
                         colIndex={c}
                         editable={editable}
                       />

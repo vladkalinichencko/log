@@ -1299,11 +1299,11 @@ A `Table` rendered as a grid carries:
 - **Value cells** — a grid of divs; each shows its value. Numbers are rounded to fit; on hover the full value appears as an **overlay above the cell** (never by widening the cell). Double-click → the cell becomes a text input; Enter commits + deselects; Esc cancels + deselects. (`Cell` + `cellEdit_fsm`.) `[v0]` edit; `[v1]` hover-overlay + rounding.
 - **Scalar table** — just the table name, no grid, until the user presses **＋**. No "1×1 frame". `[v1]`
 - **No context menus.** One minimal per-tile toolbar instead: icons (add row, add column, trash, rename, ƒ, formula, export) are gray/inactive until something is selected. Clicking the table's true outer edge (the outermost divider, not a header cell or a manufactured handle column) selects the whole row or column, drawn as one outline centered on the border (expanding onto neighboring cells, not inset). Deleting shows a second, one-item menu ("confirm") in place of the first — not a modal — before applying; Ctrl+Z still restores. Renaming a single cell/header stays inline (double-click); renaming across a multi-selection (Ctrl/Shift/drag-select, pending range selection — Section 11.4 #7) opens a modal with prefix/suffix/find-replace fields. (`Menu` + `menu_fsm` render the confirm step; the same `Menu` renders the search dropdown.) `[v1]` *(supersedes the earlier right-click context menu, which itself had superseded the ＋ edge controls and corner dot-menu — owner decision 2026-07-19: context menus hide the available actions until you right-click the right thing; a toolbar keeps them visible and discoverable.)*
-- **Table-reference cell** — inside `InlineView`, the cell contains the referenced table's read-only `Tile`; its linked title drills in, while its switcher, Expand, and resize handle operate locally. `[v1]`
+- **Table-reference cell** — a collection screen renders it as a normal link inside the parent table. A detail screen promotes the same reference to an independent preview tile with a linked title, switcher, Expand, reorder and resize; a complete interactive table is never nested inside another table. `[v1]`
 - **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; table mode uses `grid`, while visualization mode opens the chart-type menu (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` chart picker.
 - **Expand button** — on every tile (table or chart); opens the tile fullscreen as a route-backed modal (Section 11.2a). `[v1]`
 - **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). Next to the input, an **ƒ catalog button** (the same `Menu`) lists every registry function from `GET /api/tables/functions`; picking one fills the input with `derive(<fn>_<col> = <fn>(<col>[, 20]))` over the table's last column and applies it — a statistic is one click, and the generated expression stays visible and editable. `[v1]`
-- **Search box** — in the top bar; searches table names and `.`-paths; a result focuses + scrolls-to + highlights the matching table/cell. `[v1]`
+- **Search box** — the top-bar `Go to table…` searches table names and `.`-paths. Every rendered table owns a separate `Filter rows…` input: comma-separated clauses are ANDed; bare text searches every cell; text columns accept `=`, `!=`, `~`; numeric columns accept `=`, `!=`, `>`, `>=`, `<`, `<=`. Invalid clauses keep all rows visible and show an exact inline error. `[v1]`
 - **Top nav bar** — back/forward arrows + breadcrumb of the drill-path; the only cross-screen navigation. `[v0]`
 
 ### 11.4 Two windows: viewer (dashboard) and editor (modal)
@@ -1325,7 +1325,7 @@ For a `Table` these are essentially all operations that exist:
 2. Edit column name / row name (double-click). `[v1]`
 3. Add row / add column (right-click context menu). `[v0]`
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
-5. Resize column width / row height (drag the border) — Excel-like. `[v1]`
+5. Resize column width / row height (drag the border) — Excel-like. `[v1]` column width; row height pending. Column width has an explicit 80px minimum so header controls remain usable.
 6. Zoom — Excel-like. `[v1]`
 7. Select a cell / drag-select a range / select a whole row / a whole column. `[v0]` single-cell; `[v1]` range/row/column.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the selected cell and grows the table to fit; one undoable edit). `[v1]` — paste + single-cell copy shipped; cut and range copy pending.
@@ -1335,7 +1335,7 @@ For a `Table` these are essentially all operations that exist:
 12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
 14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
-15. Filter rows, hide/reorder columns, and encode those view choices in the URL. `[v2]`
+15. Filter rows, hide/reorder columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts and column widths are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`); hide/reorder remains `[v2]`. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 
@@ -1354,6 +1354,14 @@ Every screen accounts for desktop, iPad, and mobile from the start (the layout a
 `[v2]` Selecting run rows adds them to one bottom comparison buffer. Compare builds a derived `Table` with three sections that remain ordinary tables: config/parameter differences, same-named metric series aligned by step, and result children present in either run. Logs, artifacts, metrics, and debug samples stay child tables in the same hierarchy rather than becoming product-specific tabs. Plotly's built-in hover/zoom/scale/legend controls stay available; one legend click toggles a series and a double-click isolates it.
 
 `[v3]` Clone creates a draft table from a run definition, including an editable input-model/checkpoint reference. Execute now or enqueue sends that draft to a named queue and creates a new immutable run; `log-agent execute --id <draft-id>` is the CLI form. Workers consume named queues, so assigning workers to queues is the resource-budget mechanism. Resetting a completed or failed run is rejected because history is immutable; "retry as draft" is the explicit replacement.
+
+### 11.8 Design system and visualization laboratory
+
+`DESIGN-SYSTEM.md` is normative for visual implementation; `VISUALIZATION-CATALOG.md` is normative for data shapes, operations, applicability, and renderers. `frontend/src/styles/tokens.css` is the shared production token layer. `/design-system` is the route-local laboratory for comparing density, theme, timelines, tables, execution views, alerts, and chart families before moving a pattern into the viewer.
+
+The UI uses an 8px spacing base with 4px half-steps, 2px control corners, 6px floating-surface corners, tabular numbers, one signal accent, and separate positive/warning/critical roles. A run prioritizes one large time figure, then a contiguous status strip and dense evidence. Inline plots or bars never replace readable table values. Three-dimensional views require real depth and a two-dimensional fallback.
+
+Every new representation declares its analytical question, accepted `Table` shape and semantic columns, transformation parameters, renderer owner, essential non-hover labels, mobile behavior, and static/reduced-motion fallback. No smoothing, aggregation, projection, threshold, anomaly rule, imputation, or filtering is implicit.
 
 ---
 

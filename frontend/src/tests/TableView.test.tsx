@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { TableView } from "../components/TableView";
@@ -6,7 +6,8 @@ import { useStore } from "../store/store";
 import { Table, CellType, TableKind, Representation } from "../types/domain";
 
 function LocationProbe() {
-  return <div data-testid="loc">{useLocation().pathname}</div>;
+  const location = useLocation();
+  return <div data-testid="loc">{location.pathname + location.search}</div>;
 }
 
 const renderR = (ui: React.ReactElement) =>
@@ -122,5 +123,96 @@ describe("TableView", () => {
     fireEvent.change(input, { target: { value: "alpha" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(s().tables.get("g4").column_names).toEqual(["alpha"]);
+  });
+
+  it("filters rows and stores the table-local query in the URL", () => {
+    const grid: Table = {
+      name: "runs",
+      kind: TableKind.Folder,
+      column_names: ["run", "status"],
+      row_names: null,
+      cells: [
+        [
+          { type: CellType.String, value: "baseline", ref: null },
+          { type: CellType.String, value: "finished", ref: null },
+        ],
+        [
+          { type: CellType.String, value: "high_lr", ref: null },
+          { type: CellType.String, value: "running", ref: null },
+        ],
+      ],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    renderR(<TableView table={grid} />);
+    fireEvent.change(screen.getByLabelText("Filter rows in runs"), {
+      target: { value: "status=finished" },
+    });
+    expect(screen.getByText("baseline")).toBeTruthy();
+    expect(screen.queryByText("high_lr")).toBeNull();
+    expect(screen.getByTestId("loc").textContent).toContain("filter.demo=status%3Dfinished");
+  });
+
+  it("cycles sort direction and supports Shift multi-sort", () => {
+    const grid: Table = {
+      name: "runs",
+      kind: TableKind.Folder,
+      column_names: ["run", "samples"],
+      row_names: null,
+      cells: [
+        [
+          { type: CellType.String, value: "b", ref: null },
+          { type: CellType.Number, value: "2", ref: null },
+        ],
+        [
+          { type: CellType.String, value: "a", ref: null },
+          { type: CellType.Number, value: "1", ref: null },
+        ],
+      ],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    renderR(<TableView table={grid} />);
+    fireEvent.click(screen.getByTitle("Sort by run; Shift-click adds a sort key"));
+    expect(screen.getAllByRole("row")[1].textContent).toContain("a");
+    fireEvent.click(screen.getByTitle("Sort by samples; Shift-click adds a sort key"), {
+      shiftKey: true,
+    });
+    expect(screen.getByTestId("loc").textContent).toContain("sort.demo=0%3Aasc%2C1%3Aasc");
+  });
+
+  it("starts a column filter from its header and resizes the column", () => {
+    const grid: Table = {
+      name: "runs",
+      kind: TableKind.Folder,
+      column_names: ["status"],
+      row_names: null,
+      cells: [[{ type: CellType.String, value: "finished", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 120,
+      height: 30,
+      top: 0,
+      right: 120,
+      bottom: 30,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    renderR(<TableView table={grid} />);
+
+    fireEvent.click(screen.getByTitle("Filter status"));
+    expect((screen.getByLabelText("Filter rows in runs") as HTMLInputElement).value).toBe("status=");
+    expect(screen.getByText("Missing value for status")).toBeTruthy();
+
+    const handle = screen.getByRole("separator");
+    fireEvent.mouseDown(handle, { clientX: 20 });
+    fireEvent.mouseMove(window, { clientX: 60 });
+    fireEvent.mouseUp(window);
+    expect(screen.getByTestId("loc").textContent).toContain("width.demo=0%3A160");
+    rect.mockRestore();
   });
 });

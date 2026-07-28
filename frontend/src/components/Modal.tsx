@@ -9,20 +9,26 @@ export function Modal() {
   const path = searchParams.get("modal");
   const settings = searchParams.get("settings");
   const open = path !== null || settings !== null;
+  const close = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("modal");
+    next.delete("settings");
+    setSearchParams(next);
+  };
 
   useEffect(() => {
     if (!open) return;
     document.body.style.overflow = "hidden";
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (e.key === "Escape") setSearchParams({});
+      if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, searchParams, setSearchParams]);
 
   if (!open) return null;
   return (
@@ -31,7 +37,7 @@ export function Modal() {
         <>
           <div className="bar">
             <span className="tile-name">settings</span>
-            <Button icon="close" ghost title="close" onClick={() => setSearchParams({})} />
+            <Button icon="close" ghost title="close" onClick={close} />
           </div>
           <Settings />
         </>

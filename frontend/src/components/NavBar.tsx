@@ -60,7 +60,7 @@ export function NavBar() {
       </nav>
       <div className="anchor push">
         <input
-          placeholder="search"
+          placeholder="Go to table…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

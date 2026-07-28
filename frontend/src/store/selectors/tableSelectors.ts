@@ -62,6 +62,18 @@ export function selection_cells(table: Table, selection: FocusSelection) {
   return [...unique.values()];
 }
 
+export function selection_rows(table: Table, selection: FocusSelection) {
+  const rows = new Set<number>();
+  for (const range of selection.ranges) {
+    if (range.kind !== "row") continue;
+    const bounds = range_bounds(range);
+    for (let row = bounds.top; row <= bounds.bottom; row += 1) {
+      if (row >= 0 && row < table.cells.length) rows.add(row);
+    }
+  }
+  return [...rows].sort((a, b) => a - b);
+}
+
 export function selection_anchor(selection: FocusSelection) {
   const active = selection.ranges[selection.ranges.length - 1];
   const bounds = range_bounds(active);

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Table, Cell } from "../types/domain";
+import { Table, Cell, CellType } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
 import { HeaderCell } from "./HeaderCell";
 import { Button } from "./Button";
@@ -77,6 +77,10 @@ export function TableView({ table, editable }: TableViewProps) {
     ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
     : 0;
   const view = table_view_selector(table, query, sorts);
+  const runTable = table.source_path?.split(".").length === 1 &&
+    table.cells.every((row) =>
+      row[0]?.type === CellType.TableRef && row[0].ref?.split(".").length === 2
+    );
 
   const selection = focused && focused.tableId === tableId ? focused : null;
 
@@ -332,6 +336,7 @@ export function TableView({ table, editable }: TableViewProps) {
         <div>
           <table className="table-view" ref={tableRef}>
             <colgroup>
+              {runTable && <col className="selection-column" />}
               {table.row_names && <col />}
               {visibleColumns.map((column) => (
                 <col key={column} style={widths[column] ? { width: widths[column] } : undefined} />
@@ -340,6 +345,7 @@ export function TableView({ table, editable }: TableViewProps) {
             {table.column_names && (
               <thead>
                 <tr>
+                  {runTable && <th aria-label="Select runs" />}
                   {visibleColumns.map((c) => {
                     const name = table.column_names![c];
                     const sortIndex = sorts.findIndex((sort) => sort.column === c);
@@ -393,6 +399,21 @@ export function TableView({ table, editable }: TableViewProps) {
                   className={rowSelected(row.index) ? "selected" : undefined}
                   style={heights[row.index] ? { height: heights[row.index] } : undefined}
                 >
+                  {runTable && (
+                    <td className="run-selection">
+                      <Button
+                        label={rowSelected(row.index) ? "✓" : "○"}
+                        title={`Select run ${row.cells[0]?.value}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startRange(
+                            { tableId, kind: "row", r: row.index, c: -1 },
+                            "toggle"
+                          );
+                        }}
+                      />
+                    </td>
+                  )}
                   {table.row_names && (
                     <th className={colClass(row.index, -2)}>
                       {editable ? (

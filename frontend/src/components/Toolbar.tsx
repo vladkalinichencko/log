@@ -52,7 +52,6 @@ export function Toolbar({ path, table }: ToolbarProps) {
   const [exportState, openExport, closeExport] = useMenu();
   const [confirmState, openConfirm, closeConfirm] = useMenu();
   const [renameState, openRename, closeRename] = useMenu();
-  const [compareState, openCompare, closeCompare] = useMenu();
 
   useEffect(() => {
     setPicking(expr.includes(COLUMN_PLACEHOLDER));
@@ -141,16 +140,6 @@ export function Toolbar({ path, table }: ToolbarProps) {
       })),
   }));
 
-  const [metricProject, metricRun, ...metricRest] = path.split(".");
-  const metricTail = metricRest.join(".");
-  const compareRuns =
-    metricRest.length > 0
-      ? paths.filter((other: string) => {
-          const [project, run_, ...rest] = other.split(".");
-          return project === metricProject && run_ !== metricRun && rest.join(".") === metricTail;
-        })
-      : [];
-
   const resetToSource = () => {
     deleteView(path)
       .then(() => fetchViews().then(setViews))
@@ -185,29 +174,6 @@ export function Toolbar({ path, table }: ToolbarProps) {
         <div className="anchor" onClick={(e) => e.stopPropagation()}>
           <Button icon="fx" ghost title="apply statistic" onClick={openCatalog} />
           {catalogState === "open" && <Menu sections={catalogSections} />}
-        </div>
-      )}
-      {compareRuns.length > 0 && (
-        <div className="anchor" onClick={(e) => e.stopPropagation()}>
-          <Button
-            icon="chart"
-            ghost
-            title="compare with run"
-            onClick={() => (compareState === "open" ? closeCompare() : openCompare())}
-          />
-          {compareState === "open" && (
-            <Menu
-              items={compareRuns.map((other: string) => ({
-                label: other.split(".")[1],
-                onPick: () => {
-                  const expression = `join(table(${other}), on = step)`;
-                  setExpr(expression);
-                  run(expression);
-                  closeCompare();
-                },
-              }))}
-            />
-          )}
         </div>
       )}
       <Button

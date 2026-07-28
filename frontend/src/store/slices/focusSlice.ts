@@ -23,7 +23,7 @@ export interface FocusState {
   pickedColumn: string | null;
 }
 
-type FocusMode = "replace" | "extend" | "add";
+type FocusMode = "replace" | "extend" | "add" | "toggle";
 
 const pointRange = ({ kind, r, c }: FocusTarget): FocusRange => ({
   kind,
@@ -37,10 +37,22 @@ export function focus_reducer(
   focused: FocusSelection | null,
   target: FocusTarget,
   mode: FocusMode
-): FocusSelection {
+): FocusSelection | null {
   const range = pointRange(target);
   if (!focused || focused.tableId !== target.tableId || mode === "replace") {
     return { tableId: target.tableId, ranges: [range] };
+  }
+  if (mode === "toggle") {
+    const ranges = focused.ranges.filter((selected) =>
+      selected.kind !== range.kind ||
+      selected.r !== range.r ||
+      selected.c !== range.c ||
+      selected.endR !== range.endR ||
+      selected.endC !== range.endC
+    );
+    return ranges.length === focused.ranges.length
+      ? { ...focused, ranges: [...ranges, range] }
+      : ranges.length ? { ...focused, ranges } : null;
   }
   if (mode === "add") {
     return { ...focused, ranges: [...focused.ranges, range] };

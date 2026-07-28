@@ -4,6 +4,7 @@ import { NavBar } from "./NavBar";
 import { MainView } from "./MainView";
 import { Dashboard } from "./Dashboard";
 import { Modal } from "./Modal";
+import { RunComparison } from "./RunComparison";
 import { Button } from "./Button";
 import { useStore } from "../store/store";
 import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace, saveView } from "../api/client";
@@ -163,6 +164,7 @@ export function App() {
       <div className="content">
         <h1>{heroTitle}</h1>
         <MainView path={currentPath} />
+        <RunComparison path={currentPath} />
         <Dashboard />
       </div>
       <Modal />

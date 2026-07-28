@@ -4,6 +4,7 @@ import {
   isFocused,
   selection_blocks,
   selection_cells,
+  selection_rows,
 } from "../store/selectors/tableSelectors";
 import { CellType, Table, TableKind, Representation } from "../types/domain";
 
@@ -62,5 +63,17 @@ describe("tableSelectors", () => {
       { r: 1, c: 0 },
       { r: 1, c: 1 },
     ]);
+  });
+
+  it("derives ordered unique run rows from row ranges", () => {
+    const selection = {
+      tableId: "p",
+      ranges: [
+        { kind: "row" as const, r: 2, c: -1, endR: 1, endC: -1 },
+        { kind: "row" as const, r: 1, c: -1, endR: 1, endC: -1 },
+      ],
+    };
+    const grid = { ...table, cells: [[], [], []] };
+    expect(selection_rows(grid, selection)).toEqual([1, 2]);
   });
 });

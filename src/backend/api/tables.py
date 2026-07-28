@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..config import get_storage
+from ..domain.compare_runs import compare_runs
 from ..domain.models import CellType, Table
 from ..domain.read_table import read_table
 from ..domain.table_engine import FUNCTIONS, ExpressionError, evaluate
@@ -64,6 +65,21 @@ def eval_table(req: EvalRequest, storage: StoragePort = Depends(get_storage)) ->
         return _table_to_dict(evaluate(req.expression, storage))
     except ExpressionError:
         raise HTTPException(status_code=400, detail="TABLE_EXPRESSION_ERROR")
+
+
+class CompareRunsRequest(BaseModel):
+    runs: list[str]
+
+
+@router.post("/api/runs/compare")
+def compare_run_tables(
+    req: CompareRunsRequest,
+    storage: StoragePort = Depends(get_storage),
+) -> dict:
+    try:
+        return _table_to_dict(compare_runs(req.runs, storage))
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail="RUN_COMPARISON_ERROR")
 
 
 def _table_to_dict(table: Table) -> dict:

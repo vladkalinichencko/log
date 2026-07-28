@@ -266,6 +266,29 @@ describe("TableView", () => {
     expect(screen.getByTestId("loc").textContent).toContain("columns.demo=0");
   });
 
+  it("toggles run rows from the collection selection column", () => {
+    const s = () => useStore.getState() as any;
+    s().focus_setTarget(null);
+    const runs: Table = {
+      name: "demo",
+      kind: TableKind.Folder,
+      column_names: ["run"],
+      row_names: null,
+      cells: [
+        [{ type: CellType.TableRef, value: "baseline", ref: "demo.baseline" }],
+        [{ type: CellType.TableRef, value: "high_lr", ref: "demo.high_lr" }],
+      ],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    renderR(<TableView table={runs} />);
+    fireEvent.click(screen.getByTitle("Select run baseline"));
+    fireEvent.click(screen.getByTitle("Select run high_lr"));
+    expect(s().focused.ranges).toHaveLength(2);
+    fireEvent.click(screen.getByTitle("Select run baseline"));
+    expect(s().focused.ranges).toHaveLength(1);
+  });
+
   it("drag-selects a rectangle and Ctrl adds another range", () => {
     const grid: Table = {
       name: "range",

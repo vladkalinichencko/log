@@ -988,6 +988,7 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | GET | `/api/table` | query `path` (`.`-path) | `Table` | 404 `TABLE_NOT_FOUND` |
 | GET | `/api/paths` | — | `string[]` (every drillable `.`-path; for search) | — |
 | POST | `/api/tables/eval` | `{ expression: str }` | `Table` | 400 `TABLE_EXPRESSION_ERROR` |
+| POST | `/api/runs/compare` | `{ runs: string[] }` | one derived comparison `Table` | 400 `RUN_COMPARISON_ERROR` |
 | GET | `/api/series/scalar` | `run`, `path`, `x?` | `{ x: number[], y: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor` | `run`, `path`, `step` | `{ shape: int[], dtype: str, data: number[] }` | 404 `SERIES_NOT_FOUND` |
 | GET | `/api/series/tensor/steps` | `run`, `path` | `{ steps: int[] }` (all logged steps of one tensor path, sorted) | 404 `SERIES_NOT_FOUND` |
@@ -1351,7 +1352,7 @@ Every screen accounts for desktop, iPad, and mobile from the start (the layout a
 
 ### 11.7 Run comparison and execution workflow
 
-`[v2]` Selecting run rows adds them to one bottom comparison buffer. Compare builds a derived `Table` with three sections that remain ordinary tables: config/parameter differences, same-named metric series aligned by step, and result children present in either run. Logs, artifacts, metrics, and debug samples stay child tables in the same hierarchy rather than becoming product-specific tabs. Plotly's built-in hover/zoom/scale/legend controls stay available; one legend click toggles a series and a double-click isolates it.
+`[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model.
 
 `[v3]` Clone creates a draft table from a run definition, including an editable input-model/checkpoint reference. Execute now or enqueue sends that draft to a named queue and creates a new immutable run; `log-agent execute --id <draft-id>` is the CLI form. Workers consume named queues, so assigning workers to queues is the resource-budget mechanism. Resetting a completed or failed run is rejected because history is immutable; "retry as draft" is the explicit replacement.
 

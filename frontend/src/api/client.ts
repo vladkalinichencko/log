@@ -89,6 +89,18 @@ export async function evalTable(expression: string): Promise<Table> {
   return response.json();
 }
 
+export async function fetchRunComparison(runs: string[]): Promise<Table> {
+  const response = await fetch(`${API_BASE}/api/runs/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runs }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to compare runs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function fetchRuns(): Promise<any[]> {
   const url = `${API_BASE}/api/runs`;
   const response = await fetch(url);

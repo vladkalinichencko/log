@@ -99,6 +99,8 @@ Two different kinds of "not done" below: items never started (design/scope not s
 
 ## Changelog (newest first — commit → what became real)
 
+- `HEAD` — **Persisted views hydrate once per path.** Refreshing the saved-view catalog after autosave no longer reloads the same view with new object identities, so edit history stops feeding an endless `PUT /api/views` → `GET /api/views` loop.
+
 - `HEAD` — **Full run comparison as one Table.** Project run tables have a dedicated selection column; selecting 2+ rows opens a bottom comparison buffer whose Compare action persists run paths in the URL. `/api/runs/compare` aligns config/meta, scalar metrics by epoch/name/step/rank, tensor shape/dtype from lightweight indexes and checkpoint tags, returning one ordinary Table with empty cells for missing values. The previous one-metric Toolbar join was removed. Frontend 61/61 and backend 64/64 tests pass; production build succeeds.
 
 - `HEAD` — **URL-owned table layout.** The table-local Columns menu now toggles visibility, moves columns in source-index order and freezes a leading prefix. Multiple frozen columns use measured header widths rather than a guessed default. Row and column borders share one resize component and persist `height.<path>`/`width.<path>` with explicit 24px/80px minima. `columns=none` is a valid reversible view. Focused suites pass 16/16 and TypeScript is clean.

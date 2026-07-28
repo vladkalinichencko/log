@@ -208,12 +208,62 @@ describe("TableView", () => {
     expect((screen.getByLabelText("Filter rows in runs") as HTMLInputElement).value).toBe("status=");
     expect(screen.getByText("Missing value for status")).toBeTruthy();
 
-    const handle = screen.getByRole("separator");
+    const handle = document.querySelector(".column-resize")!;
     fireEvent.mouseDown(handle, { clientX: 20 });
     fireEvent.mouseMove(window, { clientX: 60 });
     fireEvent.mouseUp(window);
     expect(screen.getByTestId("loc").textContent).toContain("width.demo=0%3A160");
     rect.mockRestore();
+  });
+
+  it("resizes a row and stores its height in the URL", () => {
+    const grid: Table = {
+      name: "runs",
+      kind: TableKind.Grid,
+      column_names: ["status"],
+      row_names: null,
+      cells: [[{ type: CellType.String, value: "finished", ref: null }]],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 120,
+      height: 30,
+      top: 0,
+      right: 120,
+      bottom: 30,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    renderR(<TableView table={grid} />);
+    const handle = document.querySelector(".row-resize")!;
+    fireEvent.mouseDown(handle, { clientY: 10 });
+    fireEvent.mouseMove(window, { clientY: 30 });
+    fireEvent.mouseUp(window);
+    expect(screen.getByTestId("loc").textContent).toContain("height.demo=0%3A50");
+    rect.mockRestore();
+  });
+
+  it("hides a column through the table-owned Columns menu", () => {
+    const grid: Table = {
+      name: "runs",
+      kind: TableKind.Grid,
+      column_names: ["run", "status"],
+      row_names: null,
+      cells: [[
+        { type: CellType.String, value: "baseline", ref: null },
+        { type: CellType.String, value: "finished", ref: null },
+      ]],
+      representation: Representation.Grid,
+      source_path: "demo",
+    };
+    renderR(<TableView table={grid} />);
+    fireEvent.click(screen.getByTitle("Choose, reorder, and freeze columns"));
+    fireEvent.click(screen.getByText("✓ status"));
+    expect(screen.queryByRole("columnheader", { name: "status ↕ filter" })).toBeNull();
+    expect(screen.getByTestId("loc").textContent).toContain("columns.demo=0");
   });
 
   it("drag-selects a rectangle and Ctrl adds another range", () => {

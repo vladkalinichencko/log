@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, Cell } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
 import { HeaderCell } from "./HeaderCell";
 import { Button } from "./Button";
-import { ColumnResizeHandle } from "./ColumnResizeHandle";
+import { Menu } from "./Menu";
+import { TableResizeHandle } from "./TableResizeHandle";
 import { parsePaste } from "./parsePaste";
 import { selectionFsm } from "../fsm/selectionFsm";
+import { useMenu } from "../fsm/useMenu";
 import { useStore } from "../store/store";
 import {
   isFocused,
@@ -17,8 +19,12 @@ import {
 } from "../store/selectors/tableSelectors";
 import {
   filter_clauses,
+  parse_columns,
+  parse_heights,
   parse_sorts,
   parse_widths,
+  serialize_columns,
+  serialize_heights,
   serialize_sorts,
   serialize_widths,
   table_view_selector,
@@ -47,17 +53,29 @@ export function TableView({ table, editable }: TableViewProps) {
   const pickColumn = useStore((state: any) => state.focus_pickColumn);
   const tableRef = useRef<HTMLTableElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  const columns = table.cells[0]?.length ?? table.column_names?.length ?? 0;
   const paramsRef = useRef<{ value: URLSearchParams; requested: string | null }>({
     value: searchParams,
     requested: null,
   });
   const [selectionState, setSelectionState] = useState(selectionFsm.initial);
+  const [columnsState, openColumns, closeColumns] = useMenu();
+  const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
   const widthKey = `width.${tableId}`;
+  const heightKey = `height.${tableId}`;
+  const columnsKey = `columns.${tableId}`;
+  const freezeKey = `freeze.${tableId}`;
   const query = searchParams.get(filterKey) ?? "";
   const sorts = parse_sorts(searchParams.get(sortKey));
   const widths = parse_widths(searchParams.get(widthKey));
+  const heights = parse_heights(searchParams.get(heightKey));
+  const visibleColumns = parse_columns(searchParams.get(columnsKey), columns);
+  const requestedFrozen = Number(searchParams.get(freezeKey) ?? 0);
+  const frozenCount = Number.isInteger(requestedFrozen)
+    ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
+    : 0;
   const view = table_view_selector(table, query, sorts);
 
   const selection = focused && focused.tableId === tableId ? focused : null;
@@ -106,6 +124,38 @@ export function TableView({ table, editable }: TableViewProps) {
   const setWidth = (column: number, width: number) => {
     setParam(widthKey, serialize_widths({ ...widths, [column]: width }));
   };
+
+  const setHeight = (row: number, height: number) => {
+    setParam(heightKey, serialize_heights({ ...heights, [row]: height }));
+  };
+
+  const setColumns = (next: number[]) => setParam(columnsKey, serialize_columns(next));
+
+  const toggleColumn = (column: number) => {
+    setColumns(visibleColumns.includes(column)
+      ? visibleColumns.filter((visible) => visible !== column)
+      : [...visibleColumns, column]);
+  };
+
+  const moveColumn = (column: number, direction: -1 | 1) => {
+    const from = visibleColumns.indexOf(column);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= visibleColumns.length) return;
+    const next = [...visibleColumns];
+    [next[from], next[to]] = [next[to], next[from]];
+    setColumns(next);
+  };
+
+  useLayoutEffect(() => {
+    let left = 0;
+    const next: Record<number, number> = {};
+    for (const column of visibleColumns.slice(0, frozenCount)) {
+      next[column] = left;
+      const header = tableRef.current?.querySelector<HTMLElement>(`th[data-column="${column}"]`);
+      left += header?.getBoundingClientRect().width ?? 0;
+    }
+    if (JSON.stringify(next) !== JSON.stringify(frozenOffsets)) setFrozenOffsets(next);
+  }, [visibleColumns.join(","), frozenCount, searchParams.toString()]);
 
   useEffect(() => {
     if (!editable || !selection) return;
@@ -201,8 +251,10 @@ export function TableView({ table, editable }: TableViewProps) {
     const bottom = r === table.cells.length - 1;
     return ["col-selected", top ? "col-top" : "", bottom ? "col-bottom" : ""].join(" ").trim();
   };
-
-  const columns = table.cells[0]?.length ?? 0;
+  const frozen = (column: number) => visibleColumns.indexOf(column) < frozenCount;
+  const frozenStyle = (column: number) =>
+    frozen(column) ? { left: frozenOffsets[column] ?? 0 } : undefined;
+  const classNames = (...names: (string | undefined | false)[]) => names.filter(Boolean).join(" ");
 
   return (
     <div className="table-wrap">
@@ -216,6 +268,51 @@ export function TableView({ table, editable }: TableViewProps) {
           onChange={(event) => setParam(filterKey, event.target.value)}
         />
         <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
+        <div className="anchor" onClick={(event) => event.stopPropagation()}>
+          <Button
+            label={`Columns ${visibleColumns.length}/${columns}`}
+            title="Choose, reorder, and freeze columns"
+            onClick={() => columnsState === "open" ? closeColumns() : openColumns()}
+          />
+          {columnsState === "open" && (
+            <Menu
+              sections={[
+                {
+                  title: "visible",
+                  items: (table.column_names ?? Array.from({ length: columns }, (_, c) => `c${c}`))
+                    .map((name, column) => ({
+                      label: `${visibleColumns.includes(column) ? "✓" : "○"} ${name}`,
+                      onPick: () => toggleColumn(column),
+                    })),
+                },
+                {
+                  title: "move left",
+                  items: visibleColumns.slice(1).map((column) => ({
+                    label: table.column_names?.[column] ?? `c${column}`,
+                    onPick: () => moveColumn(column, -1),
+                  })),
+                },
+                {
+                  title: "move right",
+                  items: visibleColumns.slice(0, -1).map((column) => ({
+                    label: table.column_names?.[column] ?? `c${column}`,
+                    onPick: () => moveColumn(column, 1),
+                  })),
+                },
+                {
+                  title: "freeze",
+                  items: [
+                    { label: "none", onPick: () => setParam(freezeKey, "") },
+                    ...visibleColumns.map((column, index) => ({
+                      label: `through ${table.column_names?.[column] ?? `c${column}`}`,
+                      onPick: () => setParam(freezeKey, String(index + 1)),
+                    })),
+                  ],
+                },
+              ]}
+            />
+          )}
+        </div>
       </div>
       {view.clauses.length > 0 && (
         <div className="filter-chips">
@@ -236,21 +333,23 @@ export function TableView({ table, editable }: TableViewProps) {
           <table className="table-view" ref={tableRef}>
             <colgroup>
               {table.row_names && <col />}
-              {Array.from({ length: columns }, (_, column) => (
+              {visibleColumns.map((column) => (
                 <col key={column} style={widths[column] ? { width: widths[column] } : undefined} />
               ))}
             </colgroup>
             {table.column_names && (
               <thead>
                 <tr>
-                  {table.column_names.map((name: string, c: number) => {
+                  {visibleColumns.map((c) => {
+                    const name = table.column_names![c];
                     const sortIndex = sorts.findIndex((sort) => sort.column === c);
                     const sort = sorts[sortIndex];
                     return (
                       <th
                         key={c}
-                        className={colClass(-1, c)}
-                        style={widths[c] ? { width: widths[c] } : undefined}
+                        data-column={c}
+                        className={classNames(colClass(-1, c), frozen(c) && "frozen")}
+                        style={{ ...(widths[c] ? { width: widths[c] } : {}), ...frozenStyle(c) }}
                         onClick={() => picking && pickColumn(name)}
                       >
                         <div className="column-header">
@@ -279,7 +378,7 @@ export function TableView({ table, editable }: TableViewProps) {
                               }}
                             />
                           </div>
-                          <ColumnResizeHandle onResize={(width) => setWidth(c, width)} />
+                          <TableResizeHandle axis="column" onResize={(width) => setWidth(c, width)} />
                         </div>
                       </th>
                     );
@@ -289,7 +388,11 @@ export function TableView({ table, editable }: TableViewProps) {
             )}
             <tbody>
               {view.rows.map((row) => (
-                <tr key={row.index} className={rowSelected(row.index) ? "selected" : undefined}>
+                <tr
+                  key={row.index}
+                  className={rowSelected(row.index) ? "selected" : undefined}
+                  style={heights[row.index] ? { height: heights[row.index] } : undefined}
+                >
                   {table.row_names && (
                     <th className={colClass(row.index, -2)}>
                       {editable ? (
@@ -302,8 +405,14 @@ export function TableView({ table, editable }: TableViewProps) {
                       )}
                     </th>
                   )}
-                  {row.cells.map((cell: Cell, c: number) => (
-                    <td key={c} className={colClass(row.index, c)}>
+                  {visibleColumns.map((c, visibleIndex) => {
+                    const cell: Cell = row.cells[c];
+                    return (
+                    <td
+                      key={c}
+                      className={classNames(colClass(row.index, c), frozen(c) && "frozen")}
+                      style={frozenStyle(c)}
+                    >
                       <CellComponent
                         cell={cell}
                         tableId={tableId}
@@ -314,8 +423,15 @@ export function TableView({ table, editable }: TableViewProps) {
                         onSelect={(event) => beginSelection(row.index, c, event)}
                         onExtend={() => extendSelection(row.index, c)}
                       />
+                      {visibleIndex === 0 && (
+                        <TableResizeHandle
+                          axis="row"
+                          onResize={(height) => setHeight(row.index, height)}
+                        />
+                      )}
                     </td>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

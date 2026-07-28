@@ -1325,7 +1325,7 @@ For a `Table` these are essentially all operations that exist:
 2. Edit column name / row name (double-click). `[v1]`
 3. Add row / add column (right-click context menu). `[v0]`
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
-5. Resize column width / row height (drag the border) — Excel-like. `[v1]` column width; row height pending. Column width has an explicit 80px minimum so header controls remain usable.
+5. Resize column width / row height (drag the border) — Excel-like. `[v1]` Width and height are table-scoped URL state; explicit minima are 80px for a column and 24px for a row so their controls cannot collapse.
 6. Zoom — Excel-like. `[v1]`
 7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
@@ -1335,7 +1335,7 @@ For a `Table` these are essentially all operations that exist:
 12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
 14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
-15. Filter rows, hide/reorder columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts and column widths are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`); hide/reorder remains `[v2]`. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
+15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 

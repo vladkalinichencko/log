@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  parse_columns,
+  parse_heights,
   parse_sorts,
   parse_widths,
+  serialize_columns,
+  serialize_heights,
   serialize_sorts,
   serialize_widths,
   table_view_selector,
@@ -60,5 +64,8 @@ describe("table_view_selector", () => {
     const sorts = [{ column: 0, direction: "asc" as const }, { column: 2, direction: "desc" as const }];
     expect(parse_sorts(serialize_sorts(sorts))).toEqual(sorts);
     expect(parse_widths(serialize_widths({ 0: 140, 2: 220 }))).toEqual({ 0: 140, 2: 220 });
+    expect(parse_heights(serialize_heights({ 0: 32, 4: 60 }))).toEqual({ 0: 32, 4: 60 });
+    expect(parse_columns(serialize_columns([2, 0]), 3)).toEqual([2, 0]);
+    expect(parse_columns("none", 3)).toEqual([]);
   });
 });

@@ -426,14 +426,40 @@ select {
   font-size: 11px;
 }
 
-.column-resize {
+.column-resize,
+.row-resize {
   position: absolute;
+  z-index: 1;
+}
+
+.column-resize {
   top: 0;
   right: -3px;
   bottom: 0;
   width: 6px;
   cursor: col-resize;
-  z-index: 1;
+}
+
+.row-resize {
+  right: 0;
+  bottom: -3px;
+  left: 0;
+  height: 6px;
+  cursor: row-resize;
+}
+
+.table-view td {
+  position: relative;
+}
+
+.table-view .frozen {
+  position: sticky;
+  z-index: 2;
+  background: var(--gray-0);
+}
+
+.table-view th.frozen {
+  z-index: 3;
 }
 
 .table-frame > button {

@@ -114,13 +114,27 @@ export const parse_sorts = (value: string | null): TableSort[] =>
 export const serialize_sorts = (sorts: TableSort[]) =>
   sorts.map((sort) => `${sort.column}:${sort.direction}`).join(",");
 
-export const parse_widths = (value: string | null): Record<number, number> =>
+const parse_sizes = (value: string | null, minimum: number): Record<number, number> =>
   Object.fromEntries(
     (value ?? "").split(",").flatMap((entry) => {
       const [column, width] = entry.split(":").map(Number);
-      return Number.isInteger(column) && width >= 80 ? [[column, width]] : [];
+      return Number.isInteger(column) && width >= minimum ? [[column, width]] : [];
     })
   );
 
+export const parse_widths = (value: string | null) => parse_sizes(value, 80);
+export const parse_heights = (value: string | null) => parse_sizes(value, 24);
+
 export const serialize_widths = (widths: Record<number, number>) =>
   Object.entries(widths).map(([column, width]) => `${column}:${Math.round(width)}`).join(",");
+
+export const serialize_heights = serialize_widths;
+
+export const parse_columns = (value: string | null, total: number) => {
+  if (value === null) return Array.from({ length: total }, (_, column) => column);
+  if (value === "none") return [];
+  return [...new Set(value.split(",").map(Number))]
+    .filter((column) => Number.isInteger(column) && column >= 0 && column < total);
+};
+
+export const serialize_columns = (columns: number[]) => columns.length ? columns.join(",") : "none";

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon, IconName } from "./Icon";
 
 interface MenuItem {
@@ -22,18 +23,27 @@ interface MenuProps {
 export function Menu({ items, sections, at }: MenuProps) {
   const flat = sections ? sections.flatMap((section) => section.items) : items ?? [];
   const [active, setActive] = useState(-1);
-  const [shift, setShift] = useState(0);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const origin = useRef<HTMLSpanElement>(null);
   const root = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!root.current) return;
+    const anchor = at
+      ? { left: at.x, top: at.y, bottom: at.y }
+      : origin.current?.parentElement?.getBoundingClientRect();
+    if (!anchor) return;
     const rect = root.current.getBoundingClientRect();
-    const overflow = rect.right - shift - (window.innerWidth - 8);
-    setShift(overflow > 0 ? -overflow : 0);
+    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - rect.width - 8));
+    const below = anchor.bottom + 4;
+    const top = below + rect.height <= window.innerHeight - 8
+      ? below
+      : Math.max(8, anchor.top - rect.height - 4);
+    setMenuPosition({ left, top });
     for (const pane of [root.current, ...root.current.querySelectorAll(".fade-scroll-y")]) {
       pane.classList.toggle("scrollable", pane.scrollHeight > pane.clientHeight + 1);
     }
-  }, [flat.length]);
+  }, [flat.length, at?.x, at?.y]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -54,8 +64,8 @@ export function Menu({ items, sections, at }: MenuProps) {
         flat[active]?.onPick();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [flat.length, active]);
 
   const item = (entry: MenuItem, index: number) => (
@@ -72,12 +82,12 @@ export function Menu({ items, sections, at }: MenuProps) {
   );
 
   const position = {
-    ...(at ? { position: "fixed" as const, left: at.x, top: at.y } : {}),
-    transform: shift ? `translateX(${shift}px)` : undefined,
+    left: menuPosition?.left ?? 0,
+    top: menuPosition?.top ?? 0,
+    visibility: menuPosition ? "visible" as const : "hidden" as const,
   };
   let offset = 0;
-  if (sections) {
-    return (
+  const menu = sections ? (
       <div className="menu columns" style={position} ref={root}>
         {sections.map((section) => {
           const start = offset;
@@ -90,11 +100,15 @@ export function Menu({ items, sections, at }: MenuProps) {
           );
         })}
       </div>
-    );
-  }
-  return (
+  ) : (
     <div className="menu fade-scroll-y" style={position} ref={root}>
       {flat.map(item)}
     </div>
+  );
+  return (
+    <>
+      <span className="menu-origin" ref={origin} />
+      {createPortal(menu, document.body)}
+    </>
   );
 }

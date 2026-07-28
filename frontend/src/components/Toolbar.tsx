@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { loadFsm } from "../fsm/loadFsm";
 import { useMenu } from "../fsm/useMenu";
 import { evalTable, deleteRun, renameRuns, deleteView, fetchViews } from "../api/client";
@@ -46,7 +46,6 @@ export function Toolbar({ path, table }: ToolbarProps) {
   const paths = useStore((state: any) => state.paths);
   const savedView = useStore((state: any) => state.views.get(path));
   const [expr, setExpr] = useState("");
-  const suggestAnchor = useRef<HTMLDivElement>(null);
   const [evalState, setEvalState] = useState(loadFsm.initial);
   const [catalogState, openCatalog, closeCatalog] = useMenu();
   const [exportState, openExport, closeExport] = useMenu();
@@ -184,15 +183,14 @@ export function Toolbar({ path, table }: ToolbarProps) {
         onClick={resetToSource}
       />
       {selection && (
-        <div className="anchor grow" ref={suggestAnchor}>
+        <div className="anchor grow">
           <input
             className={expr.includes(COLUMN_PLACEHOLDER) ? "grow picking" : "grow"}
             placeholder="formula: derive(z = zscore(loss, 100)) | select(step, z)"
             value={expr}
             onChange={(e) => setExpr(e.target.value)}
             onKeyDown={(e) => {
-              const navigating = suggestAnchor.current?.querySelector(".menu .active");
-              if (e.key === "Enter" && expr.trim() && !navigating) run(expr);
+              if (e.key === "Enter" && expr.trim() && !e.defaultPrevented) run(expr);
             }}
           />
           {evalState === "error" && <span className="error">invalid expression</span>}

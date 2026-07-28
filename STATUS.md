@@ -99,6 +99,8 @@ Two different kinds of "not done" below: items never started (design/scope not s
 
 ## Changelog (newest first — commit → what became real)
 
+- `HEAD` — **One table scroll owner and one popup layer.** Preview tiles no longer put `overflow:auto` around both toolbar and table: filter/column controls stay fixed and only `.table-frame` scrolls. Resize hit zones moved inside cell borders, removing the artificial 1–2 px overflow that produced scrollbars on exactly fitting tables. Every `Menu` now portals to `document.body`, uses viewport-fixed placement, flips vertically and clamps to an 8 px margin. Live `demo.baseline` verification measured fixed toolbar `y=223.75` while the meta body moved to `scrollTop=101.5`; fitting config/epoch tables are exactly `318/318` px with no overflow, while the genuinely wide meta table remains scrollable. Frontend 62/62 and production build pass.
+
 - `HEAD` — **Persisted views hydrate once per path.** Refreshing the saved-view catalog after autosave no longer reloads the same view with new object identities, so edit history stops feeding an endless `PUT /api/views` → `GET /api/views` loop.
 
 - `HEAD` — **Full run comparison as one Table.** Project run tables have a dedicated selection column; selecting 2+ rows opens a bottom comparison buffer whose Compare action persists run paths in the URL. `/api/runs/compare` aligns config/meta, scalar metrics by epoch/name/step/rank, tensor shape/dtype from lightweight indexes and checkpoint tags, returning one ordinary Table with empty cells for missing values. The previous one-metric Toolbar join was removed. Frontend 61/61 and backend 64/64 tests pass; production build succeeds.

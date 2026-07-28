@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, Cell } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
@@ -6,7 +6,15 @@ import { HeaderCell } from "./HeaderCell";
 import { Button } from "./Button";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { parsePaste } from "./parsePaste";
+import { selectionFsm } from "../fsm/selectionFsm";
 import { useStore } from "../store/store";
+import {
+  isFocused,
+  isInFocusedLine,
+  selection_anchor,
+  selection_blocks,
+  selection_cells,
+} from "../store/selectors/tableSelectors";
 import {
   filter_clauses,
   parse_sorts,
@@ -31,7 +39,9 @@ export function TableView({ table, editable }: TableViewProps) {
   const addColumn = useStore((state: any) => state.tables_addColumn);
   const editName = useStore((state: any) => state.tables_editName);
   const pasteBlock = useStore((state: any) => state.tables_pasteBlock);
-  const setTarget = useStore((state: any) => state.focus_setTarget);
+  const clearCells = useStore((state: any) => state.tables_clearCells);
+  const startRange = useStore((state: any) => state.focus_startRange);
+  const extendRange = useStore((state: any) => state.focus_extendRange);
   const focused = useStore((state: any) => state.focused);
   const picking = useStore((state: any) => state.picking);
   const pickColumn = useStore((state: any) => state.focus_pickColumn);
@@ -41,6 +51,7 @@ export function TableView({ table, editable }: TableViewProps) {
     value: searchParams,
     requested: null,
   });
+  const [selectionState, setSelectionState] = useState(selectionFsm.initial);
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
   const widthKey = `width.${tableId}`;
@@ -97,26 +108,58 @@ export function TableView({ table, editable }: TableViewProps) {
   };
 
   useEffect(() => {
-    if (!editable || !selection || selection.kind !== "cell") return;
+    if (!editable || !selection) return;
     const onPaste = (e: ClipboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       const block = parsePaste(e.clipboardData?.getData("text/plain") ?? "");
       if (block.length === 0) return;
       e.preventDefault();
-      pasteBlock(tableId, selection.r, selection.c, block);
+      const anchor = selection_anchor(selection);
+      pasteBlock(tableId, anchor.r, anchor.c, block);
     };
     const onCopy = (e: ClipboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       e.preventDefault();
-      e.clipboardData?.setData("text/plain", table.cells[selection.r]?.[selection.c]?.value ?? "");
+      const text = selection_blocks(table, selection)
+        .map((block) => block.map((row) => row.join("\t")).join("\n"))
+        .join("\n\n");
+      e.clipboardData?.setData("text/plain", text);
+    };
+    const onCut = (e: ClipboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      onCopy(e);
+      clearCells(tableId, selection_cells(table, selection));
     };
     document.addEventListener("paste", onPaste);
     document.addEventListener("copy", onCopy);
+    document.addEventListener("cut", onCut);
     return () => {
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("copy", onCopy);
+      document.removeEventListener("cut", onCut);
     };
   }, [editable, selection, tableId, table]);
+
+  useEffect(() => {
+    if (selectionState !== "dragging") return;
+    const end = () => setSelectionState((state) => selectionFsm.next(state, "up"));
+    window.addEventListener("mouseup", end);
+    return () => window.removeEventListener("mouseup", end);
+  }, [selectionState]);
+
+  const beginSelection = (r: number, c: number, event: React.MouseEvent) => {
+    if (!editable) return;
+    event.preventDefault();
+    const mode = event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
+    startRange({ tableId, kind: "cell", r, c }, mode);
+    setSelectionState((state) => selectionFsm.next(state, "down"));
+  };
+
+  const extendSelection = (r: number, c: number) => {
+    if (selectionState === "dragging") {
+      extendRange({ tableId, kind: "cell", r, c });
+    }
+  };
 
   const selectFromEdge = (e: React.MouseEvent) => {
     if (!editable || !tableRef.current) return;
@@ -131,7 +174,10 @@ export function TableView({ table, editable }: TableViewProps) {
         const rowRect = row.getBoundingClientRect();
         return e.clientY >= rowRect.top && e.clientY <= rowRect.bottom;
       });
-      if (r >= 0) setTarget({ tableId, kind: "row", r, c: -1 });
+      if (r >= 0) {
+        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
+        startRange({ tableId, kind: "row", r, c: -1 }, mode);
+      }
     } else if (onHorizontalEdge && e.clientX >= rect.left && e.clientX <= rect.right) {
       const firstRow = rows[0] ? [...rows[0].children] : [];
       const domIndex = firstRow.findIndex((cell) => {
@@ -139,12 +185,16 @@ export function TableView({ table, editable }: TableViewProps) {
         return e.clientX >= cellRect.left && e.clientX <= cellRect.right;
       });
       const c = table.row_names ? domIndex - 1 : domIndex;
-      if (c >= 0) setTarget({ tableId, kind: "col", r: -1, c });
+      if (c >= 0) {
+        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
+        startRange({ tableId, kind: "col", r: -1, c }, mode);
+      }
     }
   };
 
-  const rowSelected = (r: number) => selection?.kind === "row" && selection.r === r;
-  const colSelected = (c: number) => selection?.kind === "col" && selection.c === c;
+  const focusState = { focused: selection };
+  const rowSelected = (r: number) => isInFocusedLine(focusState, tableId, r, -1);
+  const colSelected = (c: number) => isInFocusedLine(focusState, tableId, -1, c);
   const colClass = (r: number, c: number) => {
     if (!colSelected(c)) return undefined;
     const top = table.column_names ? r === -1 : r === 0;
@@ -260,6 +310,9 @@ export function TableView({ table, editable }: TableViewProps) {
                         rowIndex={row.index}
                         colIndex={c}
                         editable={editable}
+                        selected={isFocused(focusState, tableId, row.index, c)}
+                        onSelect={(event) => beginSelection(row.index, c, event)}
+                        onExtend={() => extendSelection(row.index, c)}
                       />
                     </td>
                   ))}

@@ -70,7 +70,8 @@ export function Toolbar({ path, table }: ToolbarProps) {
   }, [pickedColumn]);
 
   const selection = focused && focused.tableId === path ? focused : null;
-  const lineSelection = selection && selection.kind !== "cell" ? selection : null;
+  const activeSelection = selection?.ranges[selection.ranges.length - 1] ?? null;
+  const lineSelection = activeSelection && activeSelection.kind !== "cell" ? activeSelection : null;
 
   const runRef =
     lineSelection?.kind === "row"
@@ -115,7 +116,9 @@ export function Toolbar({ path, table }: ToolbarProps) {
   };
 
   const selectedColumn =
-    selection && selection.c >= 0 ? table.column_names?.[selection.c] ?? null : null;
+    activeSelection && activeSelection.c >= 0
+      ? table.column_names?.[activeSelection.c] ?? null
+      : null;
 
   const { word, suggestions } = formula_selector(
     { functions, paths },

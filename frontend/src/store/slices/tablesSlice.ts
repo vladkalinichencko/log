@@ -169,6 +169,19 @@ export const createTablesSlice = (set: any) => ({
       })
     ),
 
+  tables_clearCells: (tableId: string, selected: { r: number; c: number }[]) =>
+    set((state: any) =>
+      applyEdit(state, tableId, (table) => {
+        const cells = new Set(selected.map(({ r, c }) => `${r}:${c}`));
+        return {
+          ...table,
+          cells: table.cells.map((row, r) =>
+            row.map((cell, c) => cells.has(`${r}:${c}`) ? emptyCell() : cell)
+          ),
+        };
+      })
+    ),
+
   tables_undo: () =>
     set((state: any) => {
       const last = state.editHistory[state.editHistory.length - 1];

@@ -1327,8 +1327,8 @@ For a `Table` these are essentially all operations that exist:
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]` column width; row height pending. Column width has an explicit 80px minimum so header controls remain usable.
 6. Zoom — Excel-like. `[v1]`
-7. Select a cell / drag-select a range / select a whole row / a whole column. `[v0]` single-cell; `[v1]` range/row/column.
-8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the selected cell and grows the table to fit; one undoable edit). `[v1]` — paste + single-cell copy shipped; cut and range copy pending.
+7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end.
+8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`
 11. Undo (Ctrl+Z), redo (Ctrl+Shift+Z / Ctrl+Y). `[v0]` undo; `[v1]` redo + persistence (ADR-018) — history survives closing and reopening a view, not just tab memory.

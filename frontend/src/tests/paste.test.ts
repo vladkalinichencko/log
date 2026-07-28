@@ -61,4 +61,13 @@ describe("tables_pasteBlock", () => {
     s().tables_undo();
     expect(s().tables.get("paste-t").cells[0][0].value).toBe("1");
   });
+
+  it("clears a range as one undoable edit", () => {
+    const s = () => useStore.getState() as any;
+    s().tables_loadTable("paste-t", table());
+    s().tables_clearCells("paste-t", [{ r: 0, c: 0 }, { r: 0, c: 1 }]);
+    expect(s().tables.get("paste-t").cells[0].map((c: any) => c.value)).toEqual(["", ""]);
+    s().tables_undo();
+    expect(s().tables.get("paste-t").cells[0].map((c: any) => c.value)).toEqual(["1", "2"]);
+  });
 });

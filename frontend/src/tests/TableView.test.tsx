@@ -215,4 +215,28 @@ describe("TableView", () => {
     expect(screen.getByTestId("loc").textContent).toContain("width.demo=0%3A160");
     rect.mockRestore();
   });
+
+  it("drag-selects a rectangle and Ctrl adds another range", () => {
+    const grid: Table = {
+      name: "range",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [
+        ["1", "2"].map((value) => ({ type: CellType.Number, value, ref: null })),
+        ["3", "4"].map((value) => ({ type: CellType.Number, value, ref: null })),
+      ],
+      representation: Representation.Grid,
+      source_path: "range",
+    };
+    renderR(<TableView table={grid} editable />);
+    fireEvent.mouseDown(screen.getByText("1"));
+    fireEvent.mouseEnter(screen.getByText("4"));
+    fireEvent.mouseUp(window);
+    expect(document.querySelectorAll(".cell.selected")).toHaveLength(4);
+
+    fireEvent.mouseDown(screen.getByText("2"), { ctrlKey: true });
+    fireEvent.mouseUp(window);
+    expect((useStore.getState() as any).focused.ranges).toHaveLength(2);
+  });
 });

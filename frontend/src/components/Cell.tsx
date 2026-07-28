@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Cell as CellData, CellType } from "../types/domain";
 import { cellEditFsm } from "../fsm/cellEditFsm";
-import { isFocused } from "../store/selectors/tableSelectors";
 import { useStore } from "../store/store";
 
 interface CellProps {
@@ -11,12 +10,22 @@ interface CellProps {
   rowIndex: number;
   colIndex: number;
   editable?: boolean;
+  selected?: boolean;
+  onSelect?: (event: React.MouseEvent) => void;
+  onExtend?: () => void;
 }
 
-export function Cell({ cell, tableId, rowIndex, colIndex, editable }: CellProps) {
+export function Cell({
+  cell,
+  tableId,
+  rowIndex,
+  colIndex,
+  editable,
+  selected,
+  onSelect,
+  onExtend,
+}: CellProps) {
   const editCell = useStore((state: any) => state.tables_editCell);
-  const setTarget = useStore((state: any) => state.focus_setTarget);
-  const selected = useStore((state: any) => isFocused(state, tableId, rowIndex, colIndex));
   const navigate = useNavigate();
   const [editState, setEditState] = useState(cellEditFsm.initial);
   const [editValue, setEditValue] = useState(cell.value);
@@ -65,7 +74,8 @@ export function Cell({ cell, tableId, rowIndex, colIndex, editable }: CellProps)
   return (
     <span
       className={selected ? "cell selected" : "cell"}
-      onClick={() => setTarget({ tableId, kind: "cell", r: rowIndex, c: colIndex })}
+      onMouseDown={onSelect}
+      onMouseEnter={onExtend}
       onDoubleClick={handleDoubleClick}
     >
       {cell.value}

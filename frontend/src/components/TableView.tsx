@@ -31,11 +31,13 @@ import {
   serialize_heights,
   serialize_sorts,
   serialize_widths,
+  row_window_selector,
   table_view_selector,
   TableSort,
 } from "../store/selectors/tableViewSelectors";
 
 const EDGE = 6;
+const ESTIMATED_ROW_HEIGHT = 30;
 
 const selectionMode = (event: React.MouseEvent): FocusMode =>
   event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
@@ -60,6 +62,10 @@ export function TableView({ table, editable }: TableViewProps) {
   const picking = useStore((state) => state.picking);
   const pickColumn = useStore((state) => state.focus_pickColumn);
   const tableRef = useRef<HTMLTableElement>(null);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [rowHeight, setRowHeight] = useState(ESTIMATED_ROW_HEIGHT);
+  const [visibleBand, setVisibleBand] = useState({ top: 0, bottom: window.innerHeight });
   const filterRef = useRef<HTMLInputElement>(null);
   const columns = table.cells[0]?.length ?? table.column_names?.length ?? 0;
   const paramsRef = useRef<{ value: URLSearchParams; requested: string | null }>({
@@ -86,6 +92,34 @@ export function TableView({ table, editable }: TableViewProps) {
   const view = table_view_selector(table, query, sorts);
   const runTable = path_segments(table.source_path ?? "").length === 1 &&
     table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
+  const span = visibleColumns.length + (runTable ? 1 : 0) + (table.row_names ? 1 : 0);
+  const rowWindow = row_window_selector(
+    view.rows.map((row) => heights[row.index] ?? rowHeight),
+    visibleBand.top,
+    visibleBand.bottom
+  );
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const body = bodyRef.current;
+      const scroller = scrollRef.current;
+      if (!body || !scroller) return;
+      const bodyBox = body.getBoundingClientRect();
+      const scrollBox = scroller.getBoundingClientRect();
+      const top = Math.max(scrollBox.top, 0) - bodyBox.top;
+      const bottom = Math.min(scrollBox.bottom, window.innerHeight) - bodyBox.top;
+      setVisibleBand((band) => (band.top === top && band.bottom === bottom ? band : { top, bottom }));
+      const plainRow = body.querySelector<HTMLElement>("tr[data-row]:not([style])");
+      if (plainRow) setRowHeight(plainRow.getBoundingClientRect().height || ESTIMATED_ROW_HEIGHT);
+    };
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   useEffect(() => {
     const current = searchParams.toString();
@@ -224,29 +258,28 @@ export function TableView({ table, editable }: TableViewProps) {
       Math.abs(e.clientX - rect.left) <= EDGE || Math.abs(e.clientX - rect.right) <= EDGE;
     const onHorizontalEdge =
       Math.abs(e.clientY - rect.top) <= EDGE || Math.abs(e.clientY - rect.bottom) <= EDGE;
-    const rows = [...tableRef.current.querySelectorAll("tbody tr")];
+    const rows = [...tableRef.current.querySelectorAll<HTMLElement>("tbody tr[data-row]")];
     if (onVerticalEdge && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-      const r = rows.findIndex((row) => {
-        const rowRect = row.getBoundingClientRect();
-        return e.clientY >= rowRect.top && e.clientY <= rowRect.bottom;
+      const row = rows.find((candidate) => {
+        const box = candidate.getBoundingClientRect();
+        return e.clientY >= box.top && e.clientY <= box.bottom;
       });
-      if (r >= 0) startRange({ tableId, kind: "row", r, c: -1 }, selectionMode(e));
+      if (row) startRange({ tableId, kind: "row", r: Number(row.dataset.row), c: -1 }, selectionMode(e));
     } else if (onHorizontalEdge && e.clientX >= rect.left && e.clientX <= rect.right) {
-      const firstRow = rows[0] ? [...rows[0].children] : [];
-      const domIndex = firstRow.findIndex((cell) => {
-        const cellRect = cell.getBoundingClientRect();
-        return e.clientX >= cellRect.left && e.clientX <= cellRect.right;
+      const cells = [...(rows[0]?.querySelectorAll<HTMLElement>("td[data-column]") ?? [])];
+      const cell = cells.find((candidate) => {
+        const box = candidate.getBoundingClientRect();
+        return e.clientX >= box.left && e.clientX <= box.right;
       });
-      const c = table.row_names ? domIndex - 1 : domIndex;
-      if (c >= 0) startRange({ tableId, kind: "col", r: -1, c }, selectionMode(e));
+      if (cell) startRange({ tableId, kind: "col", r: -1, c: Number(cell.dataset.column) }, selectionMode(e));
     }
   };
 
   const rowSelected = (r: number) => selection_has_row(selection, r);
-  const colClass = (r: number, c: number) => {
+  const colClass = (position: number, c: number) => {
     if (!selection_has_column(selection, c)) return undefined;
-    const top = table.column_names ? r === -1 : r === 0;
-    const bottom = r === table.cells.length - 1;
+    const top = table.column_names ? position === -1 : position === 0;
+    const bottom = position === view.rows.length - 1;
     return ["col-selected", top ? "col-top" : "", bottom ? "col-bottom" : ""].join(" ").trim();
   };
   const frozen = (column: number) => visibleColumns.indexOf(column) < frozenCount;
@@ -322,7 +355,7 @@ export function TableView({ table, editable }: TableViewProps) {
       {view.error && <div className="table-filter-error">{view.error}</div>}
       {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
-        <div>
+        <div ref={scrollRef}>
           <table className="table-view" ref={tableRef}>
             <colgroup>
               {runTable && <col className="selection-column" />}
@@ -381,10 +414,14 @@ export function TableView({ table, editable }: TableViewProps) {
                 </tr>
               </thead>
             )}
-            <tbody>
-              {view.rows.map((row) => (
+            <tbody ref={bodyRef}>
+              {rowWindow.before > 0 && (
+                <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.before }} /></tr>
+              )}
+              {view.rows.slice(rowWindow.from, rowWindow.to).map((row, offset) => (
                 <tr
                   key={row.index}
+                  data-row={row.index}
                   className={rowSelected(row.index) ? "selected" : undefined}
                   style={heights[row.index] ? { height: heights[row.index] } : undefined}
                 >
@@ -404,7 +441,7 @@ export function TableView({ table, editable }: TableViewProps) {
                     </td>
                   )}
                   {table.row_names && (
-                    <th className={colClass(row.index, -2)}>
+                    <th className={colClass(rowWindow.from + offset, -2)}>
                       {editable ? (
                         <EditableText
                           className="cell"
@@ -421,7 +458,8 @@ export function TableView({ table, editable }: TableViewProps) {
                     return (
                     <td
                       key={c}
-                      className={classNames(colClass(row.index, c), frozen(c) && "frozen")}
+                      data-column={c}
+                      className={classNames(colClass(rowWindow.from + offset, c), frozen(c) && "frozen")}
                       style={frozenStyle(c)}
                     >
                       <CellComponent
@@ -443,6 +481,9 @@ export function TableView({ table, editable }: TableViewProps) {
                   })}
                 </tr>
               ))}
+              {rowWindow.after > 0 && (
+                <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.after }} /></tr>
+              )}
             </tbody>
           </table>
           {editable && <Button icon="plus" ghost title="add row" onClick={() => addRow(tableId)} />}

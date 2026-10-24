@@ -688,6 +688,11 @@ input.picking {
   overflow: auto;
 }
 
+.row-spacer > td {
+  padding: 0;
+  border: 0;
+}
+
 .run-overview {
   display: flex;
   flex-direction: column;

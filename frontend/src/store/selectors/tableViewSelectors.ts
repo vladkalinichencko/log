@@ -102,7 +102,26 @@ export function table_view_selector(table: Table, query: string, sorts: TableSor
   };
 }
 
-export const parse_sorts = (value: string | null): TableSort[] =>
+export interface RowWindow {
+  from: number;
+  to: number;
+  before: number;
+  after: number;
+}
+
+export function row_window_selector(heights: number[], top: number, bottom: number): RowWindow {
+  if (bottom <= top) return { from: 0, to: heights.length, before: 0, after: 0 };
+  const buffer = bottom - top;
+  let from = 0;
+  let offset = 0;
+  while (from < heights.length && offset + heights[from] <= top - buffer) offset += heights[from++];
+  const before = offset;
+  let to = from;
+  while (to < heights.length && offset < bottom + buffer) offset += heights[to++];
+  return { from, to, before, after: heights.slice(to).reduce((sum, height) => sum + height, 0) };
+}
+
+export const parse_sorts =(value: string | null): TableSort[] =>
   (value ?? "").split(",").flatMap((entry) => {
     const [column, direction] = entry.split(":");
     const index = Number(column);

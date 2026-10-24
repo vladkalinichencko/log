@@ -1,4 +1,4 @@
-import { HTMLAttributes, useState } from "react";
+import { HTMLAttributes, useEffect, useRef, useState } from "react";
 import { cellEditFsm } from "../fsm/cellEditFsm";
 
 interface EditableTextProps extends HTMLAttributes<HTMLSpanElement> {
@@ -10,6 +10,19 @@ export function EditableText({ value, onCommit, ...span }: EditableTextProps) {
   const [state, setState] = useState(cellEditFsm.initial);
   const [draft, setDraft] = useState(value);
   const send = (event: Parameters<typeof cellEditFsm.next>[1]) => setState((current) => cellEditFsm.next(current, event));
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const edited = useRef(false);
+  const begin = () => {
+    setDraft(value);
+    edited.current = true;
+    send("begin");
+  };
+
+  useEffect(() => {
+    if (state !== "display" || !edited.current) return;
+    edited.current = false;
+    spanRef.current?.focus();
+  }, [state]);
 
   if (state === "editing") {
     return (
@@ -33,9 +46,13 @@ export function EditableText({ value, onCommit, ...span }: EditableTextProps) {
   return (
     <span
       {...span}
-      onDoubleClick={() => {
-        setDraft(value);
-        send("dblclick");
+      ref={spanRef}
+      tabIndex={-1}
+      onDoubleClick={begin}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== "F2") return;
+        e.preventDefault();
+        begin();
       }}
     >
       {value}

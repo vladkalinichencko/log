@@ -718,7 +718,7 @@ The one FSM factory and its derivations:
 - `makeFsm(states, transitions)` (`baseFsm.ts`) → returns `{ initial, next(state, event) }`. Input: a states list + a `(state,event)->state` transition table. Output: a pure FSM object. Invalid transitions return the current state unchanged.
 - `button_fsm` = `makeFsm(["idle","hover","pressed","pending","done","error"], …)`. Every button and every `＋`/toolbar/representation control derives from this.
 - `load_fsm` = `makeFsm(["idle","loading","loaded","error"], …)`. Replaces a query library: every async fetch tracks its state here.
-- `cellEdit_fsm` = `makeFsm(["display","editing"], …)`. `display --dblclick--> editing`, `editing --enter/esc--> display`.
+- `cellEdit_fsm` = `makeFsm(["display","editing"], …)`. `display --begin--> editing` (double-click, or Enter / F2 on the focused cell), `editing --enter/esc--> display`; after editing, focus returns to the cell so the keyboard can continue.
 - `menu_fsm` = `makeFsm(["closed","open"], …)`. Right-click → `open`; pick / click-away → `closed`.
 - `player_fsm` = `makeFsm(["paused","playing"], …)`. Play → `playing`; pause or last frame → `paused`.
 - `connection_fsm` = `makeFsm(["connected","reconnecting"], …)` with max backoff 30s.
@@ -1341,15 +1341,15 @@ Every stateful element above is an explicit FSM named `<element>_fsm`, derived f
 
 For a `Table` these are essentially all operations that exist:
 
-1. Edit cell value (double-click → input; Enter = commit + deselect; Esc = cancel + deselect). `[v0]`
+1. Edit cell value (double-click, or Enter / F2 on the active cell → input; Enter = commit; Esc = cancel; focus stays on the cell). `[v0]` double-click; `[v1]` keyboard.
 2. Edit column name / row name (double-click). `[v1]`
 3. Add row / add column (right-click context menu). `[v0]`
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]` Width and height are table-scoped URL state; explicit minima are 80px for a column and 24px for a row so their controls cannot collapse.
 6. Zoom — Excel-like. `[v1]` `−` / `+` in the table's filter bar step the whole table (text, padding, widths) by 10% between 50% and 200% with CSS `zoom`; the level is table-scoped URL state (`zoom.<path>`, absent = 100%). Stored widths, heights and the row window stay in unzoomed CSS pixels: every measured size is divided by the element's `currentCSSZoom`.
-6a. Fill — drag the handle at the bottom-right of the active cell range in any of the four directions; the dominant direction wins. An even numeric step continues as a series (backwards when filling up or left), anything else repeats cyclically (in reverse order when filling up or left); one undoable edit. `[v1]`
+6a. Fill — drag the handle at the bottom-right of the active cell range in any of the four directions; the dominant direction wins. An even numeric step continues as a series (backwards when filling up or left), anything else repeats cyclically (in reverse order when filling up or left); one undoable edit. Ctrl/Cmd+D fills down the way a spreadsheet does: the top row of the active range is copied into the rest of it, or, for a one-row range, the row above is copied into it. `[v1]`
 6b. Find / replace — the editor's Replace panel takes a find text, a replacement and a Match case box (off = ignore case); while it is open every matching cell is highlighted, and the button says how many cells it will change. With a range of more than one cell selected, the toolbar button reads `Replace in selection` and only the selected cells are searched. Every occurrence in every matching non-reference cell is replaced as one undoable edit; the find text is plain text, not a pattern. `[v1]`
-7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end. Arrow keys move the active cell one step in visible (sorted, filtered, reordered) order, stopping at the edge; Shift+arrow moves the active end of the range instead; the active end is scrolled into view.
+7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end. Arrow keys move the active cell one step in visible (sorted, filtered, reordered) order, stopping at the edge; Shift+arrow moves the active end of the range instead; the active end is focused and scrolled into view. Shift+Space selects the active cell's row, Ctrl/Cmd+Space its column.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`

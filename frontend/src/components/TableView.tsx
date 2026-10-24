@@ -258,14 +258,29 @@ export function TableView({ table, editable }: TableViewProps) {
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const step = ARROW_STEPS[e.key];
+      const command = e.metaKey || e.ctrlKey;
       const active = selection.ranges[selection.ranges.length - 1];
-      if (!step || e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
-      const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
-      const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
-      if (!to) return;
-      e.preventDefault();
-      if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
-      else startRange({ tableId, kind: "cell", ...to }, "replace");
+      if (e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
+      if (step) {
+        const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
+        const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
+        if (!to) return;
+        e.preventDefault();
+        if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
+        else startRange({ tableId, kind: "cell", ...to }, "replace");
+      } else if (e.key === " " && (e.shiftKey || command)) {
+        e.preventDefault();
+        startRange(
+          e.shiftKey ? { tableId, kind: "row", r: active.endR, c: -1 } : { tableId, kind: "col", r: -1, c: active.endC },
+          "replace"
+        );
+      } else if (command && e.key.toLowerCase() === "d") {
+        const bounds = range_bounds(active);
+        const top = bounds.top === bounds.bottom ? bounds.top - 1 : bounds.top;
+        if (top < 0) return;
+        e.preventDefault();
+        fill(tableId, { ...bounds, top, bottom: top }, { ...bounds, top });
+      }
     };
     document.addEventListener("paste", onPaste);
     document.addEventListener("copy", onCopy);
@@ -281,9 +296,11 @@ export function TableView({ table, editable }: TableViewProps) {
 
   useEffect(() => {
     if (activeRange?.kind !== "cell") return;
-    tableRef.current
-      ?.querySelector(`tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const cell = tableRef.current?.querySelector<HTMLElement>(
+      `tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"] .cell`
+    );
+    cell?.focus({ preventScroll: true });
+    cell?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeRange?.kind, activeRange?.endR, activeRange?.endC]);
 
   useEffect(() => {

@@ -9,7 +9,7 @@ describe("cellEditFsm", () => {
   });
 
   it("double-click opens editing; enter and esc return to display", () => {
-    expect(cellEditFsm.next("display", "dblclick")).toBe("editing");
+    expect(cellEditFsm.next("display", "begin")).toBe("editing");
     expect(cellEditFsm.next("editing", "enter")).toBe("display");
     expect(cellEditFsm.next("editing", "esc")).toBe("display");
   });

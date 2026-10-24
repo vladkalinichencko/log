@@ -425,4 +425,53 @@ describe("TableView", () => {
     fireEvent.click(screen.getByText("Replace in 2 selected cells"));
     expect(view()).toEqual(["AdamW", "AdamW", "adam", "sgd"]);
   });
+
+  it("edits the active cell with F2 or Enter, fills down with Ctrl+D, and selects a row or column with Shift/Ctrl+Space", () => {
+    const s = () => useStore.getState();
+    s().focus_clear();
+    const grid: Table = {
+      name: "editkeys",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [["1", "x"], ["2", "y"], ["3", "z"]].map((row) =>
+        row.map((value) => ({ type: CellType.String, value, ref: null }))
+      ),
+      representation: Representation.Grid,
+      source_path: "editkeys",
+    };
+    s().tables_loadTable("editkeys", grid);
+    const values = () => s().tables.get("editkeys")!.cells.map((row) => row.map((cell) => cell.value));
+    const { rerender } = renderR(<TableView table={grid} editable />);
+    const refresh = () => rerender(<MemoryRouter><TableView table={s().tables.get("editkeys")!} editable /></MemoryRouter>);
+    fireEvent.mouseDown(screen.getByText("1"));
+    fireEvent.mouseUp(window);
+    expect(document.activeElement).toBe(screen.getByText("1"));
+    fireEvent.keyDown(document.activeElement!, { key: "F2" });
+    fireEvent.change(document.querySelector(".cell-input")!, { target: { value: "10" } });
+    fireEvent.keyDown(document.querySelector(".cell-input")!, { key: "Enter" });
+    refresh();
+    expect(values()[0][0]).toBe("10");
+    expect(document.activeElement?.textContent).toBe("10");
+    fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+    expect(document.querySelector(".cell-input")).toBeTruthy();
+    fireEvent.keyDown(document.querySelector(".cell-input")!, { key: "Escape" });
+
+    fireEvent.keyDown(document.body, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    expect(values().map((row) => row[0])).toEqual(["10", "10", "10"]);
+    refresh();
+    fireEvent.mouseDown(screen.getByText("z"));
+    fireEvent.mouseUp(window);
+    fireEvent.keyDown(document.body, { key: "d", metaKey: true });
+    expect(values().map((row) => row[1])).toEqual(["x", "y", "y"]);
+
+    fireEvent.keyDown(document.body, { key: " ", shiftKey: true });
+    expect(s().focused!.ranges).toEqual([{ kind: "row", r: 2, c: -1, endR: 2, endC: -1 }]);
+    fireEvent.mouseDown(screen.getAllByText("10")[0]);
+    fireEvent.mouseUp(window);
+    fireEvent.keyDown(document.body, { key: " ", ctrlKey: true });
+    expect(s().focused!.ranges).toEqual([{ kind: "col", r: -1, c: 0, endR: -1, endC: 0 }]);
+  });
 });

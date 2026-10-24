@@ -270,7 +270,7 @@ log/
         menuFsm.ts                # menu_fsm derived from baseFsm
         playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
-        resizeFsm.ts              # resize_fsm (idle/dragging) derived from baseFsm
+        dragFsm.ts                # drag_fsm (idle/dragging): every pointer drag — tile resize, column/row resize, range selection, fill
       components/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
@@ -1344,6 +1344,7 @@ For a `Table` these are essentially all operations that exist:
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]` Width and height are table-scoped URL state; explicit minima are 80px for a column and 24px for a row so their controls cannot collapse.
 6. Zoom — Excel-like. `[v1]`
+6a. Fill — drag the handle at the bottom-right of the active cell range down or right; an even numeric step continues as a series, anything else repeats; one undoable edit. `[v1]`
 7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`

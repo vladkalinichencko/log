@@ -8,7 +8,7 @@ import { Menu } from "./Menu";
 import { MenuButton } from "./MenuButton";
 import { TableResizeHandle } from "./TableResizeHandle";
 import { parsePaste } from "./parsePaste";
-import { selectionFsm } from "../fsm/selectionFsm";
+import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
 import { FocusMode } from "../store/slices/focusSlice";
 import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
@@ -20,6 +20,8 @@ import {
   selection_has_column,
   selection_has_row,
   table_selection_selector,
+  fill_target_selector,
+  range_bounds,
 } from "../store/selectors/tableSelectors";
 import {
   filter_clauses,
@@ -56,6 +58,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const editName = useStore((state) => state.tables_editName);
   const pasteBlock = useStore((state) => state.tables_pasteBlock);
   const clearCells = useStore((state) => state.tables_clearCells);
+  const fill = useStore((state) => state.tables_fill);
   const startRange = useStore((state) => state.focus_startRange);
   const extendRange = useStore((state) => state.focus_extendRange);
   const selection = useStore((state) => table_selection_selector(state, tableId));
@@ -72,7 +75,9 @@ export function TableView({ table, editable }: TableViewProps) {
     value: searchParams,
     requested: null,
   });
-  const [selectionState, setSelectionState] = useState(selectionFsm.initial);
+  const [selectionState, setSelectionState] = useState(dragFsm.initial);
+  const [fillState, setFillState] = useState(dragFsm.initial);
+  const [fillEnd, setFillEnd] = useState<{ r: number; c: number } | null>(null);
   const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
@@ -93,6 +98,12 @@ export function TableView({ table, editable }: TableViewProps) {
   const runTable = path_segments(table.source_path ?? "").length === 1 &&
     table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
   const span = visibleColumns.length + (runTable ? 1 : 0) + (table.row_names ? 1 : 0);
+  const activeRange = selection?.ranges[selection.ranges.length - 1];
+  const fillSource = editable && activeRange?.kind === "cell" ? range_bounds(activeRange) : null;
+  const fillTarget = fillSource && fillEnd ? fill_target_selector(fillSource, fillEnd) : null;
+  const inFillTarget = (r: number, c: number) =>
+    fillTarget !== null && fillSource !== null && r <= fillTarget.bottom && c <= fillTarget.right
+      && r >= fillTarget.top && c >= fillTarget.left && (r > fillSource.bottom || c > fillSource.right);
   const rowWindow = row_window_selector(
     view.rows.map((row) => heights[row.index] ?? rowHeight),
     visibleBand.top,
@@ -233,22 +244,38 @@ export function TableView({ table, editable }: TableViewProps) {
 
   useEffect(() => {
     if (selectionState !== "dragging") return;
-    const end = () => setSelectionState((state) => selectionFsm.next(state, "up"));
+    const end = () => setSelectionState((state) => dragFsm.next(state, "up"));
     window.addEventListener("mouseup", end);
     return () => window.removeEventListener("mouseup", end);
   }, [selectionState]);
+
+  useEffect(() => {
+    if (fillState !== "dragging") return;
+    const end = () => {
+      if (fillSource && fillTarget) fill(tableId, fillSource, fillTarget);
+      setFillEnd(null);
+      setFillState((state) => dragFsm.next(state, "up"));
+    };
+    window.addEventListener("mouseup", end);
+    return () => window.removeEventListener("mouseup", end);
+  }, [fillState, fillSource, fillTarget]);
 
   const beginSelection = (r: number, c: number, event: React.MouseEvent) => {
     if (!editable) return;
     event.preventDefault();
     startRange({ tableId, kind: "cell", r, c }, selectionMode(event));
-    setSelectionState((state) => selectionFsm.next(state, "down"));
+    setSelectionState((state) => dragFsm.next(state, "down"));
+  };
+
+  const beginFill = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFillState((state) => dragFsm.next(state, "down"));
   };
 
   const extendSelection = (r: number, c: number) => {
-    if (selectionState === "dragging") {
-      extendRange({ tableId, kind: "cell", r, c });
-    }
+    if (selectionState === "dragging") extendRange({ tableId, kind: "cell", r, c });
+    if (fillState === "dragging") setFillEnd({ r, c });
   };
 
   const selectFromEdge = (e: React.MouseEvent) => {
@@ -459,9 +486,16 @@ export function TableView({ table, editable }: TableViewProps) {
                     <td
                       key={c}
                       data-column={c}
-                      className={classNames(colClass(rowWindow.from + offset, c), frozen(c) && "frozen")}
+                      className={classNames(
+                        colClass(rowWindow.from + offset, c),
+                        frozen(c) && "frozen",
+                        inFillTarget(row.index, c) && "fill-target"
+                      )}
                       style={frozenStyle(c)}
                     >
+                      {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
+                        <span className="fill-handle" title="Drag to fill down or right" onMouseDown={beginFill} />
+                      )}
                       <CellComponent
                         cell={cell}
                         editable={editable}

@@ -10,7 +10,21 @@ export function table_selection_selector(state: Pick<StoreData, "focused">, tabl
   return state.focused?.tableId === tableId ? state.focused : null;
 }
 
-const range_bounds = (range: FocusRange) => ({
+export interface Bounds {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+export function fill_target_selector(source: Bounds, end: { r: number; c: number }): Bounds | null {
+  const down = end.r - source.bottom;
+  const across = end.c - source.right;
+  if (down <= 0 && across <= 0) return null;
+  return down >= across ? { ...source, bottom: end.r } : { ...source, right: end.c };
+}
+
+export const range_bounds = (range: FocusRange): Bounds => ({
   top: Math.min(range.r, range.endR),
   bottom: Math.max(range.r, range.endR),
   left: Math.min(range.c, range.endC),

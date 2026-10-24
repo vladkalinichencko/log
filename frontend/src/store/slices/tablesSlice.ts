@@ -1,5 +1,6 @@
 import { Cell, CellType, Frame, SavedView, Table, TableFunction } from "../../types/domain";
 import type { SetStore, StoreData } from "../store";
+import type { Bounds } from "../selectors/tableSelectors";
 
 interface Edit {
   tableId: string;
@@ -30,7 +31,38 @@ const valueCell = (value: string): Cell => ({
   ref: null,
 });
 
-const padNames = (names: string[] | null, length: number) =>
+export function fill_values(source: string[], count: number): string[] {
+  const numbers = source.map(Number);
+  const step = numbers[1] - numbers[0];
+  const series = source.length >= 2 && source.every((value) => NUMBER.test(value))
+    && numbers.every((value, i) => i === 0 || Math.abs(value - numbers[i - 1] - step) < 1e-9 * Math.max(1, Math.abs(step)));
+  const decimals = Math.max(...source.map((value) => value.split(".")[1]?.length ?? 0));
+  return Array.from({ length: count }, (_, i) =>
+    series
+      ? String(Number((numbers[0] + step * (source.length + i)).toFixed(decimals)))
+      : source[(source.length + i) % source.length]
+  );
+}
+
+function fill_cells(cells: Cell[][], source: Bounds, target: Bounds): Cell[][] {
+  const next = cells.map((row) => [...row]);
+  if (target.bottom > source.bottom) {
+    for (let c = source.left; c <= source.right; c++) {
+      const values = cells.slice(source.top, source.bottom + 1).map((row) => row[c].value);
+      fill_values(values, target.bottom - source.bottom)
+        .forEach((value, i) => (next[source.bottom + 1 + i][c] = valueCell(value)));
+    }
+  } else {
+    for (let r = source.top; r <= source.bottom; r++) {
+      const values = cells[r].slice(source.left, source.right + 1).map((cell) => cell.value);
+      fill_values(values, target.right - source.right)
+        .forEach((value, i) => (next[r][source.right + 1 + i] = valueCell(value)));
+    }
+  }
+  return next;
+}
+
+const padNames =(names: string[] | null, length: number) =>
   names ? [...names, ...Array.from({ length: Math.max(0, length - names.length) }, () => "")] : null;
 
 const applyEdit = (state: StoreData, tableId: string, change: (table: Table) => Table) => {
@@ -159,6 +191,9 @@ export const createTablesSlice = (set: SetStore) => ({
         };
       })
     ),
+
+  tables_fill: (tableId: string, source: Bounds, target: Bounds) =>
+    set((state) => applyEdit(state, tableId, (table) => ({ ...table, cells: fill_cells(table.cells, source, target) }))),
 
   tables_clearCells: (tableId: string, selected: { r: number; c: number }[]) =>
     set((state) =>

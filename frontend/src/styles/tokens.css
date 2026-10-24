@@ -480,6 +480,22 @@ select {
   position: relative;
 }
 
+.fill-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: var(--hit);
+  height: var(--hit);
+  background: var(--gray-600);
+  cursor: crosshair;
+}
+
+.table-view td.fill-target {
+  outline: 1px dashed var(--gray-600);
+  outline-offset: -1px;
+}
+
 .table-view .frozen {
   position: sticky;
   z-index: 2;

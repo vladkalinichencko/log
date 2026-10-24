@@ -90,6 +90,36 @@ def test_watch_paths_are_globs_and_hooks_end_with_the_run(tmp_path):
     assert all(not module._forward_hooks for module in net.modules())
 
 
+def test_watch_a_module_called_twice_in_one_step_keeps_both_outputs(tmp_path):
+    import numpy as np
+
+    class Shared(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.block = torch.nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.block(torch.relu(self.block(x)))
+
+    net = Shared()
+    outputs = []
+    net.block.register_forward_hook(lambda _m, _i, out: outputs.append(out.detach().numpy().copy()))
+
+    @log.run(project="p", runs_root=str(tmp_path))
+    def main():
+        log.watch(net, paths=["block"])
+        for step in range(2):
+            log.log("loss", 1.0, step=step)
+            net(torch.ones(1, 2))
+
+    main()
+    tensors = _rundir(tmp_path) / "epoch_0000" / "tensors"
+    rows = [json.loads(line) for line in (tensors / "index.jsonl").read_text().splitlines() if line.strip()]
+    assert [(row["path"], row["step"]) for row in rows] == [("block", 0), ("block@2", 0), ("block", 1), ("block@2", 1)]
+    assert np.allclose(np.load(tensors / rows[0]["file"]), outputs[0])
+    assert np.allclose(np.load(tensors / rows[1]["file"]), outputs[1])
+
+
 def test_checkpoint_cadence(tmp_path):
     net = torch.nn.Linear(2, 2)
 

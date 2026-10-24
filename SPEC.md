@@ -900,7 +900,7 @@ log.watch(
 - `paths`: optional `fnmatch` glob patterns (e.g. `"encoder.*"`); only matching module paths are hooked. `None` = all named modules with ≥1 parameter or that produce a tensor output.
 - Reference semantics (ADR-008): `WatchHandle` holds a `weakref` to `model`; hooks capture each tensor by `.detach()` and enqueue the detached tensor object (not a deep copy); the writer thread performs the CPU/NumPy copy. One `.detach()` + one `queue.put()` per hooked module per step on the main thread.
 - Returns `WatchHandle` with `.remove()`; hooks also auto-removed on run finish.
-- Documented (not errors): functional ops not captured; tied modules fire multiple times and get a numeric suffix `path#2`; dynamically created modules need a new `log.watch`.
+- Documented (not errors): functional ops not captured; a module called more than once in one step (a shared block applied twice, tied layers) logs each call: the first as `path`, the n-th as `path@n`, counted per (epoch, step) — before this the second call silently overwrote the first's file. The suffix is `@`, not `#`: a `#` in a UI link starts the URL fragment, so `/…block#2` would open `block`; dynamically created modules need a new `log.watch`.
 - Errors: `NoActiveRunError`, `InvalidPathError` (malformed glob).
 
 ### 9.5 `log.track`

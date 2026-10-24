@@ -27,6 +27,14 @@ def watch(
 ) -> WatchHandle:
     ctx = get_active_run()
     handles = []
+    calls: dict[str, tuple[tuple[int, int], int]] = {}
+
+    def record(path: str, tensor: torch.Tensor) -> None:
+        moment = (ctx.epoch, ctx.current_step)
+        seen_at, count = calls.get(path, (moment, 0))
+        count = count + 1 if seen_at == moment else 1
+        calls[path] = (moment, count)
+        log(path if count == 1 else f"{path}@{count}", tensor.detach())
     for name, module in model.named_modules():
         path = name or "model"
         if paths is not None and not any(fnmatchcase(path, pattern) for pattern in paths):
@@ -34,13 +42,13 @@ def watch(
         if log_activations:
             def forward_hook(_m, _inp, out, _path=path):
                 if isinstance(out, torch.Tensor):
-                    log(_path, out.detach())
+                    record(_path, out)
 
             handles.append(module.register_forward_hook(forward_hook))
         if log_gradients:
             def backward_hook(_m, grad_in, grad_out, _path=path):
                 if grad_out and isinstance(grad_out[0], torch.Tensor):
-                    log(f"{_path}.grad", grad_out[0].detach())
+                    record(f"{_path}.grad", grad_out[0])
 
             handles.append(module.register_full_backward_hook(backward_hook))
     handle = WatchHandle(model, handles)

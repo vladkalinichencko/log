@@ -110,9 +110,9 @@ def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
     return Table(
         name="metrics",
         kind=TableKind.grid,
-        column_names=["step", "epoch", *names],
+        column_names=["step", "epoch", "wall_time", "rank", *names],
         cells=[
-            [Cell(CellType.number, str(row["step"])), Cell(CellType.number, str(epoch))]
+            [_scalar_cell(row["step"]), _scalar_cell(epoch), _scalar_cell(row["wall_time"]), _scalar_cell(row["rank"])]
             + [_scalar_cell(row["scalars"].get(name)) for name in names]
             for epoch, row in rows
         ],

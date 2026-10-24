@@ -58,13 +58,14 @@ def test_run_metrics_table_spans_epochs_with_gaps_left_empty(tmp_path):
         {"step": 2, "samples_seen": 0, "wall_time": 3.0, "rank": 0, "scalars": {"loss": 0.5, "acc": 0.9}}
     ))
     metrics = read_table("p.r.metrics", _storage(tmp_path))
-    assert metrics.column_names == ["step", "epoch", "loss", "acc"]
-    assert [[c.value for c in r] for r in metrics.cells] == [
-        ["0", "0", "2.0", ""],
-        ["1", "0", "1.0", ""],
-        ["2", "1", "0.5", "0.9"],
+    assert metrics.column_names == ["step", "epoch", "wall_time", "rank", "loss", "acc"]
+    assert [[c.value for c in r][:2] + [c.value for c in r][3:] for r in metrics.cells] == [
+        ["0", "0", "0", "2.0", ""],
+        ["1", "0", "0", "1.0", ""],
+        ["2", "1", "0", "0.5", "0.9"],
     ]
-    assert metrics.cells[0][3].type.value == "empty"
+    assert metrics.cells[2][2].value == "3.0"
+    assert metrics.cells[0][5].type.value == "empty"
 
 
 def test_drill_tensor(tmp_path):

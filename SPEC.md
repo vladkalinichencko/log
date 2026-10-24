@@ -288,7 +288,7 @@ log/
         MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
         Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
         LoadError.tsx             # in-place failure of a view: message + Retry
-        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics + status strip
+        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics with its range slider, status strip, execution strip
         Sparkline.tsx             # hand-rolled SVG polyline trend inside a stat
         TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
@@ -421,7 +421,7 @@ Field rules:
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns = run meta (name, status, samples_seen) read from each `meta.json` |
 | `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
-| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart and status strip read this table. |
+| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
 | `<project>.<run>.epoch_<N>.<scalar>` | `kind=column`; `column_names=["step","samples_seen","wall_time","rank",<scalar>]`; one row per `metrics.jsonl` row containing that scalar |
 | `<project>.<run>.epoch_<N>.<tensor-path>` (a `tensor_ref` cell) | drilling reads the `.npy` and returns `kind=grid` with the tensor's 2-D values (n-D flattened to 2-D in v1; n-D native is `[v3]`) |

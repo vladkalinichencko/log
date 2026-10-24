@@ -1,7 +1,7 @@
 import type { Data, Layout } from "plotly.js";
 import { Representation, Table } from "../types/domain";
 import { SERIES } from "../store/slices/settingsSlice";
-import { end_value } from "../store/selectors/runSelectors";
+import { end_value, is_bookkeeping } from "../store/selectors/runSelectors";
 
 const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -40,8 +40,7 @@ export function downsampleSeries(
 ): [number[], number[]] {
   if (xs.length <= target) return [xs, ys];
   const bucketSize = Math.ceil(xs.length / (target / 2));
-  const outX: number[] = [];
-  const outY: number[] = [];
+  const kept = new Set([0, xs.length - 1]);
   for (let start = 0; start < xs.length; start += bucketSize) {
     let low = start;
     let high = start;
@@ -49,12 +48,10 @@ export function downsampleSeries(
       if (ys[i] < ys[low]) low = i;
       if (ys[i] > ys[high]) high = i;
     }
-    for (const i of [low, high].sort((a, b) => a - b)) {
-      outX.push(xs[i]);
-      outY.push(ys[i]);
-    }
+    kept.add(low).add(high);
   }
-  return [outX, outY];
+  const order = [...kept].sort((a, b) => a - b);
+  return [order.map((i) => xs[i]), order.map((i) => ys[i])];
 }
 
 export function chartSpec(
@@ -71,17 +68,21 @@ export function chartSpec(
     const xi = Math.max(0, cols.indexOf("step"));
     const x = column(table, xi);
     const palette = [t.accent, ...SERIES.map(token).filter((color) => color !== t.accent), t.muted];
-    const bookkeeping = ["samples_seen", "wall_time", "rank", "epoch"];
     const series = cols
       .map((name, i) => ({ name, i }))
-      .filter(({ name, i }) => i !== xi && !bookkeeping.includes(name.replace(/_\d+$/, "")));
+      .filter(({ name, i }) => i !== xi && !is_bookkeeping(name));
     const picked = (series.length > 0 ? series : [{ name: cols[last] ?? "", i: last }]).map(({ name, i }, order) => {
       const logged = table.cells.flatMap((row, index) => (row[i]?.value === "" ? [] : [index]));
-      const visible = window ? logged.filter((index) => x[index] >= window[0] && x[index] <= window[1]) : logged;
-      const [xs, ys] = downsampleSeries(
-        visible.map((index) => x[index]),
-        visible.map((index) => Number(table.cells[index][i].value))
-      );
+      const sample = (indices: number[]) =>
+        downsampleSeries(indices.map((index) => x[index]), indices.map((index) => Number(table.cells[index][i].value)));
+      const [wideX, wideY] = sample(logged);
+      const [closeX, closeY] = window
+        ? sample(logged.filter((index) => x[index] >= window[0] && x[index] <= window[1]))
+        : [[], []];
+      const points = [...wideX.map((at, k) => [at, wideY[k]]), ...closeX.map((at, k) => [at, closeY[k]])]
+        .sort((a, b) => a[0] - b[0]);
+      const xs = points.map(([at]) => at);
+      const ys = points.map(([, value]) => value);
       return { name, xs, ys, color: palette[order % palette.length] };
     });
     return {

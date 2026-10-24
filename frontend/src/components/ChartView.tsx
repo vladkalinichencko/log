@@ -8,9 +8,10 @@ const Plot = lazy(() => import("react-plotly.js"));
 interface ChartViewProps {
   table: Table;
   representation: Representation;
+  overview?: boolean;
 }
 
-export function ChartView({ table, representation }: ChartViewProps) {
+export function ChartView({ table, representation, overview }: ChartViewProps) {
   const [window, setWindow] = useState<[number, number] | null>(null);
 
   const onRelayout = (event: Readonly<PlotRelayoutEvent>) => {
@@ -20,10 +21,14 @@ export function ChartView({ table, representation }: ChartViewProps) {
     else if (event["xaxis.autorange"]) setWindow(null);
   };
 
+  const spec = chartSpec(table, representation, window);
+  const xaxis = { ...spec.layout.xaxis, rangeslider: { visible: true, thickness: 0.12, bgcolor: "transparent" } };
+
   return (
     <Suspense fallback={<div>Loading chart…</div>}>
       <Plot
-        {...chartSpec(table, representation, window)}
+        data={spec.data}
+        layout={overview ? { ...spec.layout, xaxis } : spec.layout}
         config={{ displayModeBar: false }}
         style={{ width: "100%", height: "100%" }}
         useResizeHandler

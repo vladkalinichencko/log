@@ -30,6 +30,27 @@ describe("representations", () => {
     expect(trace.y).toEqual([2, 1]);
   });
 
+  it("chartSpec(line) skips unlogged steps instead of drawing zeros and labels each line end", () => {
+    const empty: Cell = { type: CellType.Empty, value: "", ref: null };
+    const metrics = table(
+      TableKind.Grid,
+      Representation.Line,
+      [
+        [num("0"), num("0"), num("2"), empty],
+        [num("1"), num("0"), num("1"), num("0.5")],
+        [num("2"), num("1"), num("0.25"), empty],
+      ],
+      ["step", "epoch", "loss", "acc"]
+    );
+    const spec = chartSpec(metrics, Representation.Line);
+    const [loss, acc] = spec.data as any[];
+    expect(spec.data).toHaveLength(2);
+    expect(loss.x).toEqual([0, 1, 2]);
+    expect(acc.x).toEqual([1]);
+    expect(acc.y).toEqual([0.5]);
+    expect(spec.layout.annotations!.map((note) => note.text)).toEqual(["0.25", "0.5"]);
+  });
+
   it("chartSpec(heatmap) maps the grid to z", () => {
     const grid = table(TableKind.Grid, Representation.Heatmap, [
       [num("0"), num("1")],

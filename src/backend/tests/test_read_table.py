@@ -39,7 +39,7 @@ def _make_run(root):
 def test_drill_run_to_scalar(tmp_path):
     _make_run(tmp_path)
     run = read_table("p.r", _storage(tmp_path))
-    assert {c[0].value for c in run.cells} == {"config", "meta", "epoch_0000"}
+    assert {c[0].value for c in run.cells} == {"config", "meta", "metrics", "epoch_0000"}
 
     epoch = read_table("p.r.epoch_0000", _storage(tmp_path))
     assert {c[0].value for c in epoch.cells} == {"loss", "w"}
@@ -48,6 +48,23 @@ def test_drill_run_to_scalar(tmp_path):
     assert series.kind.value == "column"
     assert series.column_names == ["step", "samples_seen", "wall_time", "rank", "loss"]
     assert [r[-1].value for r in series.cells] == ["2.0", "1.0"]
+
+
+def test_run_metrics_table_spans_epochs_with_gaps_left_empty(tmp_path):
+    _make_run(tmp_path)
+    epoch_1 = tmp_path / "p" / "r" / "epoch_0001"
+    epoch_1.mkdir()
+    (epoch_1 / "metrics.jsonl").write_text(json.dumps(
+        {"step": 2, "samples_seen": 0, "wall_time": 3.0, "rank": 0, "scalars": {"loss": 0.5, "acc": 0.9}}
+    ))
+    metrics = read_table("p.r.metrics", _storage(tmp_path))
+    assert metrics.column_names == ["step", "epoch", "loss", "acc"]
+    assert [[c.value for c in r] for r in metrics.cells] == [
+        ["0", "0", "2.0", ""],
+        ["1", "0", "1.0", ""],
+        ["2", "1", "0.5", "0.9"],
+    ]
+    assert metrics.cells[0][3].type.value == "empty"
 
 
 def test_drill_tensor(tmp_path):

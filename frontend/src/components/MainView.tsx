@@ -1,6 +1,7 @@
 import { useTable } from "./useTable";
 import { render } from "./render";
 import { LoadError } from "./LoadError";
+import { RunOverview } from "./RunOverview";
 import { CellType, Representation } from "../types/domain";
 import { path_segments } from "../store/selectors/pathSelectors";
 
@@ -21,13 +22,18 @@ export function MainView({ path }: MainViewProps) {
   const inline = depth >= 2 && hasChildren;
   const sectionTitle = depth === 0 ? "All projects" : depth === 1 ? "Runs" : inline ? "Tables" : "Data";
 
+  const runOverview = depth === 2 && table.cells.some((row) => row[0]?.ref === `${path}.metrics`);
+
   return (
-    <section className="data-section">
-      <div className="section-heading">
-        <h2>{sectionTitle}</h2>
-        <span className="subtitle">{table.cells.length}</span>
-      </div>
-      {render(table, inline ? Representation.Inline : Representation.Grid)}
-    </section>
+    <>
+      {runOverview && <RunOverview path={path} />}
+      <section className="data-section">
+        <div className="section-heading">
+          <h2>{sectionTitle}</h2>
+          <span className="subtitle">{table.cells.length}</span>
+        </div>
+        {render(table, inline ? Representation.Inline : Representation.Grid)}
+      </section>
+    </>
   );
 }

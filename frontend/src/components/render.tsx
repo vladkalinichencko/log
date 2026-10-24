@@ -30,7 +30,7 @@ export function applicable(table: Table): Representation[] {
   if (rows.length === 0) return reps;
 
   const lastColumnNumeric = rows.every((row) => row.length > 0 && isNumber(row[row.length - 1]));
-  const allNumeric = rows.every((row) => row.length > 0 && row.every(isNumber));
+  const allNumeric = rows.every((row) => row.length > 0 && row.every((cell) => isNumber(cell) || cell.type === CellType.Empty));
   const isTrajectory =
     allNumeric &&
     table.column_names !== null &&

@@ -28,6 +28,8 @@ def read_table(path: str, storage: StoragePort) -> Table:
         return _keyvalue_table("meta", f"{base}.meta", meta.items())
     if inside == ["checkpoints"]:
         return _checkpoints_table(base, run_dir, storage)
+    if inside == ["metrics"]:
+        return _run_metrics_table(base, run_dir, storage)
 
     epoch, *leaf = inside
     if not leaf:
@@ -78,8 +80,10 @@ def _project_table(project: str, storage: StoragePort) -> Table:
 
 
 def _run_table(run: str, base: str, run_dir: str, storage: StoragePort) -> Table:
+    run_epochs = epochs(storage, run_dir)
     entries = [("config", f"{base}.config"), ("meta", f"{base}.meta")]
-    entries += [(epoch, f"{base}.{epoch}") for epoch in epochs(storage, run_dir)]
+    entries += [("metrics", f"{base}.metrics")] if run_epochs else []
+    entries += [(epoch, f"{base}.{epoch}") for epoch in run_epochs]
     if storage.exists(f"{run_dir}/checkpoints"):
         entries.append(("checkpoints", f"{base}.checkpoints"))
     return _folder_table(run, base, entries)
@@ -94,6 +98,31 @@ def _checkpoints_table(base: str, run_dir: str, storage: StoragePort) -> Table:
         cells=[[Cell(CellType.string, row["tag"])] for row in rows],
         source_path=f"{base}.checkpoints",
     )
+
+
+def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
+    rows = [
+        (int(epoch.removeprefix("epoch_")), row)
+        for epoch in epochs(storage, run_dir)
+        for row in read_jsonl(storage, f"{run_dir}/{epoch}/metrics.jsonl")
+    ]
+    names = list(dict.fromkeys(name for _, row in rows for name in row["scalars"]))
+    return Table(
+        name="metrics",
+        kind=TableKind.grid,
+        column_names=["step", "epoch", *names],
+        cells=[
+            [Cell(CellType.number, str(row["step"])), Cell(CellType.number, str(epoch))]
+            + [_scalar_cell(row["scalars"].get(name)) for name in names]
+            for epoch, row in rows
+        ],
+        source_path=f"{base}.metrics",
+        representation=Representation.line,
+    )
+
+
+def _scalar_cell(value) -> Cell:
+    return Cell(CellType.empty, "") if value is None else Cell(CellType.number, str(value))
 
 
 def _epoch_table(epoch_path: str, epoch_dir: str, storage: StoragePort) -> Table:

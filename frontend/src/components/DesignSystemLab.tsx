@@ -23,9 +23,11 @@ const rows = [
   ["all_reduce", "grad sync", "8.7ms", 44, "8%"],
 ] as const;
 
-function MiniLine({ tone = "accent" }: { tone?: "accent" | "blue" | "green" }) {
+const TONES = { accent: "var(--accent)", blue: "var(--series-5)", green: "var(--positive)" };
+
+function MiniLine({ tone = "accent" }: { tone?: keyof typeof TONES }) {
   return (
-    <svg className={`lab-spark lab-spark--${tone}`} viewBox="0 0 120 28" aria-hidden="true">
+    <svg className="sparkline" style={{ color: TONES[tone] }} viewBox="0 0 120 28" aria-hidden="true">
       <path d="M1 21 C16 7 25 22 39 12 S63 17 77 8 S101 17 119 3" />
     </svg>
   );

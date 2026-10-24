@@ -688,6 +688,71 @@ input.picking {
   overflow: auto;
 }
 
+.run-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-top: var(--space-2);
+}
+
+.run-hero,
+.stat-strip {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-0);
+}
+
+.run-hero {
+  height: calc(var(--menu-height) * 1.25);
+  overflow: hidden;
+}
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--menu-width), 1fr));
+}
+
+.stat {
+  position: relative;
+  min-height: calc(var(--space-4) * 4);
+  padding: var(--space-2);
+  border-right: 1px solid var(--gray-200);
+}
+
+.stat:last-child {
+  border-right: 0;
+}
+
+.stat > span,
+.stat small {
+  display: block;
+  color: var(--gray-600);
+  font-size: var(--text-meta);
+}
+
+.stat strong {
+  display: block;
+  margin-top: var(--space);
+  font-size: var(--text-page);
+  overflow-wrap: anywhere;
+}
+
+.sparkline {
+  position: absolute;
+  right: var(--space);
+  bottom: var(--space);
+  width: calc(var(--space-4) * 3.5);
+  height: var(--space-3);
+  color: var(--accent);
+}
+
+.sparkline > * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .notices {
   position: fixed;
   right: var(--space-2);

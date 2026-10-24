@@ -258,6 +258,7 @@ log/
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
           pathSelectors.ts        # path_segments, is_run_ref, tensor_source, with_param
           searchSelectors.ts      # search_selector (matching `.`-paths)
+          runSelectors.ts         # run_stats_selector (status strip from meta + metrics), end_value (how a current value is printed)
       api/
         client.ts                 # one request() + one typed line per route; relative URLs (Vite proxies /api and /ws in dev)
         websocket.ts              # connectWebSocket(onMessage) on the page's own host
@@ -284,6 +285,8 @@ log/
         MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
         Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
         LoadError.tsx             # in-place failure of a view: message + Retry
+        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics + status strip
+        Sparkline.tsx             # hand-rolled SVG polyline trend inside a stat
         TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
         Toolbar.tsx               # thin action bar
@@ -414,7 +417,8 @@ Field rules:
 |---|---|
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns = run meta (name, status, samples_seen) read from each `meta.json` |
-| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, each `epoch_<N>`, `checkpoints` |
+| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
+| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart and status strip read this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
 | `<project>.<run>.epoch_<N>.<scalar>` | `kind=column`; `column_names=["step","samples_seen","wall_time","rank",<scalar>]`; one row per `metrics.jsonl` row containing that scalar |
 | `<project>.<run>.epoch_<N>.<tensor-path>` (a `tensor_ref` cell) | drilling reads the `.npy` and returns `kind=grid` with the tensor's 2-D values (n-D flattened to 2-D in v1; n-D native is `[v3]`) |

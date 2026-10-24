@@ -172,7 +172,7 @@ export function DesignSystem() {
             )}
           </MenuButton>
           <MenuButton icon="trash" ghost title="confirm panel">
-            {() => <div className="menu panel"><Button label="confirm" onClick={() => {}} /></div>}
+            {() => <Menu><Button label="confirm" onClick={() => {}} /></Menu>}
           </MenuButton>
         </div>
       </Section>

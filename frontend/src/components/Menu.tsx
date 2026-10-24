@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, IconName } from "./Icon";
 
@@ -18,9 +18,10 @@ interface MenuProps {
   items?: MenuItem[];
   sections?: MenuSection[];
   at?: { x: number; y: number };
+  children?: ReactNode;
 }
 
-export function Menu({ items, sections, at }: MenuProps) {
+export function Menu({ items, sections, at, children }: MenuProps) {
   const flat = sections ? sections.flatMap((section) => section.items) : items ?? [];
   const [active, setActive] = useState(-1);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
@@ -46,6 +47,7 @@ export function Menu({ items, sections, at }: MenuProps) {
   }, [flat.length, at?.x, at?.y]);
 
   useEffect(() => {
+    if (flat.length === 0) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -100,6 +102,10 @@ export function Menu({ items, sections, at }: MenuProps) {
           );
         })}
       </div>
+  ) : children ? (
+    <div className="menu panel" style={position} ref={root}>
+      {children}
+    </div>
   ) : (
     <div className="menu fade-scroll-y" style={position} ref={root}>
       {flat.map(item)}

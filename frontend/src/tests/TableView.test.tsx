@@ -312,4 +312,30 @@ describe("TableView", () => {
     fireEvent.mouseUp(window);
     expect((useStore.getState() as any).focused.ranges).toHaveLength(2);
   });
+
+  it("replaces text in every matching cell as one undoable edit", () => {
+    const s = () => useStore.getState();
+    const grid: Table = {
+      name: "tags",
+      kind: TableKind.Grid,
+      column_names: ["tag", "note"],
+      row_names: null,
+      cells: [
+        ["adam_lr", "adam warmup"].map((value) => ({ type: CellType.String, value, ref: null })),
+        ["sgd_lr", "12"].map((value) => ({ type: CellType.String, value, ref: null })),
+      ],
+      representation: Representation.Grid,
+      source_path: "tags",
+    };
+    s().tables_loadTable("tags", grid);
+    const { unmount } = renderR(<TableView table={grid} editable />);
+    fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
+    fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
+    fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "adamw" } });
+    fireEvent.click(screen.getByText("Replace in 2 cells"));
+    unmount();
+    expect(s().tables.get("tags")!.cells.flat().map((cell) => cell.value)).toEqual(["adamw_lr", "adamw warmup", "sgd_lr", "12"]);
+    s().tables_undo();
+    expect(s().tables.get("tags")!.cells.flat().map((cell) => cell.value)).toEqual(["adam_lr", "adam warmup", "sgd_lr", "12"]);
+  });
 });

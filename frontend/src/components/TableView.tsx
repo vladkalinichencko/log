@@ -11,6 +11,7 @@ import { parsePaste } from "./parsePaste";
 import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
 import { FocusMode } from "../store/slices/focusSlice";
+import { cell_matches } from "../store/slices/tablesSlice";
 import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
   selection_anchor,
@@ -59,6 +60,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const pasteBlock = useStore((state) => state.tables_pasteBlock);
   const clearCells = useStore((state) => state.tables_clearCells);
   const fill = useStore((state) => state.tables_fill);
+  const replaceText = useStore((state) => state.tables_replaceText);
   const startRange = useStore((state) => state.focus_startRange);
   const extendRange = useStore((state) => state.focus_extendRange);
   const selection = useStore((state) => table_selection_selector(state, tableId));
@@ -78,6 +80,8 @@ export function TableView({ table, editable }: TableViewProps) {
   const [selectionState, setSelectionState] = useState(dragFsm.initial);
   const [fillState, setFillState] = useState(dragFsm.initial);
   const [fillEnd, setFillEnd] = useState<{ r: number; c: number } | null>(null);
+  const [findText, setFindText] = useState("");
+  const [replacement, setReplacement] = useState("");
   const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
@@ -366,6 +370,27 @@ export function TableView({ table, editable }: TableViewProps) {
             />
           )}
         </MenuButton>
+        {editable && (
+          <MenuButton label="Replace" title="Find text in cells and replace every match">
+            {(close) => {
+              const matches = table.cells.flat().filter((cell) => cell_matches(cell, findText)).length;
+              return (
+                <Menu>
+                  <input placeholder="find" value={findText} onChange={(e) => setFindText(e.target.value)} />
+                  <input placeholder="replace with" value={replacement} onChange={(e) => setReplacement(e.target.value)} />
+                  <Button
+                    label={`Replace in ${matches} cells`}
+                    disabled={matches === 0}
+                    onClick={() => {
+                      replaceText(tableId, findText, replacement);
+                      close();
+                    }}
+                  />
+                </Menu>
+              );
+            }}
+          </MenuButton>
+        )}
       </div>
       {view.clauses.length > 0 && (
         <div className="filter-chips">

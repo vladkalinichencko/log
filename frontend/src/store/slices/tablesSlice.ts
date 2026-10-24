@@ -31,6 +31,9 @@ const valueCell = (value: string): Cell => ({
   ref: null,
 });
 
+export const cell_matches = (cell: Cell, find: string) =>
+  find !== "" && cell.type !== CellType.TableRef && cell.value.includes(find);
+
 export function fill_values(source: string[], count: number): string[] {
   const numbers = source.map(Number);
   const step = numbers[1] - numbers[0];
@@ -190,6 +193,16 @@ export const createTablesSlice = (set: SetStore) => ({
           row_names: padNames(table.row_names, height),
         };
       })
+    ),
+
+  tables_replaceText: (tableId: string, find: string, replacement: string) =>
+    set((state) =>
+      applyEdit(state, tableId, (table) => ({
+        ...table,
+        cells: table.cells.map((row) =>
+          row.map((cell) => (cell_matches(cell, find) ? valueCell(cell.value.split(find).join(replacement)) : cell))
+        ),
+      }))
     ),
 
   tables_fill: (tableId: string, source: Bounds, target: Bounds) =>

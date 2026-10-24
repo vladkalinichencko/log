@@ -139,9 +139,9 @@ export function Toolbar({ path, table, content }: ToolbarProps) {
         disabled={lineSelection === null}
       >
         {() => (
-          <div className="menu panel">
+          <Menu>
             <Button label="confirm" onClick={deleteSelection} />
-          </div>
+          </Menu>
         )}
       </MenuButton>
       <MenuButton icon="rename" ghost title="rename run" disabled={runRef === null}>

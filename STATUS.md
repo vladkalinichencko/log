@@ -89,7 +89,7 @@ What still separates `HEAD` from a finished v1 (SPEC §3.2), in the order it sho
 6. ~~Production run screen from the design lab~~ — hero chart + status strip done, see changelog. Not moved yet: the overview range slider under the hero, epoch boundary marks on the time axis, and the execution strip / alerts (they need data the toolkit does not log yet: profiler traces, alert rules).
 7. ~~Failure surfacing on run actions~~ — done, see changelog.
 8. **Multi-run rename dialog** (Finder-style over the selection column), placeholder visual treatment (glow + cursor-attached chip), export dialog with live preview.
-9. **Spreadsheet remainder**: find/replace, fill-drag, zoom; keyboard equivalent for tile reorder and real links/buttons for every clickable (accessibility).
+9. **Spreadsheet remainder**: ~~find/replace, fill-drag~~ (done, see changelog), zoom; keyboard equivalent for tile reorder and real links/buttons for every clickable (accessibility).
 
 **C. v1 performance seams (§8, ADR-016)**
 10. ~~Row windowing~~ — done, see changelog.
@@ -105,6 +105,8 @@ The read path is complete: every run-data read goes through `StoragePort`; the o
 `http://localhost:8000` — один процесс: FastAPI отдаёт и API, и собранный фронт (`frontend/dist`, catch-all route → `index.html`, so deep links work). Живёт под launchd (`~/Library/LaunchAgents/com.log.viewer.plist`, `KeepAlive` + `RunAtLoad`): переживает перезагрузку мака и рестартует при падении; лог в `/tmp/com.log.viewer.log`. После изменений фронта: `cd frontend && npx vite build`; после изменений бэка: `launchctl kickstart -k gui/$UID/com.log.viewer`. Vite на `:3000` остаётся только для разработки.
 
 ## Changelog (newest first — commit → what became real)
+
+- `HEAD` — **Find and replace in the editor.** The editor's filter bar gains a Replace panel (find, replace with, `Replace in N cells`); `tables_replaceText` replaces every occurrence in every non-reference cell through `applyEdit`, so it is one undoable edit. Matching is `cell_matches`: plain, case-sensitive substring. Checked by `TableView.test.tsx` › replaces text in every matching cell (rendered panel → store → undo); the test fails on the previous `TableView`. Matching cells are not highlighted (proposed, not built). Live check (`replace.js`, production build): `batch → batch_size` in a run config, Ctrl+Z restores it, no page errors. The live check also showed the panel clipped by the window's right edge: every `.menu.panel` (Replace, Rename, delete confirm) was placed where it sat in the flow. `Menu` now takes `children` and renders them as a panel through the same portal and edge-aware placement as its lists, so all four panels are one component; measured: the Replace panel ends at x=1392 in a 1400px window.
 
 - `HEAD` — **Fill-drag like a spreadsheet.** The active cell range shows a handle at its bottom-right corner; dragging it down or right fills the dominant direction: an even numeric step continues as a series (`1, 2 → 3, 4`, decimals kept), anything else repeats cyclically; one undoable edit (`tables_fill`, pure `fill_values` / `fill_target_selector`). Before adding the third pointer-drag machine, `selection_fsm` and `resize_fsm` (identical `idle/dragging`, `down/up`) were merged into one `drag_fsm` that all four drags use. Fill works on data rows, like range selection does; up/left fill is not built. Tests: `fill.test.tsx` (series/repeat rules, direction, drag through the rendered table + undo).
 

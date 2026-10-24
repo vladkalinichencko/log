@@ -46,6 +46,20 @@ function violations() {
     if (element.matches(".bar, .table-filter, .toggle, .group, .tile, .modal, .content, .stat-strip")
       && element.scrollWidth > element.clientWidth + 1) found.push(`${name(element)} overflows ${element.scrollWidth} > ${element.clientWidth}`);
   }
+  const modal = document.querySelector(".modal");
+  const floating = (element) => element.closest(".modal, .menu, .notices") !== null;
+  if (modal) {
+    const box = modal.getBoundingClientRect();
+    for (const element of document.querySelectorAll("#root *")) {
+      if (floating(element) || getComputedStyle(element).zIndex === "auto") continue;
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(rect.left, box.left), right = Math.min(rect.right, box.right);
+      const top = Math.max(rect.top, box.top), bottom = Math.min(rect.bottom, box.bottom);
+      if (right <= left || bottom <= top) continue;
+      const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+      if (hit && !floating(hit)) found.push(`${name(hit)} paints over the modal`);
+    }
+  }
   return [...new Set(found)];
 }
 

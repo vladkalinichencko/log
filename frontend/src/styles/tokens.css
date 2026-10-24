@@ -554,8 +554,15 @@ select {
   background: var(--gray-0);
 }
 
-.table-view th.frozen {
+.table-view thead th {
+  position: sticky;
+  top: 0;
   z-index: 3;
+  background: var(--gray-100);
+}
+
+.table-view thead th.frozen {
+  z-index: 4;
 }
 
 .table-view .selection-column,
@@ -933,6 +940,7 @@ input.picking {
 
 .modal {
   position: fixed;
+  z-index: 9;
   inset: var(--space-2);
   padding: var(--space-2);
   background: var(--gray-0);

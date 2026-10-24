@@ -244,7 +244,7 @@ log/
     index.html                    # the app entry
     design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
     scripts/
-      check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens
+      check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens, and on any page element painted over an open modal
     src/
       main.tsx                    # React root, router
       store/
@@ -1357,7 +1357,7 @@ For a `Table` these are essentially all operations that exist:
 12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
 14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
-15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`, `zoom.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
+15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`, `zoom.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. The header row stays at the top of the table's scroll box while its rows scroll (a collection table that scrolls with the page keeps its header in place only inside its own box). A comma separates filter clauses, so quoted values containing commas are not expressible yet.
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 

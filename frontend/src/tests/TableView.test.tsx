@@ -37,6 +37,7 @@ describe("TableView", () => {
   it("renders every cell value and the dimensions line in the editor", () => {
     renderR(<TableView table={table} editable />);
     expect(screen.getByText("2 cols × 1 rows")).toBeTruthy();
+    expect(screen.getByText("2.5").closest("td")!.classList.contains("number")).toBe(true);
     expect(screen.getByText("2.5")).toBeTruthy();
     expect(screen.getByText("1.9")).toBeTruthy();
   });

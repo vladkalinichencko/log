@@ -595,7 +595,8 @@ export function TableView({ table, editable }: TableViewProps) {
                         colClass(rowWindow.from + offset, c),
                         frozen(c) && "frozen",
                         inFillTarget(row.index, c) && "fill-target",
-                        matchedKeys.has(cell_key({ r: row.index, c })) && "match"
+                        matchedKeys.has(cell_key({ r: row.index, c })) && "match",
+                        cell.type === CellType.Number && "number"
                       )}
                       style={frozenStyle(c)}
                     >

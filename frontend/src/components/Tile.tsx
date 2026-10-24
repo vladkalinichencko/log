@@ -4,6 +4,7 @@ import { RepresentationSwitcher } from "./RepresentationSwitcher";
 import { Toolbar } from "./Toolbar";
 import { Player } from "./Player";
 import { Button } from "./Button";
+import { LoadError } from "./LoadError";
 import { render, chartReps } from "./render";
 import { Representation } from "../types/domain";
 import { useStore } from "../store/store";
@@ -19,13 +20,13 @@ interface TileProps {
 
 export function Tile({ path, editor, titled }: TileProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { table, loadState } = useTable(path);
+  const { table, loadState, error, retry } = useTable(path);
   const { tensor, leaf } = useTensor(path, table);
   const chosen = useStore((state) => state.tiles.get(path)?.representation);
   const mode = useStore((state) => state.tiles.get(path)?.mode) ?? "table";
   const content = useRef<HTMLDivElement>(null);
 
-  if (loadState === "error") return <div>Failed to load {path}</div>;
+  if (loadState === "error") return <LoadError message={error} retry={retry} />;
   if (!table) return <div>Loading…</div>;
 
   const expanded = searchParams.get("modal") === path;

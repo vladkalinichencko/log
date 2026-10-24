@@ -82,7 +82,7 @@ flowchart LR
 What still separates `HEAD` from a finished v1 (SPEC §3.2), in the order it should be built. Three kinds: contract gaps where SPEC promises something the code does not do, product UX the owner asked for, and v1 performance seams. Each item names where it lands.
 
 **A. Contract gaps (SPEC says it, code does not do it)**
-1. **Visible failure + retry everywhere** (§12): `Tile`/`MainView` show "Failed to load" with no retry and no message; the boot loads (`/api/paths`, views, workspaces, functions) have no `load_fsm` at all, so a failure is only an unhandled rejection in the console. One `load_fsm`-driven error block with the `ApiError` message and a Retry button, reused by every loader.
+1. ~~Visible failure + retry everywhere~~ — done, see changelog.
 2. **`GET /api/runs/{project}/{run}`** (§9.12) is listed but not routed (the folder Table is reachable only through `/api/table`).
 3. **WebSocket `run_added` / `run_removed` / client `subscribe`** (§9.12): only `run_updated` exists; a new run appears only after a reload.
 4. **`log.export.figure(renderer=...)`** (§9.11): `proplot` and `"nature"` presets are accepted but ignored — everything renders with plain matplotlib.
@@ -90,7 +90,7 @@ What still separates `HEAD` from a finished v1 (SPEC §3.2), in the order it sho
 
 **B. Product UX the owner asked for**
 6. **Production run screen from the design lab**: hero timeline chart with end values, status strip, then tables (`DESIGN-SYSTEM.md` "Rollout"). The lab lives in `/design-system` §09; moving a proposal into the product means moving its values into `tokens.css` and its markup into a real component.
-7. **Failure surfacing on run actions**: delete / rename / reset now show `pending`/`error` on their buttons; a short error text next to the failed button is still missing.
+7. ~~Failure surfacing on run actions~~ — done, see changelog.
 8. **Multi-run rename dialog** (Finder-style over the selection column), placeholder visual treatment (glow + cursor-attached chip), export dialog with live preview.
 9. **Spreadsheet remainder**: find/replace, fill-drag, zoom; keyboard equivalent for tile reorder and real links/buttons for every clickable (accessibility).
 
@@ -108,6 +108,8 @@ The read path is complete: every run-data read goes through `StoragePort`; the o
 `http://localhost:8000` — один процесс: FastAPI отдаёт и API, и собранный фронт (`frontend/dist`, catch-all route → `index.html`, so deep links work). Живёт под launchd (`~/Library/LaunchAgents/com.log.viewer.plist`, `KeepAlive` + `RunAtLoad`): переживает перезагрузку мака и рестартует при падении; лог в `/tmp/com.log.viewer.log`. После изменений фронта: `cd frontend && npx vite build`; после изменений бэка: `launchctl kickstart -k gui/$UID/com.log.viewer`. Vite на `:3000` остаётся только для разработки.
 
 ## Changelog (newest first — commit → what became real)
+
+- `HEAD` — **Every failure reaches the screen with its message and a Retry, without moving the layout.** A view whose content fails (`Tile`, `MainView`, run comparison) shows `LoadError` in place of its content; the owner chose this over text inside the button, which would change the button's width. Actions and background jobs (async buttons, view/workspace autosave, boot catalogs, tensor frames, PNG export) go to one fixed `Notices` stack through `attempt(label, work)`, and Retry repeats the same job. Closed on the way: PNG export silently did nothing on a table tile (now says to switch to a chart), and a non-JSON answer (proxy page, crashed server) surfaced as a JSON parser error. Tests: `errors.test.tsx` (fails without the fix for tile, button and non-JSON). Live: `/nope.gone` shows the server message with Retry; an autosave against a broken `views/` showed `saving demo.baseline.config: FileExistsError …` with Retry.
 
 - `HEAD` — **Codex review on PR #1: two claims from the previous commit were true for only part of their class.** (1) "API errors follow one shape" covered only `ApiError`; validation failures (422), wrong methods (405) and crashes (500) still answered `{detail}`, and an unknown `GET /api/...` answered 200 with the app's HTML through the catch-all route. All four error sources now go through one handler, and the catch-all refuses `api/` paths. A parametrized route test covers every source. (2) Moving tensor frames into the store dropped the refresh that remounting used to give, so a reopened tensor tile showed the old last step. `useTensor` now reloads on mount and on every `liveTick`. The test for this exposed a crash my fix introduced (slider index past the shrunken frame list), and the player now has an explicit "follow the newest step" state (`chosenIndex === null`). Verified live: appending a step to an open tensor tile moved it from step 240 to step 280 without a reload. `CLAUDE.md` gains rules 11–16 for the misses reviews keep finding.
 

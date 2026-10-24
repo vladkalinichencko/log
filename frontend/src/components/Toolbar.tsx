@@ -6,6 +6,7 @@ import { Button } from "./Button";
 import { Menu } from "./Menu";
 import { MenuButton } from "./MenuButton";
 import { RenamePanel } from "./RenamePanel";
+import { attempt } from "./Notices";
 import { Table, CellType, TableFunction } from "../types/domain";
 import { ACCENTS } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
@@ -22,9 +23,9 @@ export function functionExpression(fn: TableFunction, column: string): string {
 
 async function exportPng(content: HTMLElement | null, filename: string) {
   const plot = content?.querySelector<HTMLElement>(".js-plotly-plot");
-  if (!plot) return;
+  if (!plot) throw new Error("this tile shows a table; switch it to a chart first");
   const Plotly = (await import("plotly.js/dist/plotly")).default;
-  Plotly.downloadImage(plot, { format: "png", width: 1600, height: 900, filename });
+  await Plotly.downloadImage(plot, { format: "png", width: 1600, height: 900, filename });
 }
 
 interface ToolbarProps {
@@ -183,7 +184,7 @@ export function Toolbar({ path, table, content }: ToolbarProps) {
                 items: [
                   { label: "csv", onPick: () => { exportCsv(table); close(); } },
                   { label: "json", onPick: () => { exportJson(table); close(); } },
-                  { label: "png", onPick: () => { exportPng(content.current, table.name); close(); } },
+                  { label: "png", onPick: () => { attempt("png export", () => exportPng(content.current, table.name)); close(); } },
                 ],
               },
               {

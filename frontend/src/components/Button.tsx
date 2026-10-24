@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { buttonFsm } from "../fsm/buttonFsm";
+import { useStore } from "../store/store";
 import { Icon, IconName } from "./Icon";
 
 export interface ButtonProps {
@@ -14,7 +15,20 @@ export interface ButtonProps {
 
 export function Button({ label, icon, ghost, active, disabled, title, onClick }: ButtonProps) {
   const [state, setState] = useState(buttonFsm.initial);
+  const notify = useStore((store) => store.notices_push);
   const send = (event: Parameters<typeof buttonFsm.next>[1]) => setState((current) => buttonFsm.next(current, event));
+  const perform = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const result = onClick(event);
+    if (!(result instanceof Promise)) return;
+    send("start");
+    result.then(
+      () => send("success"),
+      (error: Error) => {
+        send("failure");
+        notify(`${title ?? label}: ${error.message}`, () => perform(event));
+      }
+    );
+  };
 
   return (
     <button
@@ -26,12 +40,7 @@ export function Button({ label, icon, ghost, active, disabled, title, onClick }:
       onMouseLeave={() => send("mouseleave")}
       onMouseDown={() => send("mousedown")}
       onMouseUp={() => send("mouseup")}
-      onClick={(event) => {
-        const result = onClick(event);
-        if (!(result instanceof Promise)) return;
-        send("start");
-        result.then(() => send("success"), () => send("failure"));
-      }}
+      onClick={perform}
     >
       {icon ? <Icon name={icon} /> : label}
     </button>

@@ -5,7 +5,9 @@ import { Button } from "./Button";
 import { ChartView } from "./ChartView";
 import { DesignSystemLab } from "./DesignSystemLab";
 import { Icon, ICON_NAMES } from "./Icon";
+import { LoadError } from "./LoadError";
 import { Menu } from "./Menu";
+import { Notices, attempt } from "./Notices";
 import { MenuButton } from "./MenuButton";
 import { Settings, useTheme } from "./Settings";
 import { TableView } from "./TableView";
@@ -174,7 +176,16 @@ export function DesignSystem() {
         </div>
       </Section>
 
-      <Section number="05" title="Inputs">
+      <Section number="05" title="Failures">
+        <LoadError message="Run demo.gone not found" retry={() => {}} />
+        <div className="catalog-row">
+          <Button label="fail an action" onClick={() => Promise.reject(new Error("disk full"))} />
+          <Button label="fail a background job" onClick={() => attempt("saving demo.baseline.config", () => Promise.reject(new Error("permission denied")))} />
+        </div>
+        <Notices />
+      </Section>
+
+      <Section number="06" title="Inputs">
         <div className="catalog-row">
           <input placeholder="Filter rows…" />
           <input className="picking" defaultValue="derive(mean_«col» = mean(«col»))" />
@@ -182,12 +193,12 @@ export function DesignSystem() {
         </div>
       </Section>
 
-      <Section number="06" title="Tables">
+      <Section number="07" title="Tables">
         <TableView table={runs} />
         <TableView table={config} editable />
       </Section>
 
-      <Section number="07" title="Tiles">
+      <Section number="08" title="Tiles">
         <div className="tile-grid">
           {views.map((view) => (
             <TileFrame key={view.id} path={view.id}>
@@ -197,7 +208,7 @@ export function DesignSystem() {
         </div>
       </Section>
 
-      <Section number="08" title="Charts">
+      <Section number="09" title="Charts">
         <div className="tile-grid">
           {CHARTS.map(([fixture, representation]) => (
             <div key={representation} className="tile catalog-chart">
@@ -208,7 +219,7 @@ export function DesignSystem() {
         </div>
       </Section>
 
-      <Section number="09" title="Proposals (not yet in the product)">
+      <Section number="10" title="Proposals (not yet in the product)">
         <DesignSystemLab />
       </Section>
     </main>

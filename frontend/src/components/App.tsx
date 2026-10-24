@@ -10,7 +10,8 @@ import { useTheme } from "./Settings";
 import { useCurrentPath } from "./useCurrentPath";
 import { useStore } from "../store/store";
 import { path_segments, with_param } from "../store/selectors/pathSelectors";
-import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace, saveView } from "../api/client";
+import { fetchWorkspaces, fetchViews, fetchFunctions, fetchPaths, saveWorkspace, saveView } from "../api/client";
+import { Notices, attempt } from "./Notices";
 import { connectWebSocket } from "../api/websocket";
 import { Table } from "../types/domain";
 
@@ -41,6 +42,7 @@ export function App() {
         <Dashboard />
       </div>
       <Modal />
+      <Notices />
     </div>
   );
 }
@@ -70,11 +72,14 @@ function useCatalogs() {
   const setViews = useStore((state) => state.tables_setViews);
   const setFunctions = useStore((state) => state.tables_setFunctions);
   useEffect(() => {
-    fetchWorkspaces().then((list) => list[0] && loadWorkspace(list[0]));
-    fetchViews().then(setViews);
-    fetchFunctions().then(setFunctions);
+    attempt("workspace", () => fetchWorkspaces().then((list) => list[0] && loadWorkspace(list[0])));
+    attempt("saved views", () => fetchViews().then(setViews));
+    attempt("table functions", () => fetchFunctions().then(setFunctions));
+    loadPaths();
   }, []);
 }
+
+const loadPaths = () => attempt("table paths", () => fetchPaths().then(useStore.getState().search_setPaths));
 
 function useLiveUpdates() {
   const bump = useStore((state) => state.connection_bump);
@@ -112,19 +117,18 @@ function useWorkspaceAutosave() {
   const pinned = useStore((state) => state.pinned);
   const tiles = useStore((state) => state.tiles);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      saveWorkspace({
-        id: "default",
-        tiles: pinned.map((path) => ({
-          id: path,
-          table_path: path,
-          mode: tiles.get(path)?.mode ?? "table",
-          representation: tiles.get(path)?.representation,
-          w: tiles.get(path)?.w,
-          h: tiles.get(path)?.h,
-        })),
-      });
-    }, 500);
+    const workspace = {
+      id: "default",
+      tiles: pinned.map((path) => ({
+        id: path,
+        table_path: path,
+        mode: tiles.get(path)?.mode ?? "table",
+        representation: tiles.get(path)?.representation,
+        w: tiles.get(path)?.w,
+        h: tiles.get(path)?.h,
+      })),
+    };
+    const timer = window.setTimeout(() => attempt("saving the dashboard", () => saveWorkspace(workspace)), 500);
     return () => window.clearTimeout(timer);
   }, [pinned, tiles]);
 }
@@ -148,7 +152,10 @@ function useViewAutosave() {
         future: snapshots(state.editFuture),
       };
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => saveView(view).then(fetchViews).then(setViews), 500);
+      timer = window.setTimeout(
+        () => attempt(`saving ${view.id}`, () => saveView(view).then(fetchViews).then(setViews)),
+        500
+      );
     });
     return () => {
       unsubscribe();

@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "../store/store";
 import { search_selector } from "../store/selectors/searchSelectors";
 import { path_segments } from "../store/selectors/pathSelectors";
-import { fetchPaths } from "../api/client";
 import { useCurrentPath } from "./useCurrentPath";
 import { Button } from "./Button";
 import { Menu } from "./Menu";
@@ -16,12 +15,7 @@ export function NavBar() {
   const paths = useStore((state) => state.paths);
   const matches = useMemo(() => search_selector({ query, paths }), [query, paths]);
   const setQuery = useStore((state) => state.search_setQuery);
-  const setPaths = useStore((state) => state.search_setPaths);
   const crumbs = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    fetchPaths().then(setPaths);
-  }, []);
 
   useEffect(() => {
     const nav = crumbs.current;

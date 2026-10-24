@@ -253,6 +253,7 @@ log/
           searchSlice.ts          # search_state, search_reducer (query)
           focusSlice.ts           # focus_state, focus_reducer (focused path)
           connectionSlice.ts      # connection_state, connection_reducer (websocket FSM)
+          noticesSlice.ts         # notices_state: failures waiting for the user (message, retry)
         selectors/
           tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
@@ -282,6 +283,8 @@ log/
         EditableText.tsx          # the one double-click/Enter/Esc text editor (cellEdit_fsm) for cells and header names
         Menu.tsx                  # one menu component: search dropdown + right-click context menu
         MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
+        Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
+        LoadError.tsx             # in-place failure of a view: message + Retry
         TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
         Toolbar.tsx               # thin action bar
@@ -1409,7 +1412,7 @@ They fall into **two groups**, and you only ever need to remember which group yo
 
 All Group A and Group B errors are synchronous (raised from the call itself) and surface to the user as a normal Python traceback at the call site.
 
-Backend error model: every route returns `{ "error": { "code", "message" } }` with the HTTP status in Section 9.12. The backend never crashes the process on a single bad request; it returns the structured error. The frontend renders backend errors via the `load_fsm` error state (the affected view shows an error + retry), and renders WebSocket disconnect via `connection_fsm` (`connected → reconnecting → connected`, max backoff 30s).
+Backend error model: every route returns `{ "error": { "code", "message" } }` with the HTTP status in Section 9.12. The backend never crashes the process on a single bad request; it returns the structured error. The frontend shows every failure with its `message` in one of two places, neither of which moves the layout: a view whose content failed to load (`Tile`, `MainView`, run comparison) replaces its content with `LoadError` (message + Retry) through its `load_fsm` error state; an action or background job (button actions, saved-view/workspace autosave, boot catalogs, tensor frames, PNG export) becomes an entry in the fixed `Notices` stack (message + Retry that repeats the same job + dismiss) via `attempt(label, work)` or the button's own failure path. It renders WebSocket disconnect via `connection_fsm` (`connected → reconnecting → connected`, max backoff 30s).
 
 Frontend async-state rule (intent vs reality): any UI action that changes server-side state (run delete, view save, workspace save) holds `userIntent`, `serverState`, `confirmedState`; the UI renders from `serverState`/`confirmedState`, shows a pending indicator until confirmed, and reverts on failure. This is the same `button_fsm` `pending → done/error` path.
 

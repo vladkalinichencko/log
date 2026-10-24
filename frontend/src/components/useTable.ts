@@ -6,6 +6,8 @@ import { fetchTable } from "../api/client";
 
 export function useTable(path: string) {
   const [loadState, setLoadState] = useState(loadFsm.initial);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const loadTable = useStore((state) => state.tables_loadTable);
   const loadView = useStore((state) => state.tables_loadView);
   const table = useStore((state) => table_selector(state, path));
@@ -31,14 +33,15 @@ export function useTable(path: string) {
         loadTable(path, loaded);
         setLoadState((s) => loadFsm.next(s, "success"));
       })
-      .catch(() => {
+      .catch((failure: Error) => {
         if (stale) return;
+        setError(failure.message);
         setLoadState((s) => loadFsm.next(s, "failure"));
       });
     return () => {
       stale = true;
     };
-  }, [path, liveTick, savedView]);
+  }, [path, liveTick, savedView, attempt]);
 
-  return { table, loadState };
+  return { table, loadState, error, retry: () => setAttempt((count) => count + 1) };
 }

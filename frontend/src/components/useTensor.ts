@@ -7,8 +7,10 @@ import { Table, TableKind } from "../types/domain";
 
 export function useTensor(path: string, table: Table | undefined) {
   const [loadState, setLoadState] = useState(loadFsm.initial);
+  const [attempt, setAttempt] = useState(0);
   const tensor = useStore((state) => state.tensors.get(path));
   const loadTensor = useStore((state) => state.tables_loadTensor);
+  const notify = useStore((state) => state.notices_push);
   const liveTick = useStore((state) => state.liveTick);
   const source = table?.kind === TableKind.Grid ? tensor_source(path) : null;
 
@@ -26,13 +28,15 @@ export function useTensor(path: string, table: Table | undefined) {
         loadTensor(path, loaded);
         setLoadState((state) => loadFsm.next(state, "success"));
       })
-      .catch(() => {
-        if (!stale) setLoadState((state) => loadFsm.next(state, "failure"));
+      .catch((error: Error) => {
+        if (stale) return;
+        setLoadState((state) => loadFsm.next(state, "failure"));
+        notify(`frames of ${path}: ${error.message}`, () => setAttempt((count) => count + 1));
       });
     return () => {
       stale = true;
     };
-  }, [path, source?.run, source?.leaf, liveTick]);
+  }, [path, source?.run, source?.leaf, liveTick, attempt]);
 
   return { tensor, leaf: source?.leaf ?? "", loadState };
 }

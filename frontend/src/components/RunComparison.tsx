@@ -6,6 +6,7 @@ import { selection_run_refs, table_selection_selector, table_selector } from "..
 import { with_param } from "../store/selectors/pathSelectors";
 import { useStore } from "../store/store";
 import { Button } from "./Button";
+import { LoadError } from "./LoadError";
 import { TableView } from "./TableView";
 
 export function RunComparison({ path }: { path: string }) {
@@ -16,6 +17,8 @@ export function RunComparison({ path }: { path: string }) {
   const clearSelection = useStore((state) => state.focus_clear);
   const requested = useRef(0);
   const [loadState, setLoadState] = useState(loadFsm.initial);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const selectedRuns = source && selection ? selection_run_refs(source, selection) : [];
   const comparedRuns = (searchParams.get("compare") ?? "").split(",").filter(Boolean);
   const comparisonId = comparedRuns.length >= 2 ? `compare:${comparedRuns.join("|")}` : "";
@@ -31,12 +34,12 @@ export function RunComparison({ path }: { path: string }) {
         loadTable(comparisonId, { ...table, source_path: comparisonId });
         setLoadState((state) => loadFsm.next(state, "success"));
       })
-      .catch(() => {
-        if (requested.current === request) {
-          setLoadState((state) => loadFsm.next(state, "failure"));
-        }
+      .catch((failure: Error) => {
+        if (requested.current !== request) return;
+        setError(failure.message);
+        setLoadState((state) => loadFsm.next(state, "failure"));
       });
-  }, [comparisonId, comparison]);
+  }, [comparisonId, comparison, attempt]);
 
   if (selectedRuns.length === 0 && comparedRuns.length < 2) return null;
 
@@ -69,7 +72,7 @@ export function RunComparison({ path }: { path: string }) {
           <TableView table={comparison} />
         </section>
       )}
-      {loadState === "error" && <div className="table-filter-error">Run comparison failed</div>}
+      {loadState === "error" && <LoadError message={error} retry={() => setAttempt((count) => count + 1)} />}
     </>
   );
 }

@@ -121,6 +121,26 @@ export function row_window_selector(heights: number[], top: number, bottom: numb
   return { from, to, before, after: heights.slice(to).reduce((sum, height) => sum + height, 0) };
 }
 
+export const ARROW_STEPS: Record<string, { rows: number; columns: number }> = {
+  ArrowUp: { rows: -1, columns: 0 },
+  ArrowDown: { rows: 1, columns: 0 },
+  ArrowLeft: { rows: 0, columns: -1 },
+  ArrowRight: { rows: 0, columns: 1 },
+};
+
+export function cell_step_selector(
+  rows: number[],
+  columns: number[],
+  at: { r: number; c: number },
+  step: { rows: number; columns: number }
+): { r: number; c: number } | null {
+  const row = rows.indexOf(at.r);
+  const column = columns.indexOf(at.c);
+  if (row < 0 || column < 0) return null;
+  const clamp = (index: number, length: number) => Math.max(0, Math.min(index, length - 1));
+  return { r: rows[clamp(row + step.rows, rows.length)], c: columns[clamp(column + step.columns, columns.length)] };
+}
+
 export const parse_sorts =(value: string | null): TableSort[] =>
   (value ?? "").split(",").flatMap((entry) => {
     const [column, direction] = entry.split(":");

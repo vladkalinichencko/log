@@ -74,6 +74,7 @@ export function Menu({ items, sections, at, children }: MenuProps) {
     <div
       key={entry.label}
       data-pick
+      role="menuitem"
       className={index === active ? "active" : undefined}
       onClick={entry.onPick}
     >
@@ -90,7 +91,7 @@ export function Menu({ items, sections, at, children }: MenuProps) {
   };
   let offset = 0;
   const menu = sections ? (
-      <div className="menu columns" style={position} ref={root}>
+      <div className="menu columns" role="menu" style={position} ref={root}>
         {sections.map((section) => {
           const start = offset;
           offset += section.items.length;
@@ -107,7 +108,7 @@ export function Menu({ items, sections, at, children }: MenuProps) {
       {children}
     </div>
   ) : (
-    <div className="menu fade-scroll-y" style={position} ref={root}>
+    <div className="menu fade-scroll-y" role="menu" style={position} ref={root}>
       {flat.map(item)}
     </div>
   );

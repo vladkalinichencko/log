@@ -4,6 +4,8 @@ import { useStore } from "../store/store";
 import { Tile } from "./Tile";
 import { TileFrame } from "./TileFrame";
 
+const NEIGHBOR_STEPS: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
+
 export function InlineView({ table }: { table: Table }) {
   const order = useStore((state) => state.order);
   const reorder = useStore((state) => state.tiles_reorder);
@@ -19,10 +21,18 @@ export function InlineView({ table }: { table: Table }) {
   ];
   return (
     <div className="tile-grid">
-      {ordered.map((ref) => (
+      {ordered.map((ref, index) => (
         <TileFrame
           key={ref}
           path={ref}
+          tabIndex={0}
+          aria-label={`${ref}: Alt+arrow moves the tile`}
+          onKeyDown={(event) => {
+            const neighbor = ordered[index + NEIGHBOR_STEPS[event.key]];
+            if (!event.altKey || event.target !== event.currentTarget || !neighbor) return;
+            event.preventDefault();
+            reorder(parent, ordered, ref, neighbor);
+          }}
           draggable
           onDragStart={() => {
             dragged.current = ref;

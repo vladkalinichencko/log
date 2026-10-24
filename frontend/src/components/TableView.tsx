@@ -35,6 +35,8 @@ import {
   serialize_sorts,
   serialize_widths,
   row_window_selector,
+  cell_step_selector,
+  ARROW_STEPS,
   table_view_selector,
   TableSort,
 } from "../store/selectors/tableViewSelectors";
@@ -245,15 +247,35 @@ export function TableView({ table, editable }: TableViewProps) {
       onCopy(e);
       clearCells(tableId, selection_cells(table, selection));
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const step = ARROW_STEPS[e.key];
+      const active = selection.ranges[selection.ranges.length - 1];
+      if (!step || e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
+      const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
+      const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
+      if (!to) return;
+      e.preventDefault();
+      if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
+      else startRange({ tableId, kind: "cell", ...to }, "replace");
+    };
     document.addEventListener("paste", onPaste);
     document.addEventListener("copy", onCopy);
     document.addEventListener("cut", onCut);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("cut", onCut);
+      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [editable, selection, tableId, table]);
+  }, [editable, selection, tableId, table, searchParams]);
+
+  useEffect(() => {
+    if (activeRange?.kind !== "cell") return;
+    tableRef.current
+      ?.querySelector(`tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeRange?.kind, activeRange?.endR, activeRange?.endC]);
 
   useEffect(() => {
     if (selectionState !== "dragging") return;

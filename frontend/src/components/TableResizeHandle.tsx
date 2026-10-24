@@ -20,14 +20,15 @@ export function TableResizeHandle({ axis, onResize }: TableResizeHandleProps) {
         event.preventDefault();
         event.stopPropagation();
         const start = axis === "column" ? event.clientX : event.clientY;
+        const scale = event.currentTarget.currentCSSZoom ?? 1;
         const rect = event.currentTarget.closest(axis === "column" ? "th" : "tr")!
           .getBoundingClientRect();
-        const initial = axis === "column" ? rect.width : rect.height;
+        const initial = (axis === "column" ? rect.width : rect.height) / scale;
         const minimum = axis === "column" ? 80 : 24;
         setState((current) => dragFsm.next(current, "down"));
         const move = (next: MouseEvent) => {
           const pointer = axis === "column" ? next.clientX : next.clientY;
-          onResize(Math.max(minimum, initial + pointer - start));
+          onResize(Math.max(minimum, initial + (pointer - start) / scale));
         };
         const up = () => {
           setState((current) => dragFsm.next(current, "up"));

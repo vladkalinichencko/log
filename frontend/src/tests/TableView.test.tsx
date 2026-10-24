@@ -338,4 +338,16 @@ describe("TableView", () => {
     s().tables_undo();
     expect(s().tables.get("tags")!.cells.flat().map((cell) => cell.value)).toEqual(["adam_lr", "adam warmup", "sgd_lr", "12"]);
   });
+
+  it("zooms the table in steps and keeps the zoom in the URL", () => {
+    renderR(<TableView table={table} />);
+    fireEvent.click(screen.getByTitle("Zoom in"));
+    fireEvent.click(screen.getByTitle("Zoom in"));
+    expect(screen.getByText("120%")).toBeTruthy();
+    expect(document.querySelector<HTMLElement>("table")!.style.zoom).toBe("1.2");
+    expect(screen.getByTestId("loc").textContent).toContain("zoom.p.run.loss=120");
+    fireEvent.click(screen.getByTitle("Zoom out"));
+    fireEvent.click(screen.getByTitle("Zoom out"));
+    expect(screen.getByTestId("loc").textContent).not.toContain("zoom.");
+  });
 });

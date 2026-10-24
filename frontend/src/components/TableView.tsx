@@ -41,6 +41,9 @@ import {
 
 const EDGE = 6;
 const ESTIMATED_ROW_HEIGHT = 30;
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
 
 const selectionMode = (event: React.MouseEvent): FocusMode =>
   event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
@@ -89,6 +92,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const heightKey = `height.${tableId}`;
   const columnsKey = `columns.${tableId}`;
   const freezeKey = `freeze.${tableId}`;
+  const zoomKey = `zoom.${tableId}`;
   const query = searchParams.get(filterKey) ?? "";
   const sorts = parse_sorts(searchParams.get(sortKey));
   const widths = parse_widths(searchParams.get(widthKey));
@@ -98,6 +102,8 @@ export function TableView({ table, editable }: TableViewProps) {
   const frozenCount = Number.isInteger(requestedFrozen)
     ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
     : 0;
+  const requestedZoom = Number(searchParams.get(zoomKey) ?? 100);
+  const zoom = Number.isFinite(requestedZoom) ? Math.max(ZOOM_MIN, Math.min(requestedZoom, ZOOM_MAX)) : 100;
   const view = table_view_selector(table, query, sorts);
   const runTable = path_segments(table.source_path ?? "").length === 1 &&
     table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
@@ -121,11 +127,12 @@ export function TableView({ table, editable }: TableViewProps) {
       if (!body || !scroller) return;
       const bodyBox = body.getBoundingClientRect();
       const scrollBox = scroller.getBoundingClientRect();
-      const top = Math.max(scrollBox.top, 0) - bodyBox.top;
-      const bottom = Math.min(scrollBox.bottom, window.innerHeight) - bodyBox.top;
+      const scale = body.currentCSSZoom ?? 1;
+      const top = (Math.max(scrollBox.top, 0) - bodyBox.top) / scale;
+      const bottom = (Math.min(scrollBox.bottom, window.innerHeight) - bodyBox.top) / scale;
       setVisibleBand((band) => (band.top === top && band.bottom === bottom ? band : { top, bottom }));
       const plainRow = body.querySelector<HTMLElement>("tr[data-row]:not([style])");
-      if (plainRow) setRowHeight(plainRow.getBoundingClientRect().height || ESTIMATED_ROW_HEIGHT);
+      if (plainRow) setRowHeight(plainRow.getBoundingClientRect().height / scale || ESTIMATED_ROW_HEIGHT);
     };
     measure();
     window.addEventListener("scroll", measure, true);
@@ -134,7 +141,7 @@ export function TableView({ table, editable }: TableViewProps) {
       window.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [zoom]);
 
   useEffect(() => {
     const current = searchParams.toString();
@@ -185,6 +192,8 @@ export function TableView({ table, editable }: TableViewProps) {
     setParam(heightKey, serialize_heights({ ...heights, [row]: height }));
   };
 
+  const setZoom = (next: number) => setParam(zoomKey, next === 100 ? "" : String(next));
+
   const setColumns = (next: number[]) => setParam(columnsKey, serialize_columns(next));
 
   const toggleColumn = (column: number) => {
@@ -208,7 +217,7 @@ export function TableView({ table, editable }: TableViewProps) {
     for (const column of visibleColumns.slice(0, frozenCount)) {
       next[column] = left;
       const header = tableRef.current?.querySelector<HTMLElement>(`th[data-column="${column}"]`);
-      left += header?.getBoundingClientRect().width ?? 0;
+      left += header ? header.getBoundingClientRect().width / (header.currentCSSZoom ?? 1) : 0;
     }
     if (JSON.stringify(next) !== JSON.stringify(frozenOffsets)) setFrozenOffsets(next);
   }, [visibleColumns.join(","), frozenCount, searchParams.toString()]);
@@ -370,6 +379,9 @@ export function TableView({ table, editable }: TableViewProps) {
             />
           )}
         </MenuButton>
+        <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
+        <span className="subtitle">{zoom}%</span>
+        <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
         {editable && (
           <MenuButton label="Replace" title="Find text in cells and replace every match">
             {(close) => {
@@ -408,7 +420,7 @@ export function TableView({ table, editable }: TableViewProps) {
       {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
         <div ref={scrollRef}>
-          <table className="table-view" ref={tableRef}>
+          <table className="table-view" ref={tableRef} style={{ zoom: zoom / 100 }}>
             <colgroup>
               {runTable && <col className="selection-column" />}
               {table.row_names && <col />}

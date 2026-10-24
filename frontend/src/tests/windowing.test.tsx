@@ -23,16 +23,18 @@ const box = (top: number, height: number, left = 0, width = 300) =>
   ({ top, bottom: top + height, height, left, right: left + width, width, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
 
 let bodyTop = 0;
+let scale = 1;
 
 function stubLayout() {
+  Object.defineProperty(Element.prototype, "currentCSSZoom", { configurable: true, get: () => scale });
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const element = this as HTMLElement;
-    if (element.tagName === "TBODY") return box(bodyTop, 30_000);
+    if (element.tagName === "TBODY") return box(bodyTop, 30_000 * scale);
     if (element.tagName === "DIV" && element.parentElement?.classList.contains("table-frame")) return box(0, 300);
     if (element.tagName === "TABLE") return box(0, 40 + element.querySelectorAll("tr[data-row]").length * 30);
     if (element.dataset.row !== undefined) {
       const rows = [...element.parentElement!.querySelectorAll("tr[data-row]")];
-      return box(40 + rows.indexOf(element) * 30, 30);
+      return box(40 + rows.indexOf(element) * 30 * scale, 30 * scale);
     }
     if (element.dataset.column !== undefined && element.tagName === "TD") {
       const cells = [...element.parentElement!.querySelectorAll("td[data-column]")];
@@ -44,7 +46,9 @@ function stubLayout() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete (Element.prototype as { currentCSSZoom?: number }).currentCSSZoom;
   bodyTop = 0;
+  scale = 1;
 });
 
 describe("row windowing", () => {
@@ -67,6 +71,24 @@ describe("row windowing", () => {
     const rows = container.querySelectorAll<HTMLElement>("tr[data-row]");
     expect(rows).toHaveLength(30);
     expect(rows[0].dataset.row).toBe("490");
+  });
+
+  it("a zoomed table sizes its row window and spacers in unzoomed pixels", () => {
+    scale = 2;
+    stubLayout();
+    const { container } = render(
+      <MemoryRouter initialEntries={["/?zoom.zoomed=200"]}>
+        <TableView table={numbers("zoomed", 1000)} />
+      </MemoryRouter>
+    );
+    expect(container.querySelector<HTMLElement>("table")!.style.zoom).toBe("2");
+    bodyTop = -30_000;
+    act(() => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    const rows = container.querySelectorAll<HTMLElement>("tr[data-row]");
+    expect(rows[0].dataset.row).toBe("495");
+    expect(container.querySelector<HTMLElement>(".row-spacer td")!.style.height).toBe(`${495 * 30}px`);
   });
 
   it("clicking a row's edge selects that data row even when the table is sorted", () => {

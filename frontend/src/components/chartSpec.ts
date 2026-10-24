@@ -1,6 +1,6 @@
 import type { Data, Layout } from "plotly.js";
 import { Representation, Table } from "../types/domain";
-import { ACCENTS } from "../store/slices/settingsSlice";
+import { SERIES } from "../store/slices/settingsSlice";
 
 const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -69,7 +69,7 @@ export function chartSpec(
   if (representation === Representation.Line) {
     const xi = Math.max(0, cols.indexOf("step"));
     const x = column(table, xi);
-    const palette = [t.accent, ...ACCENTS.filter((color) => color !== t.accent), t.muted];
+    const palette = [t.accent, ...SERIES.map(token).filter((color) => color !== t.accent), t.muted];
     const bookkeeping = ["samples_seen", "wall_time", "rank"];
     const series = cols
       .map((name, i) => ({ name, i }))

@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Cell, CellType, Representation, SavedView, Table, TableKind } from "../types/domain";
 import { useStore } from "../store/store";
+import { SERIES } from "../store/slices/settingsSlice";
 import { Button } from "./Button";
 import { ChartView } from "./ChartView";
 import { DesignSystemLab } from "./DesignSystemLab";
@@ -15,7 +16,7 @@ import { Tile } from "./Tile";
 import { TileFrame } from "./TileFrame";
 
 const TOKENS = {
-  color: ["--gray-0", "--gray-50", "--gray-100", "--gray-200", "--gray-400", "--gray-600", "--gray-900", "--accent", "--positive", "--warning", "--critical"],
+  color: ["--gray-0", "--gray-50", "--gray-100", "--gray-200", "--gray-400", "--gray-600", "--gray-900", "--accent", "--positive", "--warning", "--critical", ...SERIES],
   space: ["--space-0-5", "--space", "--space-2", "--space-3", "--space-4"],
   text: ["--text-page", "--text-section", "--text-tile", "--text-body", "--text-meta"],
   size: ["--radius", "--radius-control", "--icon", "--handle", "--hit", "--menu-width", "--menu-column", "--menu-height"],
@@ -165,7 +166,7 @@ export function DesignSystem() {
               <Menu
                 sections={[
                   { title: "export as", items: ["csv", "json", "png"].map((label) => ({ label, onPick: close })) },
-                  { title: "line color", items: ["#e11d1d", "#3b82f6"].map((label) => ({ label, swatch: label, onPick: close })) },
+                  { title: "line color", items: SERIES.map((token) => ({ label: token.slice(2), swatch: `var(${token})`, onPick: close })) },
                 ]}
               />
             )}

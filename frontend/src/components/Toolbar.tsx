@@ -8,7 +8,7 @@ import { MenuButton } from "./MenuButton";
 import { RenamePanel } from "./RenamePanel";
 import { attempt } from "./Notices";
 import { Table, CellType, TableFunction } from "../types/domain";
-import { ACCENTS } from "../store/slices/settingsSlice";
+import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
 import { formula_selector } from "../store/selectors/searchSelectors";
 import { is_run_ref } from "../store/selectors/pathSelectors";
@@ -189,10 +189,10 @@ export function Toolbar({ path, table, content }: ToolbarProps) {
               },
               {
                 title: "line color",
-                items: ACCENTS.map((color) => ({
-                  label: color,
-                  swatch: color,
-                  onPick: () => { setAccent(color); close(); },
+                items: SERIES.map((token) => ({
+                  label: token.slice(2),
+                  swatch: `var(${token})`,
+                  onPick: () => { setAccent(token); close(); },
                 })),
               },
             ]}

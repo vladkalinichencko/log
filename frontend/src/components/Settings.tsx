@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Button } from "./Button";
-import { ACCENTS } from "../store/slices/settingsSlice";
+import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
 
 export function useTheme() {
@@ -8,7 +8,7 @@ export function useTheme() {
   const accent = useStore((state) => state.accent);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent", `var(${accent})`);
   }, [theme, accent]);
 }
 
@@ -29,13 +29,13 @@ export function Settings() {
       </div>
       <div className="group">
         <span>accent</span>
-        {ACCENTS.map((color) => (
+        {SERIES.map((token) => (
           <button
-            key={color}
-            className={color === accent ? "dot active" : "dot"}
-            style={{ background: color }}
-            title={color}
-            onClick={() => setAccent(color)}
+            key={token}
+            className={token === accent ? "dot active" : "dot"}
+            style={{ background: `var(${token})` }}
+            title={token}
+            onClick={() => setAccent(token)}
           />
         ))}
       </div>

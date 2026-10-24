@@ -21,6 +21,18 @@ def test_push_broadcasts_to_all():
     assert b.sent == [{"type": "run_updated"}]
 
 
+def test_subscribed_socket_gets_only_its_runs():
+    transport = WebSocketTransport()
+    everything, scoped = FakeSocket(), FakeSocket()
+    transport.add(everything)
+    transport.add(scoped)
+    transport.subscribe(scoped, "p/a")
+    asyncio.run(transport.push({"type": "run_updated", "run": "p/b"}))
+    asyncio.run(transport.push({"type": "run_updated", "run": "p/a"}))
+    assert [event["run"] for event in everything.sent] == ["p/b", "p/a"]
+    assert [event["run"] for event in scoped.sent] == ["p/a"]
+
+
 def test_removed_socket_gets_nothing():
     transport = WebSocketTransport()
     socket = FakeSocket()

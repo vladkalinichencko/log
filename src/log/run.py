@@ -31,6 +31,7 @@ class RunContext:
         self.samples_seen = 0
         self.epoch = 0
         self.current_step = 0
+        self.watch_handles: list = []
 
 
 class Config:
@@ -115,6 +116,8 @@ def run(
                 status = "crashed"
                 raise
             finally:
+                for handle in _active_run.watch_handles:
+                    handle.remove()
                 writer.stop_and_join()
                 update_json(meta_path, {"status": status, "samples_seen": _active_run.samples_seen})
                 _active_run = None

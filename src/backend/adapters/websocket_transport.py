@@ -4,14 +4,18 @@ from fastapi import WebSocket
 class WebSocketTransport:
 
     def __init__(self):
-        self.sockets: set[WebSocket] = set()
+        self.subscriptions: dict[WebSocket, set[str]] = {}
 
     def add(self, socket: WebSocket) -> None:
-        self.sockets.add(socket)
+        self.subscriptions[socket] = set()
+
+    def subscribe(self, socket: WebSocket, run: str) -> None:
+        self.subscriptions[socket].add(run)
 
     def remove(self, socket: WebSocket) -> None:
-        self.sockets.discard(socket)
+        self.subscriptions.pop(socket, None)
 
     async def push(self, event: dict) -> None:
-        for socket in list(self.sockets):
-            await socket.send_json(event)
+        for socket, runs in list(self.subscriptions.items()):
+            if not runs or event["run"] in runs:
+                await socket.send_json(event)

@@ -1,5 +1,6 @@
 import json
 
+import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -68,7 +69,25 @@ def test_watch_logs_module_activations(tmp_path):
     index = _rundir(tmp_path) / "epoch_0000" / "tensors" / "index.jsonl"
     paths = {json.loads(l)["path"] for l in index.read_text().splitlines() if l.strip()}
     names = {name for name, _ in net.named_modules() if name}
-    assert names <= paths
+    assert names | {"model"} <= paths
+
+
+def test_watch_paths_are_globs_and_hooks_end_with_the_run(tmp_path):
+    net = torch.nn.Sequential(
+        torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.ReLU()),
+        torch.nn.Linear(4, 2),
+    )
+
+    @log.run(project="p", runs_root=str(tmp_path))
+    def main():
+        log.watch(net, paths=["0.*"])
+        net(torch.randn(1, 4))
+
+    main()
+    index = _rundir(tmp_path) / "epoch_0000" / "tensors" / "index.jsonl"
+    paths = {json.loads(l)["path"] for l in index.read_text().splitlines() if l.strip()}
+    assert paths == {"0.0", "0.1"}
+    assert all(not module._forward_hooks for module in net.modules())
 
 
 def test_checkpoint_cadence(tmp_path):
@@ -132,5 +151,23 @@ def test_export_figure_writes_png(tmp_path, monkeypatch):
     main()
     monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
     out = tmp_path / "out.png"
-    log.export.figure("p.r.epoch_0000.loss", str(out))
+    assert log.export.figure("p.r.epoch_0000.loss", str(out)) == str(out.resolve())
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_export_figure_nature_preset_is_a_single_column_figure(tmp_path, monkeypatch):
+    from PIL import Image
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(5):
+            log.log("loss", 1.0 / (step + 1), step=step)
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    out = tmp_path / "nature.png"
+    log.export.figure("p.r.epoch_0000.loss", str(out), renderer="nature")
+    width_mm = Image.open(out).size[0] / 300 * 25.4
+    assert width_mm <= 89
+    with pytest.raises(log.errors.RendererUnavailableError):
+        log.export.figure("p.r.epoch_0000.loss", str(out), renderer="proplot")

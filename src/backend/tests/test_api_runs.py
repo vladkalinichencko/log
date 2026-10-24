@@ -96,3 +96,15 @@ def test_route_status_filter_through_index(tmp_path, monkeypatch):
     with TestClient(app) as client:
         rows = client.get("/api/runs", params={"status": "finished"}).json()
     assert {r["name"] for r in rows} == {"run_a"}
+
+
+def test_get_run_returns_its_folder_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    _make_run(tmp_path, "p1", "run_a", "finished")
+    with TestClient(app) as client:
+        found = client.get("/api/runs/p1/run_a")
+        missing = client.get("/api/runs/p1/nope")
+    assert found.json()["source_path"] == "p1.run_a"
+    assert [row[0]["value"] for row in found.json()["cells"]][:2] == ["config", "meta"]
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "RUN_NOT_FOUND"

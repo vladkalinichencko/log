@@ -92,6 +92,10 @@ function useLiveUpdates() {
     const connect = () => {
       socket = connectWebSocket((message) => {
         if (message.type === "run_updated") bump();
+        if (message.type === "run_added" || message.type === "run_removed") {
+          bump();
+          loadPaths();
+        }
       });
       socket.onopen = () => {
         retryDelay = 1000;

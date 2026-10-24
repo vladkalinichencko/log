@@ -37,11 +37,17 @@ class FileWatcher:
 
     async def run(self) -> None:
         async for changes in awatch(self.runs_root):
-            for (project, name), kind in changed_runs([p for _, p in changes], self.runs_root).items():
-                if (self.runs_root / project / name).is_dir():
-                    self.index.upsert(read_summary(self.runs_root, project, name))
-                else:
-                    self.index.rebuild()
-                await self.transport.push(
-                    {"type": "run_updated", "run": f"{project}/{name}", "kind": kind}
-                )
+            await self.handle([path for _, path in changes])
+
+    async def handle(self, paths: list[str]) -> None:
+        for (project, name), kind in changed_runs(paths, self.runs_root).items():
+            await self.transport.push(self._record(project, name, kind))
+
+    def _record(self, project: str, name: str, kind: str) -> dict:
+        run = f"{project}/{name}"
+        if not (self.runs_root / project / name).is_dir():
+            self.index.rebuild()
+            return {"type": "run_removed", "run": run}
+        known = any(summary.name == name for summary in self.index.query(project, None, None))
+        self.index.upsert(read_summary(self.runs_root, project, name))
+        return {"type": "run_updated", "run": run, "kind": kind} if known else {"type": "run_added", "run": run}

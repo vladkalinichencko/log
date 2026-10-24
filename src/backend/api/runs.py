@@ -5,8 +5,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..config import get_index, get_runs_root
+from ..config import get_index, get_runs_root, get_storage
+from ..domain.models import Table
+from ..domain.read_table import read_table
 from ..ports.index_port import IndexPort
+from ..ports.storage_port import StoragePort
 from .errors import ApiError
 
 router = APIRouter()
@@ -34,6 +37,14 @@ def get_runs(
     tag: str | None = None,
 ) -> list[dict]:
     return [asdict(run) for run in index.query(project, status, tag)]
+
+
+@router.get("/api/runs/{project}/{run}")
+def get_run(project: str, run: str, storage: StoragePort = Depends(get_storage)) -> Table:
+    try:
+        return read_table(f"{project}.{run}", storage)
+    except FileNotFoundError:
+        raise ApiError(404, "RUN_NOT_FOUND", f"run {project}/{run} does not exist")
 
 
 @router.delete("/api/runs/{project}/{run}")

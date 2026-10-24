@@ -112,7 +112,6 @@ For every dependency: one line on what it does and what specifically breaks or m
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
-| proplot | A thin styling layer over matplotlib that supplies journal/`"nature"` presets for `log.export.figure(renderer=...)`. Without it we hand-write the journal style dictionaries. |
 | PyYAML `[v2]` | Parses `.yaml`/`.yml` config files at the `log.run` boundary. JSON remains stdlib; without PyYAML we would own a YAML parser. |
 
 Standard library only for: threading, queue, **sqlite3** (derived index — ADR-003), pathlib, os, **json** (no `orjson`; stdlib `json` is fast enough for single-user read responses), hashlib, subprocess (git hash), tempfile, dataclasses, math (LR schedules), fnmatch (glob paths), weakref (ADR-008).
@@ -982,7 +981,7 @@ log.tick(samples: int | None = None, **scalars: float) -> None
 log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 ```
 - Renders the table identified by `view_id` (via the running backend's table engine if reachable on `localhost`, else from files directly) to an image at `path`.
-- `renderer`: `"matplotlib"` (default), `"proplot"`, `"nature"` (a fixed Nature-journal preset over proplot). matplotlib and proplot are core dependencies (Section 4.1) — export works out of the box, no extra install. `RendererUnavailableError` is retained only for a renderer name that maps to a library the environment somehow lacks.
+- `renderer`: `"matplotlib"` (default) or `"nature"` — a fixed Nature-journal preset expressed as matplotlib `rcParams` (single column 89 mm, 7 pt sans-serif, 0.5 pt axes, 300 dpi, no top/right spines). `proplot` was dropped (2026-10): its last release requires matplotlib < 3.5, which has no build for Python ≥ 3.11, so listing it made `pip install -e .` fail on a clean machine. Any other name raises `RendererUnavailableError` naming the supported renderers.
 - Returns the absolute path written.
 - Errors: `ViewNotFoundError`, `RendererUnavailableError`.
 
@@ -1015,7 +1014,8 @@ WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
 - On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta" }`.
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
-- Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent.
+- Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
+- A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.
 
 ### 9.13 Merge / table language (v1)
 

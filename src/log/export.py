@@ -1,9 +1,35 @@
+from pathlib import Path
+
 from .errors import RendererUnavailableError, ViewNotFoundError
 from .writer.atomic import read_jsonl
 from .writer.layout import default_runs_root
 
+MILLIMETRE = 1 / 25.4
+
+RENDERER_STYLES = {
+    "matplotlib": {},
+    "nature": {
+        "figure.figsize": (89 * MILLIMETRE, 60 * MILLIMETRE),
+        "savefig.dpi": 300,
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.size": 7,
+        "axes.labelsize": 7,
+        "xtick.labelsize": 6,
+        "ytick.labelsize": 6,
+        "axes.linewidth": 0.5,
+        "lines.linewidth": 1.0,
+        "xtick.major.width": 0.5,
+        "ytick.major.width": 0.5,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    },
+}
+
 
 def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
+    if renderer not in RENDERER_STYLES:
+        raise RendererUnavailableError(f"renderer {renderer!r} is not one of {sorted(RENDERER_STYLES)}")
     try:
         import matplotlib
 
@@ -27,10 +53,11 @@ def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
     if not xs:
         raise ViewNotFoundError(f"view {view_id!r} has no series {scalar!r}")
 
-    figure_, axes = plt.subplots()
-    axes.plot(xs, ys)
-    axes.set_xlabel("step")
-    axes.set_ylabel(scalar)
-    figure_.savefig(path)
-    plt.close(figure_)
-    return path
+    with plt.rc_context(RENDERER_STYLES[renderer]):
+        figure_, axes = plt.subplots()
+        axes.plot(xs, ys)
+        axes.set_xlabel("step")
+        axes.set_ylabel(scalar)
+        figure_.savefig(path, bbox_inches="tight")
+        plt.close(figure_)
+    return str(Path(path).resolve())

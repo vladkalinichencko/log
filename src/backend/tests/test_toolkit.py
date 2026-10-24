@@ -171,3 +171,40 @@ def test_export_figure_nature_preset_is_a_single_column_figure(tmp_path, monkeyp
     assert width_mm <= 89
     with pytest.raises(log.errors.RendererUnavailableError):
         log.export.figure("p.r.epoch_0000.loss", str(out), renderer="proplot")
+
+
+def test_export_figure_draws_what_the_ui_shows(tmp_path, monkeypatch):
+    import matplotlib.axes
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(3):
+            log.log("loss", 1.0 / (step + 1), step=step)
+            log.log("accuracy", step / 2, step=step)
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    drawn = {}
+    original = matplotlib.axes.Axes.plot
+
+    def record(self, xs, ys, label=None, **kwargs):
+        drawn[label] = (list(xs), list(ys))
+        return original(self, xs, ys, label=label, **kwargs)
+
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", record)
+    log.export.figure("p.r.metrics", str(tmp_path / "metrics.png"))
+    assert drawn == {"loss": ([0, 1, 2], [1.0, 0.5, 1 / 3]), "accuracy": ([0, 1, 2], [0.0, 0.5, 1.0])}
+
+    edited = {
+        "name": "loss", "kind": "column", "column_names": ["step", "loss"], "row_names": None,
+        "source_path": "p.r.epoch_0000.loss", "representation": "line",
+        "cells": [[{"type": "number", "value": str(step), "ref": None}, {"type": "number", "value": "7", "ref": None}] for step in range(2)],
+    }
+    (tmp_path / "views").mkdir()
+    (tmp_path / "views" / "p.r.epoch_0000.loss.json").write_text(json.dumps(edited))
+    drawn.clear()
+    log.export.figure("p.r.epoch_0000.loss", str(tmp_path / "edited.png"))
+    assert drawn == {"loss": ([0.0, 1.0], [7.0, 7.0])}
+
+    with pytest.raises(log.errors.ViewNotFoundError):
+        log.export.figure("p.gone.metrics", str(tmp_path / "gone.png"))

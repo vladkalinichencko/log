@@ -987,7 +987,8 @@ log.tick(samples: int | None = None, **scalars: float) -> None
 ```
 log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 ```
-- Renders the table identified by `view_id` (via the running backend's table engine if reachable on `localhost`, else from files directly) to an image at `path`.
+- Renders the table identified by `view_id` to an image at `path`, through the backend's own table engine called in process (both packages install together; the engine is pure functions over the runs root). A saved view `views/<view_id>.json` — the table as edited in the UI — wins; otherwise `read_table(view_id)`, so any path the UI opens can be exported (a scalar leaf, `<project>.<run>.metrics`, a derived table). It is drawn as the UI's `line` representation: x is the `step` column (else the first column), every other column whose non-empty cells are all numbers is a line except bookkeeping (`samples_seen`, `wall_time`, `rank`, `epoch`), empty cells are gaps, a legend appears for more than one line. *(Revised 2026-10: the earlier text said "via the running backend if reachable on localhost, else from files"; both routes read the same files with the same code, so the HTTP route would only add a failure mode.)*
+- A table with no numeric series raises `ViewNotFoundError` naming the view.
 - `renderer`: `"matplotlib"` (default) or `"nature"` — a fixed Nature-journal preset expressed as matplotlib `rcParams` (single column 89 mm, 7 pt sans-serif, 0.5 pt axes, 300 dpi, no top/right spines). `proplot` was dropped (2026-10): its last release requires matplotlib < 3.5, which has no build for Python ≥ 3.11, so listing it made `pip install -e .` fail on a clean machine. Any other name raises `RendererUnavailableError` naming the supported renderers.
 - Returns the absolute path written.
 - Errors: `ViewNotFoundError`, `RendererUnavailableError`.

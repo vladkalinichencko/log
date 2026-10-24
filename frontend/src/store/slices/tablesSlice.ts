@@ -56,20 +56,26 @@ export function fill_values(source: string[], count: number): string[] {
   );
 }
 
+const span = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
 function fill_cells(cells: Cell[][], source: Bounds, target: Bounds): Cell[][] {
   const next = cells.map((row) => [...row]);
-  if (target.bottom > source.bottom) {
-    for (let c = source.left; c <= source.right; c++) {
-      const values = cells.slice(source.top, source.bottom + 1).map((row) => row[c].value);
-      fill_values(values, target.bottom - source.bottom)
-        .forEach((value, i) => (next[source.bottom + 1 + i][c] = valueCell(value)));
-    }
-  } else {
-    for (let r = source.top; r <= source.bottom; r++) {
-      const values = cells[r].slice(source.left, source.right + 1).map((cell) => cell.value);
-      fill_values(values, target.right - source.right)
-        .forEach((value, i) => (next[r][source.right + 1 + i] = valueCell(value)));
-    }
+  const vertical = target.top !== source.top || target.bottom !== source.bottom;
+  const forward = vertical ? target.bottom > source.bottom : target.right > source.right;
+  const step = forward ? 1 : -1;
+  const count = vertical
+    ? target.bottom - target.top - (source.bottom - source.top)
+    : target.right - target.left - (source.right - source.left);
+  for (const line of vertical ? span(source.left, source.right) : span(source.top, source.bottom)) {
+    const along = vertical ? span(source.top, source.bottom) : span(source.left, source.right);
+    const ordered = forward ? along : along.reverse();
+    const values = ordered.map((at) => (vertical ? cells[at][line] : cells[line][at]).value);
+    const edge = ordered[ordered.length - 1];
+    fill_values(values, count).forEach((value, i) => {
+      const at = edge + step * (i + 1);
+      if (vertical) next[at][line] = valueCell(value);
+      else next[line][at] = valueCell(value);
+    });
   }
   return next;
 }

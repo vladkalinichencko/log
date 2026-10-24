@@ -24,6 +24,7 @@ import {
   selection_has_row,
   table_selection_selector,
   fill_target_selector,
+  in_bounds,
   range_bounds,
 } from "../store/selectors/tableSelectors";
 import {
@@ -117,8 +118,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const fillSource = editable && activeRange?.kind === "cell" ? range_bounds(activeRange) : null;
   const fillTarget = fillSource && fillEnd ? fill_target_selector(fillSource, fillEnd) : null;
   const inFillTarget = (r: number, c: number) =>
-    fillTarget !== null && fillSource !== null && r <= fillTarget.bottom && c <= fillTarget.right
-      && r >= fillTarget.top && c >= fillTarget.left && (r > fillSource.bottom || c > fillSource.right);
+    fillTarget !== null && fillSource !== null && in_bounds(fillTarget, r, c) && !in_bounds(fillSource, r, c);
   const inSelection = selection_is_range(selection);
   const matchedCells = replaceOpen
     ? (inSelection ? selection_cells(table, selection!) : table.cells.flatMap((row, r) => row.map((_, c) => ({ r, c }))))
@@ -583,7 +583,7 @@ export function TableView({ table, editable }: TableViewProps) {
                       style={frozenStyle(c)}
                     >
                       {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
-                        <span className="fill-handle" title="Drag to fill down or right" onMouseDown={beginFill} />
+                        <span className="fill-handle" title="Drag to fill in any direction" onMouseDown={beginFill} />
                       )}
                       <CellComponent
                         cell={cell}

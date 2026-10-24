@@ -16,11 +16,33 @@ describe("fill", () => {
     expect(fill_values(["1", "4", "5"], 2)).toEqual(["1", "4"]);
   });
 
-  it("fills in the dominant drag direction only", () => {
-    const source = { top: 0, bottom: 1, left: 0, right: 0 };
-    expect(fill_target_selector(source, { r: 4, c: 1 })).toEqual({ top: 0, bottom: 4, left: 0, right: 0 });
-    expect(fill_target_selector(source, { r: 1, c: 3 })).toEqual({ top: 0, bottom: 1, left: 0, right: 3 });
-    expect(fill_target_selector(source, { r: 0, c: 0 })).toBeNull();
+  it("fills in the dominant drag direction only, any of the four", () => {
+    const source = { top: 2, bottom: 3, left: 2, right: 2 };
+    expect(fill_target_selector(source, { r: 6, c: 3 })).toEqual({ top: 2, bottom: 6, left: 2, right: 2 });
+    expect(fill_target_selector(source, { r: 3, c: 5 })).toEqual({ top: 2, bottom: 3, left: 2, right: 5 });
+    expect(fill_target_selector(source, { r: 0, c: 2 })).toEqual({ top: 0, bottom: 3, left: 2, right: 2 });
+    expect(fill_target_selector(source, { r: 2, c: 0 })).toEqual({ top: 2, bottom: 3, left: 0, right: 2 });
+    expect(fill_target_selector(source, { r: 3, c: 2 })).toBeNull();
+  });
+
+  it("filling up or left continues the series backwards and repeats in reverse", () => {
+    const value = (text: string) => ({ type: CellType.String, value: text, ref: null });
+    const store = useStore.getState;
+    store().tables_loadTable("back", {
+      name: "back",
+      kind: TableKind.Grid,
+      column_names: null,
+      row_names: null,
+      cells: [["", "", "", ""], ["", "", "", ""], ["", "", "3", "a"], ["", "", "4", "b"]].map((row) => row.map(value)),
+      representation: Representation.Grid,
+      source_path: "back",
+    });
+    store().tables_fill("back", { top: 2, bottom: 3, left: 2, right: 3 }, { top: 0, bottom: 3, left: 2, right: 3 });
+    expect(store().tables.get("back")!.cells.map((row) => row.slice(2).map((cell) => cell.value))).toEqual([
+      ["1", "a"], ["2", "b"], ["3", "a"], ["4", "b"],
+    ]);
+    store().tables_fill("back", { top: 2, bottom: 2, left: 2, right: 3 }, { top: 2, bottom: 2, left: 0, right: 3 });
+    expect(store().tables.get("back")!.cells[2].map((cell) => cell.value)).toEqual(["3", "a", "3", "a"]);
   });
 
   it("dragging the fill handle down extends the series as one undoable edit", () => {
@@ -42,7 +64,7 @@ describe("fill", () => {
     fireEvent.mouseDown(screen.getByText("1"));
     fireEvent.mouseEnter(screen.getByText("2"));
     fireEvent.mouseUp(window);
-    fireEvent.mouseDown(screen.getByTitle("Drag to fill down or right"));
+    fireEvent.mouseDown(screen.getByTitle("Drag to fill in any direction"));
     const cells = document.querySelectorAll("td[data-column='0'] .cell");
     fireEvent.mouseEnter(cells[3]);
     fireEvent.mouseUp(window);

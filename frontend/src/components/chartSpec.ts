@@ -1,5 +1,6 @@
 import type { Data, Layout } from "plotly.js";
-import { Table } from "../types/domain";
+import { Representation, Table } from "../types/domain";
+import { ACCENTS } from "../store/slices/settingsSlice";
 
 const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -26,8 +27,6 @@ const baseLayout = (): Partial<Layout> => {
     showlegend: false,
   };
 };
-
-type Kind = "line" | "histogram" | "heatmap" | "scatter" | "trajectory";
 
 function column(table: Table, index: number): number[] {
   return table.cells.map((row) => Number(row[index].value));
@@ -59,7 +58,7 @@ export function downsampleSeries(
 
 export function chartSpec(
   table: Table,
-  kind: Kind,
+  representation: Representation,
   window: [number, number] | null = null
 ): { data: Data[]; layout: Partial<Layout> } {
   const cols = table.column_names ?? [];
@@ -67,10 +66,10 @@ export function chartSpec(
   const t = theme();
   const base = baseLayout();
 
-  if (kind === "line") {
+  if (representation === Representation.Line) {
     const xi = Math.max(0, cols.indexOf("step"));
     const x = column(table, xi);
-    const palette = [t.accent, "#3b82f6", "#a855f7", "#34d399", "#f59e0b", t.muted];
+    const palette = [t.accent, ...ACCENTS.filter((color) => color !== t.accent), t.muted];
     const bookkeeping = ["samples_seen", "wall_time", "rank"];
     const series = cols
       .map((name, i) => ({ name, i }))
@@ -106,21 +105,21 @@ export function chartSpec(
     };
   }
 
-  if (kind === "histogram") {
+  if (representation === Representation.Histogram) {
     return {
       data: [{ x: column(table, last), type: "histogram", marker: { color: t.muted } }],
       layout: base,
     };
   }
 
-  if (kind === "scatter") {
+  if (representation === Representation.Scatter) {
     return {
       data: [{ x: column(table, 0), y: column(table, 1), type: "scatter", mode: "markers", marker: { color: t.ink, size: 5 } }],
       layout: base,
     };
   }
 
-  if (kind === "trajectory") {
+  if (representation === Representation.Trajectory) {
     const steps = column(table, 0);
     const points = column(table, 1);
     const xs = column(table, 2);

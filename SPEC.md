@@ -108,6 +108,7 @@ For every dependency: one line on what it does and what specifically breaks or m
 | numpy | `.npy` read/write with a documented header and memory-mapped partial reads. Hand-rolling a binary array format is the thing ADR-004 rejects. |
 | fastapi | Typed request/response models (matches the DTO-as-message constraint) + first-class WebSocket in one framework. Without it we hand-wire ASGI routing, validation, and WS handshakes. |
 | uvicorn | ASGI server to run FastAPI (`--workers 1`). Without it, no server process. |
+| websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
@@ -240,7 +241,8 @@ log/
     vite.config.ts                # vite + vitest config (test.environment = jsdom)
     tsconfig.json
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
-    index.html
+    index.html                    # the app entry
+    design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
     src/
       main.tsx                    # React root, router
       store/
@@ -252,12 +254,13 @@ log/
           focusSlice.ts           # focus_state, focus_reducer (focused path)
           connectionSlice.ts      # connection_state, connection_reducer (websocket FSM)
         selectors/
-          tableSelectors.ts       # table_selector, isFocused, ...
-          runSelectors.ts         # run_selector
+          tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
+          tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
+          pathSelectors.ts        # path_segments, is_run_ref, tensor_source, with_param
           searchSelectors.ts      # search_selector (matching `.`-paths)
       api/
-        client.ts                 # typed fetch wrappers
-        websocket.ts              # ws middleware: events -> store actions
+        client.ts                 # one request() + one typed line per route; relative URLs (Vite proxies /api and /ws in dev)
+        websocket.ts              # connectWebSocket(onMessage) on the page's own host
       fsm/
         baseFsm.ts                # makeFsm(states, transitions): the one FSM factory
         buttonFsm.ts              # button_fsm derived from baseFsm
@@ -266,7 +269,6 @@ log/
         menuFsm.ts                # menu_fsm derived from baseFsm
         playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
-        searchFsm.ts              # search_fsm derived from baseFsm
         resizeFsm.ts              # resize_fsm (idle/dragging) derived from baseFsm
       components/
         App.tsx                   # router outlet + nav bar
@@ -277,17 +279,19 @@ log/
         TableView.tsx             # semantic <table> representation
         InlineView.tsx            # parent table whose table_ref cells render read-only child tiles
         Cell.tsx                  # one cell (uses cellEdit_fsm)
-        HeaderCell.tsx            # column/row name cell (double-click edit)
+        EditableText.tsx          # the one double-click/Enter/Esc text editor (cellEdit_fsm) for cells and header names
         Menu.tsx                  # one menu component: search dropdown + right-click context menu
+        MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
+        TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
         Toolbar.tsx               # thin action bar
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
-        LineChartView.tsx         # Plotly line chart
-        HeatmapView.tsx           # Plotly heatmap
-        HistogramView.tsx         # Plotly histogram (value distribution)
-        Button.tsx                # base button component (uses button_fsm)
+        ChartView.tsx             # every chart representation: chartSpec(table, representation) -> lazy Plotly
+        Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
+        useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
+        DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/

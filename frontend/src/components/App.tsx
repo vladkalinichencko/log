@@ -1,45 +1,61 @@
 import { useEffect } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { NavBar } from "./NavBar";
 import { MainView } from "./MainView";
 import { Dashboard } from "./Dashboard";
 import { Modal } from "./Modal";
 import { RunComparison } from "./RunComparison";
 import { Button } from "./Button";
+import { useTheme } from "./Settings";
+import { useCurrentPath } from "./useCurrentPath";
 import { useStore } from "../store/store";
+import { path_segments, with_param } from "../store/selectors/pathSelectors";
 import { fetchWorkspaces, fetchViews, fetchFunctions, saveWorkspace, saveView } from "../api/client";
 import { connectWebSocket } from "../api/websocket";
+import { Table } from "../types/domain";
 
 export function App() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPath = decodeURIComponent(useLocation().pathname.slice(1));
-  const pin = useStore((state: any) => state.tiles_pin);
-  const pinned = useStore((state: any) => state.pinned) as string[];
-  const tiles = useStore((state: any) => state.tiles);
-  const loadWorkspace = useStore((state: any) => state.tiles_loadWorkspace);
-  const setViews = useStore((state: any) => state.tables_setViews);
-  const setFunctions = useStore((state: any) => state.tables_setFunctions);
-  const liveBump = useStore((state: any) => state.live_bump);
-  const connectionEvent = useStore((state: any) => state.connection_event);
-  const undo = useStore((state: any) => state.tables_undo);
-  const redo = useStore((state: any) => state.tables_redo);
-  const theme = useStore((state: any) => state.theme);
+  const currentPath = useCurrentPath();
+  const pin = useStore((state) => state.tiles_pin);
+  useTheme();
+  useUndoKeys();
+  useCatalogs();
+  useLiveUpdates();
+  useWorkspaceAutosave();
+  useViewAutosave();
 
-  const accent = useStore((state: any) => state.accent);
+  return (
+    <div>
+      <div className="bar">
+        <NavBar />
+        <div className="group">
+          <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
+          <Button icon="gear" ghost title="settings" onClick={() => setSearchParams(with_param(searchParams, "settings", "1"))} />
+        </div>
+      </div>
+      <div className="content">
+        <h1>{path_segments(currentPath).pop() ?? "Projects"}</h1>
+        <MainView path={currentPath} />
+        <RunComparison path={currentPath} />
+        <Dashboard />
+      </div>
+      <Modal />
+    </div>
+  );
+}
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.setProperty("--accent", accent);
-  }, [theme, accent]);
-
+function useUndoKeys() {
+  const undo = useStore((state) => state.tables_undo);
+  const redo = useStore((state) => state.tables_redo);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || !(e.metaKey || e.ctrlKey)) return;
       const key = e.key.toLowerCase();
-      if ((e.metaKey || e.ctrlKey) && (key === "y" || (key === "z" && e.shiftKey))) {
+      if (key === "y" || (key === "z" && e.shiftKey)) {
         e.preventDefault();
         redo();
-      } else if ((e.metaKey || e.ctrlKey) && key === "z") {
+      } else if (key === "z") {
         e.preventDefault();
         undo();
       }
@@ -47,29 +63,30 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+}
 
+function useCatalogs() {
+  const loadWorkspace = useStore((state) => state.tiles_loadWorkspace);
+  const setViews = useStore((state) => state.tables_setViews);
+  const setFunctions = useStore((state) => state.tables_setFunctions);
   useEffect(() => {
-    fetchWorkspaces()
-      .then((list) => {
-        if (list.length) loadWorkspace(list[0]);
-      })
-      .catch((err) => console.error("Failed to load workspaces:", err));
-    fetchViews()
-      .then(setViews)
-      .catch((err) => console.error("Failed to load views:", err));
-    fetchFunctions()
-      .then(setFunctions)
-      .catch((err) => console.error("Failed to load functions:", err));
+    fetchWorkspaces().then((list) => list[0] && loadWorkspace(list[0]));
+    fetchViews().then(setViews);
+    fetchFunctions().then(setFunctions);
   }, []);
+}
 
+function useLiveUpdates() {
+  const bump = useStore((state) => state.connection_bump);
+  const connectionEvent = useStore((state) => state.connection_event);
   useEffect(() => {
     let socket: WebSocket;
     let retryDelay = 1000;
     let retryTimer = 0;
     let unmounted = false;
     const connect = () => {
-      socket = connectWebSocket((msg) => {
-        if (msg.type === "run_updated") liveBump();
+      socket = connectWebSocket((message) => {
+        if (message.type === "run_updated") bump();
       });
       socket.onopen = () => {
         retryDelay = 1000;
@@ -89,10 +106,14 @@ export function App() {
       socket.close();
     };
   }, []);
+}
 
+function useWorkspaceAutosave() {
+  const pinned = useStore((state) => state.pinned);
+  const tiles = useStore((state) => state.tiles);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      saveWorkspace("default", {
+      saveWorkspace({
         id: "default",
         tiles: pinned.map((path) => ({
           id: path,
@@ -102,72 +123,36 @@ export function App() {
           w: tiles.get(path)?.w,
           h: tiles.get(path)?.h,
         })),
-      }).catch((err) => console.error("Failed to save workspace:", err));
+      });
     }, 500);
     return () => window.clearTimeout(timer);
   }, [pinned, tiles]);
+}
 
+function useViewAutosave() {
+  const setViews = useStore((state) => state.tables_setViews);
   useEffect(() => {
     let timer = 0;
-    const unsubscribe = (useStore as any).subscribe((state: any, prev: any) => {
+    const unsubscribe = useStore.subscribe((state, prev) => {
       if (state.editHistory === prev.editHistory && state.editFuture === prev.editFuture) return;
-      const edited =
-        state.editHistory[state.editHistory.length - 1] ??
-        state.editFuture[state.editFuture.length - 1];
-      if (!edited) return;
-      const table = state.tables.get(edited.tableId);
+      const edited = state.editHistory[state.editHistory.length - 1] ?? state.editFuture[state.editFuture.length - 1];
+      const table = edited && state.tables.get(edited.tableId);
       if (!table) return;
-      const snapshots = (edits: any[]) =>
-        edits
-          .filter((edit: any) => edit.tableId === edited.tableId)
-          .slice(-20)
-          .map((edit: any) => edit.table);
-      const history = snapshots(state.editHistory);
-      const future = snapshots(state.editFuture);
+      const snapshots = (edits: { tableId: string; table: Table }[]) =>
+        edits.filter((edit) => edit.tableId === edited.tableId).slice(-20).map((edit) => edit.table);
+      const view = {
+        ...table,
+        id: edited.tableId,
+        source_path: edited.tableId,
+        history: snapshots(state.editHistory),
+        future: snapshots(state.editFuture),
+      };
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        saveView(edited.tableId, {
-          id: edited.tableId,
-          ...table,
-          source_path: edited.tableId,
-          history,
-          future,
-        })
-          .then(() => fetchViews().then(setViews))
-          .catch((err) => console.error("Failed to save view:", err));
-      }, 500);
+      timer = window.setTimeout(() => saveView(view).then(fetchViews).then(setViews), 500);
     });
     return () => {
       unsubscribe();
       window.clearTimeout(timer);
     };
   }, []);
-
-  const heroTitle = currentPath.split(".").filter(Boolean).pop() ?? "Projects";
-
-  return (
-    <div>
-      <div className="bar">
-        <NavBar />
-        <div className="group">
-          <Button icon="pin" ghost title="pin to dashboard" onClick={() => pin(currentPath)} />
-          <Button
-            icon="gear"
-            ghost
-            title="settings"
-            onClick={() =>
-              setSearchParams({ ...Object.fromEntries(searchParams), settings: "1" })
-            }
-          />
-        </div>
-      </div>
-      <div className="content">
-        <h1>{heroTitle}</h1>
-        <MainView path={currentPath} />
-        <RunComparison path={currentPath} />
-        <Dashboard />
-      </div>
-      <Modal />
-    </div>
-  );
 }

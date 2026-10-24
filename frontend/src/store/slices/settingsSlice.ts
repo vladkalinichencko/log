@@ -1,3 +1,5 @@
+import type { SetStore } from "../store";
+
 export type Theme = "light" | "dark";
 
 export const ACCENTS = ["#e11d1d", "#e91e8c", "#a855f7", "#6366f1", "#3b82f6", "#34d399"];
@@ -7,8 +9,8 @@ export interface SettingsState {
   accent: string;
 }
 
-export const createSettingsSlice = (set: any) => ({
-  theme: (localStorage.getItem("theme") as Theme) ?? "light",
+export const createSettingsSlice = (set: SetStore) => ({
+  theme: (localStorage.getItem("theme") as Theme | null) ?? "light",
   accent: localStorage.getItem("accent") ?? ACCENTS[0],
 
   settings_setTheme: (theme: Theme) => {

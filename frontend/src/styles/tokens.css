@@ -19,6 +19,17 @@
   --critical: #e11d1d;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
   --font: "IBM Plex Mono", ui-monospace, monospace;
+  --text-page: 40px;
+  --text-section: 20px;
+  --text-tile: 18px;
+  --text-body: 14px;
+  --text-meta: 12px;
+  --icon: 16px;
+  --handle: 12px;
+  --hit: 6px;
+  --menu-width: 220px;
+  --menu-column: 160px;
+  --menu-height: 320px;
 }
 
 :root[data-theme="dark"] {
@@ -40,7 +51,7 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.15;
   color: var(--gray-900);
   background: var(--gray-50);
@@ -54,13 +65,13 @@ body {
 h1 {
   margin: var(--space) 0;
   font-weight: 600;
-  font-size: 40px;
+  font-size: var(--text-page);
 }
 
 .subtitle {
   color: var(--gray-600);
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
 h1,
@@ -112,6 +123,7 @@ tbody tr:hover {
 }
 
 .link {
+  color: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -182,12 +194,20 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-button:hover {
+button[data-state="hover"] {
   background: var(--gray-100);
 }
 
-button:active {
+button[data-state="pressed"] {
   background: var(--gray-200);
+}
+
+button[data-state="pending"] {
+  cursor: progress;
+}
+
+button[data-state="error"] {
+  outline: 1px solid var(--accent);
 }
 
 button:disabled {
@@ -204,12 +224,8 @@ button.ghost {
   align-items: center;
 }
 
-button.ghost:hover {
+button.ghost[data-state="hover"] {
   background: var(--gray-100);
-}
-
-button.ghost.armed {
-  background: var(--gray-200);
 }
 
 .toggle {
@@ -235,8 +251,8 @@ button.active {
 }
 
 .icon {
-  width: 16px;
-  height: 16px;
+  width: var(--icon);
+  height: var(--icon);
   display: block;
 }
 
@@ -397,7 +413,7 @@ select {
 
 .table-filter-error {
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--text-meta);
   margin-bottom: calc(var(--space) / 2);
 }
 
@@ -429,7 +445,7 @@ select {
 
 .column-actions button {
   color: var(--gray-600);
-  font-size: 11px;
+  font-size: var(--text-meta);
 }
 
 .column-resize,
@@ -442,7 +458,7 @@ select {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 6px;
+  width: var(--hit);
   cursor: col-resize;
 }
 
@@ -450,7 +466,7 @@ select {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 6px;
+  height: var(--hit);
   cursor: row-resize;
 }
 
@@ -508,8 +524,8 @@ select {
 }
 
 .resize-handle {
-  width: 12px;
-  height: 12px;
+  width: var(--handle);
+  height: var(--handle);
   cursor: nwse-resize;
   align-self: flex-end;
   flex: 0 0 auto;
@@ -533,7 +549,7 @@ input.picking {
 
 .table-meta {
   color: var(--gray-600);
-  font-size: 12px;
+  font-size: var(--text-meta);
   margin: var(--space) 0 0;
 }
 
@@ -603,7 +619,7 @@ input.picking {
 }
 
 .section-heading h2 {
-  font-size: 20px;
+  font-size: var(--text-section);
 }
 
 .data-section > .table-wrap,
@@ -628,13 +644,13 @@ input.picking {
 }
 
 .tile-name {
-  font-size: 18px;
+  font-size: var(--text-tile);
   font-weight: 600;
 }
 
 .dot {
-  width: 16px;
-  height: 16px;
+  width: var(--icon);
+  height: var(--icon);
   border-radius: 50%;
   border: none;
   padding: 0;
@@ -656,13 +672,13 @@ input.picking {
 
 .menu {
   position: fixed;
-  min-width: 220px;
+  min-width: var(--menu-width);
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   z-index: 10;
-  max-height: 320px;
+  max-height: var(--menu-height);
   overflow: auto;
 }
 
@@ -704,8 +720,8 @@ input.picking {
   display: block;
   padding: 0;
   cursor: default;
-  min-width: 160px;
-  max-height: 320px;
+  min-width: var(--menu-column);
+  max-height: var(--menu-height);
   overflow: auto;
 }
 
@@ -720,7 +736,7 @@ input.picking {
   padding: calc(var(--space) / 1.5) var(--space);
   background: linear-gradient(var(--gray-0) 55%, transparent);
   color: var(--gray-600);
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
 .menu-section > div {
@@ -788,5 +804,5 @@ input.picking {
 }
 
 .content > .tile-body > .tile-content {
-  min-height: 320px;
+  min-height: var(--menu-height);
 }

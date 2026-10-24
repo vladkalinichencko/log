@@ -1,9 +1,9 @@
 import { makeFsm } from "./baseFsm";
 
-type MenuState = "closed" | "open";
-type MenuEvent = "open" | "close";
+export type MenuState = "closed" | "open";
+type MenuEvent = "toggle" | "close";
 
 export const menuFsm = makeFsm<MenuState, MenuEvent>(["closed", "open"], {
-  closed: { open: "open" },
-  open: { close: "closed", open: "open" },
+  closed: { toggle: "open" },
+  open: { toggle: "closed", close: "closed" },
 });

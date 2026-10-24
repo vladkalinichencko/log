@@ -23,13 +23,11 @@ describe("tilesSlice pin/unpin", () => {
     expect(s().tiles.get("p.r.loss").representation).toBe("line");
   });
 
-  it("resize increments size with a floor", () => {
-    const s = () => useStore.getState() as any;
-    s().tiles_resize("rt", 50, 50);
-    expect(s().tiles.get("rt").w).toBe(370);
-    expect(s().tiles.get("rt").h).toBe(350);
-    s().tiles_resize("rt", -1000, -1000);
-    expect(s().tiles.get("rt").w).toBe(160);
-    expect(s().tiles.get("rt").h).toBe(120);
+  it("setSize stores a size with a floor", () => {
+    const s = useStore.getState;
+    s().tiles_setSize("rt", 370, 350);
+    expect(s().tiles.get("rt")).toMatchObject({ w: 370, h: 350 });
+    s().tiles_setSize("rt", -1000, -1000);
+    expect(s().tiles.get("rt")).toMatchObject({ w: 160, h: 120 });
   });
 });

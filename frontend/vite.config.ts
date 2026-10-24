@@ -6,6 +6,15 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    proxy: {
+      "/api": "http://localhost:8000",
+      "/ws": { target: "ws://localhost:8000", ws: true },
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: { index: "index.html", "design-system": "design-system.html" },
+    },
   },
   test: {
     environment: "jsdom",

@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "fastapi",
     "uvicorn",
+    "websockets",
     "pydantic",
     "watchfiles",
     "matplotlib",

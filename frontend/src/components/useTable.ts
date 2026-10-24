@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { loadFsm } from "../fsm/loadFsm";
 import { useStore } from "../store/store";
+import { table_selector } from "../store/selectors/tableSelectors";
 import { fetchTable } from "../api/client";
-import { Table } from "../types/domain";
 
-export function useTable(path: string): { table: Table | undefined; loadState: string } {
+export function useTable(path: string) {
   const [loadState, setLoadState] = useState(loadFsm.initial);
-  const loadTable = useStore((state: any) => state.tables_loadTable);
-  const loadView = useStore((state: any) => state.tables_loadView);
-  const table = useStore((state: any) => state.tables.get(path));
-  const savedView = useStore((state: any) => state.views.get(path));
-  const liveTick = useStore((state: any) => state.liveTick);
+  const loadTable = useStore((state) => state.tables_loadTable);
+  const loadView = useStore((state) => state.tables_loadView);
+  const table = useStore((state) => table_selector(state, path));
+  const savedView = useStore((state) => state.views.get(path));
+  const liveTick = useStore((state) => state.liveTick);
   const hydratedView = useRef<string | null>(null);
 
   useEffect(() => {

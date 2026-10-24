@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "./Button";
 
 interface RenamePanelProps {
-  onApply: (fields: { prefix: string; suffix: string; find: string; replace: string }) => void;
+  onApply: (fields: { prefix: string; suffix: string; find: string; replace: string }) => Promise<unknown>;
 }
 
 export function RenamePanel({ onApply }: RenamePanelProps) {

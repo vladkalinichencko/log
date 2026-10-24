@@ -3,18 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { Tile } from "./Tile";
 import { Settings } from "./Settings";
 import { Button } from "./Button";
+import { with_param } from "../store/selectors/pathSelectors";
 
 export function Modal() {
   const [searchParams, setSearchParams] = useSearchParams();
   const path = searchParams.get("modal");
   const settings = searchParams.get("settings");
   const open = path !== null || settings !== null;
-  const close = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete("modal");
-    next.delete("settings");
-    setSearchParams(next);
-  };
+  const close = () => setSearchParams(with_param(with_param(searchParams, "modal", null), "settings", null));
 
   useEffect(() => {
     if (!open) return;

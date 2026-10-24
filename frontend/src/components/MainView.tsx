@@ -1,6 +1,7 @@
 import { useTable } from "./useTable";
 import { render } from "./render";
 import { CellType, Representation } from "../types/domain";
+import { path_segments } from "../store/selectors/pathSelectors";
 
 interface MainViewProps {
   path: string;
@@ -12,7 +13,7 @@ export function MainView({ path }: MainViewProps) {
   if (loadState === "error") return <div>Failed to load {path}</div>;
   if (!table) return <div>Loading…</div>;
 
-  const depth = path ? path.split(".").length : 0;
+  const depth = path_segments(path).length;
   const hasChildren = table.cells.some((row) =>
     row.some((cell) => cell.type === CellType.TableRef)
   );

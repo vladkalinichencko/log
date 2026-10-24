@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   table_selector,
-  isFocused,
+  selection_has_cell,
   selection_blocks,
   selection_cells,
   selection_rows,
@@ -25,21 +25,19 @@ describe("tableSelectors", () => {
     expect(table_selector(state, "missing")).toBeUndefined();
   });
 
-  it("isFocused includes every cell in every selected rectangle", () => {
-    const state = {
-      focused: {
-        tableId: "p.run",
-        ranges: [
-          { kind: "cell", r: 1, c: 2, endR: 2, endC: 3 },
-          { kind: "cell", r: 0, c: 0, endR: 0, endC: 0 },
-        ],
-      },
+  it("selection_has_cell includes every cell in every selected rectangle", () => {
+    const selection = {
+      tableId: "p.run",
+      ranges: [
+        { kind: "cell" as const, r: 1, c: 2, endR: 2, endC: 3 },
+        { kind: "cell" as const, r: 0, c: 0, endR: 0, endC: 0 },
+      ],
     };
-    expect(isFocused(state, "p.run", 1, 2)).toBe(true);
-    expect(isFocused(state, "p.run", 2, 3)).toBe(true);
-    expect(isFocused(state, "p.run", 0, 0)).toBe(true);
-    expect(isFocused(state, "p.run", 0, 2)).toBe(false);
-    expect(isFocused({ focused: null }, "p.run", 1, 2)).toBe(false);
+    expect(selection_has_cell(selection, 1, 2)).toBe(true);
+    expect(selection_has_cell(selection, 2, 3)).toBe(true);
+    expect(selection_has_cell(selection, 0, 0)).toBe(true);
+    expect(selection_has_cell(selection, 0, 2)).toBe(false);
+    expect(selection_has_cell(null, 1, 2)).toBe(false);
   });
 
   it("derives clipboard blocks and unique cut coordinates", () => {

@@ -268,7 +268,7 @@ describe("TableView", () => {
 
   it("toggles run rows from the collection selection column", () => {
     const s = () => useStore.getState() as any;
-    s().focus_setTarget(null);
+    s().focus_clear();
     const runs: Table = {
       name: "demo",
       kind: TableKind.Folder,

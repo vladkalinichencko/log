@@ -1,20 +1,5 @@
-const WS_URL = "ws://localhost:8000/ws";
-
-export function connectWebSocket(onMessage: (data: any) => void): WebSocket {
-  const ws = new WebSocket(WS_URL);
-
-  ws.onopen = () => {
-    console.log("WebSocket connected");
-  };
-
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    onMessage(data);
-  };
-
-  ws.onclose = () => {
-    console.log("WebSocket closed");
-  };
-
-  return ws;
+export function connectWebSocket(onMessage: (message: { type: string }) => void): WebSocket {
+  const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  socket.onmessage = (event) => onMessage(JSON.parse(event.data));
+  return socket;
 }

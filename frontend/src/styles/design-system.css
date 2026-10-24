@@ -1,3 +1,62 @@
+.catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+.catalog-row figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.catalog-swatch > span {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+}
+
+.catalog-space {
+  align-items: flex-start;
+}
+
+.catalog-space > span {
+  height: var(--space);
+  background: var(--accent);
+}
+
+.catalog-icon {
+  width: calc(var(--space-4) * 2);
+}
+
+.catalog-label {
+  width: var(--menu-column);
+}
+
+.catalog-shadow {
+  padding: var(--space);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.catalog-chart {
+  display: flex;
+  flex-direction: column;
+  width: var(--menu-height);
+  height: var(--menu-height);
+}
+
 .lab {
   --lab-bg: #f2f2ef;
   --lab-surface: #fff;

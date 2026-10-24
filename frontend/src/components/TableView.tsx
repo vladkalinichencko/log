@@ -2,20 +2,24 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, Cell, CellType } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
-import { HeaderCell } from "./HeaderCell";
+import { EditableText } from "./EditableText";
 import { Button } from "./Button";
 import { Menu } from "./Menu";
+import { MenuButton } from "./MenuButton";
 import { TableResizeHandle } from "./TableResizeHandle";
 import { parsePaste } from "./parsePaste";
 import { selectionFsm } from "../fsm/selectionFsm";
-import { useMenu } from "../fsm/useMenu";
 import { useStore } from "../store/store";
+import { FocusMode } from "../store/slices/focusSlice";
+import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
-  isFocused,
-  isInFocusedLine,
   selection_anchor,
   selection_blocks,
   selection_cells,
+  selection_has_cell,
+  selection_has_column,
+  selection_has_row,
+  table_selection_selector,
 } from "../store/selectors/tableSelectors";
 import {
   filter_clauses,
@@ -33,6 +37,9 @@ import {
 
 const EDGE = 6;
 
+const selectionMode = (event: React.MouseEvent): FocusMode =>
+  event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
+
 interface TableViewProps {
   table: Table;
   editable?: boolean;
@@ -41,16 +48,17 @@ interface TableViewProps {
 export function TableView({ table, editable }: TableViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tableId = table.source_path || table.name;
-  const addRow = useStore((state: any) => state.tables_addRow);
-  const addColumn = useStore((state: any) => state.tables_addColumn);
-  const editName = useStore((state: any) => state.tables_editName);
-  const pasteBlock = useStore((state: any) => state.tables_pasteBlock);
-  const clearCells = useStore((state: any) => state.tables_clearCells);
-  const startRange = useStore((state: any) => state.focus_startRange);
-  const extendRange = useStore((state: any) => state.focus_extendRange);
-  const focused = useStore((state: any) => state.focused);
-  const picking = useStore((state: any) => state.picking);
-  const pickColumn = useStore((state: any) => state.focus_pickColumn);
+  const addRow = useStore((state) => state.tables_addRow);
+  const addColumn = useStore((state) => state.tables_addColumn);
+  const editCell = useStore((state) => state.tables_editCell);
+  const editName = useStore((state) => state.tables_editName);
+  const pasteBlock = useStore((state) => state.tables_pasteBlock);
+  const clearCells = useStore((state) => state.tables_clearCells);
+  const startRange = useStore((state) => state.focus_startRange);
+  const extendRange = useStore((state) => state.focus_extendRange);
+  const selection = useStore((state) => table_selection_selector(state, tableId));
+  const picking = useStore((state) => state.picking);
+  const pickColumn = useStore((state) => state.focus_pickColumn);
   const tableRef = useRef<HTMLTableElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const columns = table.cells[0]?.length ?? table.column_names?.length ?? 0;
@@ -59,7 +67,6 @@ export function TableView({ table, editable }: TableViewProps) {
     requested: null,
   });
   const [selectionState, setSelectionState] = useState(selectionFsm.initial);
-  const [columnsState, openColumns, closeColumns] = useMenu();
   const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
@@ -77,12 +84,8 @@ export function TableView({ table, editable }: TableViewProps) {
     ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
     : 0;
   const view = table_view_selector(table, query, sorts);
-  const runTable = table.source_path?.split(".").length === 1 &&
-    table.cells.every((row) =>
-      row[0]?.type === CellType.TableRef && row[0].ref?.split(".").length === 2
-    );
-
-  const selection = focused && focused.tableId === tableId ? focused : null;
+  const runTable = path_segments(table.source_path ?? "").length === 1 &&
+    table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
 
   useEffect(() => {
     const current = searchParams.toString();
@@ -204,8 +207,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const beginSelection = (r: number, c: number, event: React.MouseEvent) => {
     if (!editable) return;
     event.preventDefault();
-    const mode = event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
-    startRange({ tableId, kind: "cell", r, c }, mode);
+    startRange({ tableId, kind: "cell", r, c }, selectionMode(event));
     setSelectionState((state) => selectionFsm.next(state, "down"));
   };
 
@@ -228,10 +230,7 @@ export function TableView({ table, editable }: TableViewProps) {
         const rowRect = row.getBoundingClientRect();
         return e.clientY >= rowRect.top && e.clientY <= rowRect.bottom;
       });
-      if (r >= 0) {
-        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
-        startRange({ tableId, kind: "row", r, c: -1 }, mode);
-      }
+      if (r >= 0) startRange({ tableId, kind: "row", r, c: -1 }, selectionMode(e));
     } else if (onHorizontalEdge && e.clientX >= rect.left && e.clientX <= rect.right) {
       const firstRow = rows[0] ? [...rows[0].children] : [];
       const domIndex = firstRow.findIndex((cell) => {
@@ -239,18 +238,13 @@ export function TableView({ table, editable }: TableViewProps) {
         return e.clientX >= cellRect.left && e.clientX <= cellRect.right;
       });
       const c = table.row_names ? domIndex - 1 : domIndex;
-      if (c >= 0) {
-        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
-        startRange({ tableId, kind: "col", r: -1, c }, mode);
-      }
+      if (c >= 0) startRange({ tableId, kind: "col", r: -1, c }, selectionMode(e));
     }
   };
 
-  const focusState = { focused: selection };
-  const rowSelected = (r: number) => isInFocusedLine(focusState, tableId, r, -1);
-  const colSelected = (c: number) => isInFocusedLine(focusState, tableId, -1, c);
+  const rowSelected = (r: number) => selection_has_row(selection, r);
   const colClass = (r: number, c: number) => {
-    if (!colSelected(c)) return undefined;
+    if (!selection_has_column(selection, c)) return undefined;
     const top = table.column_names ? r === -1 : r === 0;
     const bottom = r === table.cells.length - 1;
     return ["col-selected", top ? "col-top" : "", bottom ? "col-bottom" : ""].join(" ").trim();
@@ -272,13 +266,8 @@ export function TableView({ table, editable }: TableViewProps) {
           onChange={(event) => setParam(filterKey, event.target.value)}
         />
         <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
-        <div className="anchor" onClick={(event) => event.stopPropagation()}>
-          <Button
-            label={`Columns ${visibleColumns.length}/${columns}`}
-            title="Choose, reorder, and freeze columns"
-            onClick={() => columnsState === "open" ? closeColumns() : openColumns()}
-          />
-          {columnsState === "open" && (
+        <MenuButton label={`Columns ${visibleColumns.length}/${columns}`} title="Choose, reorder, and freeze columns">
+          {() => (
             <Menu
               sections={[
                 {
@@ -316,7 +305,7 @@ export function TableView({ table, editable }: TableViewProps) {
               ]}
             />
           )}
-        </div>
+        </MenuButton>
       </div>
       {view.clauses.length > 0 && (
         <div className="filter-chips">
@@ -360,7 +349,7 @@ export function TableView({ table, editable }: TableViewProps) {
                       >
                         <div className="column-header">
                           {editable ? (
-                            <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
+                            <EditableText className="cell" value={name} onCommit={(n) => editName(tableId, "col", c, n)} />
                           ) : (
                             <span className="cell">{name}</span>
                           )}
@@ -417,9 +406,10 @@ export function TableView({ table, editable }: TableViewProps) {
                   {table.row_names && (
                     <th className={colClass(row.index, -2)}>
                       {editable ? (
-                        <HeaderCell
-                          name={row.rowName!}
-                          onRename={(n) => editName(tableId, "row", row.index, n)}
+                        <EditableText
+                          className="cell"
+                          value={row.rowName!}
+                          onCommit={(n) => editName(tableId, "row", row.index, n)}
                         />
                       ) : (
                         <span className="cell">{row.rowName}</span>
@@ -436,11 +426,9 @@ export function TableView({ table, editable }: TableViewProps) {
                     >
                       <CellComponent
                         cell={cell}
-                        tableId={tableId}
-                        rowIndex={row.index}
-                        colIndex={c}
                         editable={editable}
-                        selected={isFocused(focusState, tableId, row.index, c)}
+                        selected={selection_has_cell(selection, row.index, c)}
+                        onCommit={(value) => editCell(tableId, row.index, c, value)}
                         onSelect={(event) => beginSelection(row.index, c, event)}
                         onExtend={() => extendSelection(row.index, c)}
                       />

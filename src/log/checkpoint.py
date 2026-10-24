@@ -43,7 +43,6 @@ def checkpoint(
         CheckpointJob(
             payload=payload,
             tag=tag or f"step{step:09d}",
-            run_dir=ctx.run_dir,
             epoch=ctx.epoch,
             metric=metric,
             mode=mode,

@@ -42,10 +42,10 @@ class Table:
     name: str
     kind: TableKind
     column_names: list[str] | None
-    row_names: list[str] | None
     cells: list[list[Cell]]
-    representation: Representation
     source_path: str | None
+    row_names: list[str] | None = None
+    representation: Representation = Representation.grid
 
 
 @dataclass

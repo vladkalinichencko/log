@@ -1,45 +1,26 @@
-import json
-import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
+from ..adapters.json_store import delete_document, list_documents, save_document
 from ..config import get_runs_root
+from .errors import ApiError
 
 router = APIRouter()
 
 
-def _workspaces_dir(runs_root: Path) -> Path:
-    return runs_root / "workspaces"
-
-
 @router.get("/api/workspaces")
 def list_workspaces(runs_root: Path = Depends(get_runs_root)) -> list[dict]:
-    directory = _workspaces_dir(runs_root)
-    if not directory.exists():
-        return []
-    return [json.loads(p.read_text()) for p in sorted(directory.glob("*.json"))]
+    return list_documents(runs_root / "workspaces")
 
 
 @router.put("/api/workspaces/{workspace_id}")
-def save_workspace(
-    workspace_id: str, workspace: dict, runs_root: Path = Depends(get_runs_root)
-) -> dict:
-    directory = _workspaces_dir(runs_root)
-    directory.mkdir(parents=True, exist_ok=True)
-    final = directory / f"{workspace_id}.json"
-    tmp = directory / f"{workspace_id}.json.tmp"
-    tmp.write_text(json.dumps(workspace))
-    os.replace(tmp, final)
-    return workspace
+def save_workspace(workspace_id: str, workspace: dict, runs_root: Path = Depends(get_runs_root)) -> dict:
+    return save_document(runs_root / "workspaces", workspace_id, workspace)
 
 
 @router.delete("/api/workspaces/{workspace_id}")
-def delete_workspace(
-    workspace_id: str, runs_root: Path = Depends(get_runs_root)
-) -> dict:
-    final = _workspaces_dir(runs_root) / f"{workspace_id}.json"
-    if not final.exists():
-        raise HTTPException(status_code=404, detail="WORKSPACE_NOT_FOUND")
-    final.unlink()
+def delete_workspace(workspace_id: str, runs_root: Path = Depends(get_runs_root)) -> dict:
+    if not delete_document(runs_root / "workspaces", workspace_id):
+        raise ApiError(404, "WORKSPACE_NOT_FOUND", f"workspace {workspace_id!r} does not exist")
     return {"deleted": True}

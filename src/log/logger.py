@@ -20,58 +20,23 @@ class Logger:
         value: Union[float, int, bool, torch.Tensor, np.ndarray],
         step: int | None = None,
     ) -> None:
-        if not path or path == "":
+        if not path:
             raise InvalidPathError("path cannot be empty")
+        if not isinstance(value, (int, float, bool, torch.Tensor, np.ndarray)):
+            raise UnsupportedValueTypeError(f"value must be scalar or tensor, got {type(value)}")
 
         if step is None:
             step = self.ctx.current_step
         else:
             self.ctx.current_step = step
+        if isinstance(value, (torch.Tensor, np.ndarray)) and value.ndim == 0:
+            value = value.item()
 
-        wall_time = time.time()
-        rank = 0
-
-        is_scalar = False
+        stamp = dict(step=step, samples_seen=self.ctx.samples_seen, wall_time=time.time(), rank=0, epoch=self.ctx.epoch)
         if isinstance(value, (int, float, bool)):
-            is_scalar = True
-        elif isinstance(value, (torch.Tensor, np.ndarray)):
-            if isinstance(value, torch.Tensor):
-                if value.ndim == 0:
-                    is_scalar = True
-                    value = value.item()
-            elif isinstance(value, np.ndarray):
-                if value.ndim == 0:
-                    is_scalar = True
-                    value = value.item()
+            self.ctx.writer.enqueue(ScalarJob(path=path, value=value, **stamp))
         else:
-            raise UnsupportedValueTypeError(
-                f"value must be scalar or tensor, got {type(value)}"
-            )
-
-        if is_scalar:
-            job = ScalarJob(
-                path=path,
-                value=value,
-                step=step,
-                samples_seen=self.ctx.samples_seen,
-                wall_time=wall_time,
-                rank=rank,
-                epoch=self.ctx.epoch,
-            )
-        else:
-            if isinstance(value, np.ndarray):
-                value = torch.from_numpy(value)
-            job = TensorJob(
-                path=path,
-                tensor=value,
-                step=step,
-                samples_seen=self.ctx.samples_seen,
-                wall_time=wall_time,
-                rank=rank,
-                epoch=self.ctx.epoch,
-            )
-
-        self.ctx.writer.enqueue(job)
+            self.ctx.writer.enqueue(TensorJob(path=path, tensor=torch.as_tensor(value), **stamp))
 
 
 def logger() -> Logger:

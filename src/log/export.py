@@ -1,12 +1,6 @@
-import json
-import os
-from pathlib import Path
-
 from .errors import RendererUnavailableError, ViewNotFoundError
-
-
-def _runs_root() -> Path:
-    return Path(os.environ.get("LOG_RUNS_ROOT", "./runs"))
+from .writer.atomic import read_jsonl
+from .writer.layout import default_runs_root
 
 
 def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
@@ -23,17 +17,13 @@ def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
         raise ViewNotFoundError(f"view {view_id!r} is not a scalar series path")
     project, run, epoch = segments[0], segments[1], segments[2]
     scalar = ".".join(segments[3:])
-    metrics_path = _runs_root() / project / run / epoch / "metrics.jsonl"
+    metrics_path = default_runs_root() / project / run / epoch / "metrics.jsonl"
     if not metrics_path.exists():
         raise ViewNotFoundError(f"view {view_id!r} not found")
 
-    xs, ys = [], []
-    for line in metrics_path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            if scalar in row.get("scalars", {}):
-                xs.append(row["step"])
-                ys.append(row["scalars"][scalar])
+    rows = [row for row in read_jsonl(metrics_path) if scalar in row.get("scalars", {})]
+    xs = [row["step"] for row in rows]
+    ys = [row["scalars"][scalar] for row in rows]
     if not xs:
         raise ViewNotFoundError(f"view {view_id!r} has no series {scalar!r}")
 

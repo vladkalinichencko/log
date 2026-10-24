@@ -2,11 +2,12 @@ import shutil
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..config import get_index, get_runs_root
 from ..ports.index_port import IndexPort
+from .errors import ApiError
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ def get_runs(
 def delete_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
     run_dir = runs_root / project / run
     if not run_dir.is_dir():
-        raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+        raise ApiError(404, "RUN_NOT_FOUND", f"run {project}/{run} does not exist")
     shutil.rmtree(run_dir)
     return {"deleted": True}
 
@@ -55,9 +56,9 @@ def rename_runs(req: RenameRequest, runs_root: Path = Depends(get_runs_root)) ->
         src = runs_root / project / run
         dst = runs_root / project / new_run
         if not src.is_dir():
-            raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+            raise ApiError(404, "RUN_NOT_FOUND", f"run {ref} does not exist")
         if dst.exists():
-            raise HTTPException(status_code=400, detail="INVALID_PATTERN")
+            raise ApiError(400, "INVALID_PATTERN", f"renaming {ref} would overwrite {project}/{new_run}")
         src.rename(dst)
         renamed[ref] = f"{project}/{new_run}"
     return {"renamed": renamed}

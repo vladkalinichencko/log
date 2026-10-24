@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import torch
@@ -7,8 +6,9 @@ import torch.optim as optim
 
 from .errors import CheckpointReadError, StateRestoreError
 from .run import get_active_run
-from .writer.atomic import atomic_write_bytes
+from .writer.atomic import read_jsonl
 from .writer.identity import restore_rng
+from .writer.queue_writer import MetaJob
 
 
 def resume_state(
@@ -23,12 +23,7 @@ def resume_state(
     if checkpoint is not None:
         ckpt_path = Path(checkpoint)
     else:
-        index_path = ckpt_dir / "index.jsonl"
-        rows = [
-            json.loads(line)
-            for line in index_path.read_text().splitlines()
-            if line.strip()
-        ] if index_path.exists() else []
+        rows = read_jsonl(ckpt_dir / "index.jsonl")
         if not rows:
             return 0
         ckpt_path = ckpt_dir / f"{max(rows, key=lambda r: r['step'])['tag']}.pt"
@@ -55,9 +50,5 @@ def resume_state(
     ctx.samples_seen = payload.get("samples_seen", 0)
     ctx.epoch = payload.get("epoch", 0)
     ctx.current_step = payload["step"]
-
-    meta_path = ctx.run_dir / "meta.json"
-    meta = json.loads(meta_path.read_text())
-    meta["resume_diff"] = {"resumed_from_step": payload["step"]}
-    atomic_write_bytes(meta_path, json.dumps(meta, indent=2).encode())
+    ctx.writer.enqueue(MetaJob({"resume_diff": {"resumed_from_step": payload["step"]}}))
     return payload["step"]

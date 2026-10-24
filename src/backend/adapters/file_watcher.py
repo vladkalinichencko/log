@@ -2,6 +2,7 @@ from pathlib import Path
 
 from watchfiles import awatch
 
+from ..domain.read_table import DERIVED_STATE_DIRS
 from .sqlite_index import read_summary
 
 
@@ -22,7 +23,7 @@ def changed_runs(paths: list[str], runs_root: Path) -> dict[tuple[str, str], str
             parts = Path(changed).relative_to(runs_root).parts
         except ValueError:
             continue
-        if len(parts) >= 2 and parts[0] != "workspaces":
+        if len(parts) >= 2 and parts[0] not in DERIVED_STATE_DIRS:
             runs[(parts[0], parts[1])] = _classify(parts[2:])
     return runs
 

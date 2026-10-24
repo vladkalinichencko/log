@@ -188,12 +188,9 @@ log/
         __init__.py
         queue_writer.py           # background WriterThread + WriteJob dataclasses
         layout.py                 # `.`-path -> on-disk path resolution (run dir layout)
-        atomic.py                 # atomic_write_bytes, append_jsonl
-        tensor_io.py              # write_npy, read_npy
+        atomic.py                 # atomic_write_bytes, update_json, append_jsonl, read_jsonl
+        tensor_io.py              # write_npy
         identity.py               # git_hash, requirements_hash, rng_state capture
-      ports/
-        __init__.py
-        storage.py                # StoragePort protocol (training-side write)
       errors.py                   # all log-side exception classes (Section 12)
     backend/                      # read-only observability server
       __init__.py
@@ -209,7 +206,8 @@ log/
         local_file_storage.py     # LocalFileStorage implements StoragePort
         sqlite_index.py           # SqliteIndex implements IndexPort
         websocket_transport.py    # WebSocketTransport implements TransportPort
-        file_watcher.py           # FileWatcher (watchfiles) -> events
+        file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
+        json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
       domain/
         __init__.py
         models.py                 # Table, Cell, CellType, TableKind, Representation + on-disk record DTOs
@@ -217,6 +215,7 @@ log/
         table_engine.py           # `.`-path merge language evaluator (Section 9.13)
       api/
         __init__.py
+        errors.py                 # ApiError(status, code, message) + the one handler -> { error: { code, message } }
         runs.py                   # /api/runs endpoints
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
@@ -580,6 +579,9 @@ classDiagram
     class ScalarJob
     class TensorJob
     class CheckpointJob
+    class MetaJob {
+        +dict fields
+    }
     class Logger {
         +RunContext ctx
         +log(path, value, step)
@@ -595,6 +597,7 @@ classDiagram
     WriteJob <|-- ScalarJob
     WriteJob <|-- TensorJob
     WriteJob <|-- CheckpointJob
+    WriteJob <|-- MetaJob
     WriterThread "1" --> "*" WriteJob : consumes
     RunContext "1" --> "1" WriterThread
     Logger --> RunContext
@@ -603,7 +606,7 @@ classDiagram
 Classes (justified by held state):
 - `RunContext` — holds the live run's counters + writer + config; one process-global instance set by `log.run`. Read by `log.log`, `log.tick`, `log.track`, `log.checkpoint`, `log.resume_state`.
 - `WriterThread` — owns the background queue + thread; the only writer of files on the training side.
-- `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` — dataclasses carrying one unit of work to the writer.
+- `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` / `MetaJob` — dataclasses carrying one unit of work to the writer. `MetaJob` exists so that `meta.json` has one writer while the run is live: `resume_state` enqueues its `resume_diff` instead of writing the file beside the thread that records `writer_errors`.
 - `Logger` — thin object bound to `RunContext`; exists so `log.logger()` can return a handle, but `log.log` is the module-level shortcut.
 - `WatchHandle` — holds the `weakref` + registered hook handles so `.remove()` can deregister.
 - `TrackedLoader` — wraps a `DataLoader`, holds the epoch counter.
@@ -626,8 +629,9 @@ Per-function I/O and purpose (training side):
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
-| `append_jsonl(path, row)` | path, dict | `None` | Append one JSON line + flush. |
-| `write_npy(path, array)` / `read_npy(path)` | path, ndarray | `None` / ndarray | Tensor file I/O. |
+| `update_json(path, fields)` | path, dict | `None` | Read-modify-write one JSON document atomically; `meta.json` is updated only by the writer thread while a run is live (`MetaJob`), and by `log.run` after the writer has joined. |
+| `append_jsonl(path, row)` / `read_jsonl(path)` | path, dict / path | `None` / `list[dict]` | Append one JSON line + flush; read every line of a JSONL log (missing file → `[]`). |
+| `write_npy(path, array)` | path, ndarray | `None` | Tensor file write. |
 | `resolve_run_dir(...)` (layout) | run params | `Path` | Compute the run directory path. |
 | `git_hash()` / `requirements_hash()` / `capture_rng()` | — | str / str / dict | Identity + RNG snapshots. |
 

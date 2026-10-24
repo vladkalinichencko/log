@@ -3,39 +3,40 @@ import json
 from ..ports.storage_port import StoragePort
 from .models import Cell, CellType, Representation, Table, TableKind
 
-
-def _folder(name: str, source_path: str, entries: list[tuple[str, str]]) -> Table:
-    cells = [
-        [Cell(type=CellType.table_ref, value=label, ref=ref)] for label, ref in entries
-    ]
-    return Table(
-        name=name,
-        kind=TableKind.folder,
-        column_names=None,
-        row_names=None,
-        cells=cells,
-        representation=Representation.grid,
-        source_path=source_path,
-    )
+DERIVED_STATE_DIRS = {"views", "workspaces"}
 
 
-def _keyvalue(name: str, source_path: str, pairs) -> Table:
-    cells = [
-        [
-            Cell(type=CellType.string, value=str(k), ref=None),
-            Cell(type=CellType.string, value=str(v), ref=None),
-        ]
-        for k, v in pairs
-    ]
-    return Table(
-        name=name,
-        kind=TableKind.column,
-        column_names=["key", "value"],
-        row_names=None,
-        cells=cells,
-        representation=Representation.grid,
-        source_path=source_path,
-    )
+def read_table(path: str, storage: StoragePort) -> Table:
+    segments = path.split(".") if path else []
+    if not segments:
+        return _projects_table(storage)
+    if len(segments) == 1:
+        return _project_table(segments[0], storage)
+
+    project, run, *inside = segments
+    base = f"{project}.{run}"
+    run_dir = f"{project}/{run}"
+    if not storage.exists(run_dir):
+        raise FileNotFoundError(f"Run {base} not found")
+    if not inside:
+        return _run_table(run, base, run_dir, storage)
+    if inside == ["config"]:
+        params = read_json(storage, f"{run_dir}/config.json")["params"]
+        return _keyvalue_table("config", f"{base}.config", params.items())
+    if inside == ["meta"]:
+        meta = read_json(storage, f"{run_dir}/meta.json")
+        return _keyvalue_table("meta", f"{base}.meta", meta.items())
+    if inside == ["checkpoints"]:
+        return _checkpoints_table(base, run_dir, storage)
+
+    epoch, *leaf = inside
+    if not leaf:
+        return _epoch_table(f"{base}.{epoch}", f"{run_dir}/{epoch}", storage)
+    return _leaf_table(path, ".".join(leaf), f"{run_dir}/{epoch}", storage)
+
+
+def read_json(storage: StoragePort, path: str) -> dict:
+    return json.loads(storage.read(path))
 
 
 def read_jsonl(storage: StoragePort, path: str) -> list[dict]:
@@ -44,137 +45,128 @@ def read_jsonl(storage: StoragePort, path: str) -> list[dict]:
     return [json.loads(line) for line in storage.read(path).decode().splitlines() if line.strip()]
 
 
+def epochs(storage: StoragePort, run_dir: str) -> list[str]:
+    return sorted(
+        name for name in storage.list_dir(run_dir)
+        if name.startswith("epoch_") and storage.is_dir(f"{run_dir}/{name}")
+    )
+
+
+def _projects_table(storage: StoragePort) -> Table:
+    names = [name for name in _child_dirs(storage, "") if name not in DERIVED_STATE_DIRS]
+    return _folder_table("Projects", None, [(name, name) for name in names])
+
+
+def _project_table(project: str, storage: StoragePort) -> Table:
+    if not storage.exists(project):
+        raise FileNotFoundError(f"Project {project} not found")
+    cells = []
+    for run in _child_dirs(storage, project):
+        meta = read_json(storage, f"{project}/{run}/meta.json")
+        cells.append([
+            Cell(CellType.table_ref, run, f"{project}.{run}"),
+            Cell(CellType.string, meta["status"]),
+            Cell(CellType.number, str(meta["samples_seen"])),
+        ])
+    return Table(
+        name=project,
+        kind=TableKind.folder,
+        column_names=["run", "status", "samples_seen"],
+        cells=cells,
+        source_path=project,
+    )
+
+
+def _run_table(run: str, base: str, run_dir: str, storage: StoragePort) -> Table:
+    entries = [("config", f"{base}.config"), ("meta", f"{base}.meta")]
+    entries += [(epoch, f"{base}.{epoch}") for epoch in epochs(storage, run_dir)]
+    if storage.exists(f"{run_dir}/checkpoints"):
+        entries.append(("checkpoints", f"{base}.checkpoints"))
+    return _folder_table(run, base, entries)
+
+
+def _checkpoints_table(base: str, run_dir: str, storage: StoragePort) -> Table:
+    rows = read_jsonl(storage, f"{run_dir}/checkpoints/index.jsonl")
+    return Table(
+        name="checkpoints",
+        kind=TableKind.folder,
+        column_names=["tag"],
+        cells=[[Cell(CellType.string, row["tag"])] for row in rows],
+        source_path=f"{base}.checkpoints",
+    )
+
+
+def _epoch_table(epoch_path: str, epoch_dir: str, storage: StoragePort) -> Table:
+    names = [name for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl") for name in row["scalars"]]
+    names += [row["path"] for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl")]
+    unique = list(dict.fromkeys(names))
+    epoch = epoch_path.rsplit(".", 1)[1]
+    return _folder_table(epoch, epoch_path, [(name, f"{epoch_path}.{name}") for name in unique])
+
+
+def _leaf_table(path: str, leaf: str, epoch_dir: str, storage: StoragePort) -> Table:
+    tensors = [row for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl") if row["path"] == leaf]
+    if tensors:
+        return _tensor_table(path, leaf, epoch_dir, max(tensors, key=lambda row: row["step"]), storage)
+    return _scalar_table(path, leaf, epoch_dir, storage)
+
+
+def _tensor_table(path: str, leaf: str, epoch_dir: str, latest: dict, storage: StoragePort) -> Table:
+    array = storage.read_array(f"{epoch_dir}/tensors/{latest['file']}")
+    grid = array.reshape(1, -1) if array.ndim < 2 else array.reshape(array.shape[0], -1)
+    return Table(
+        name=leaf,
+        kind=TableKind.grid,
+        column_names=None,
+        cells=[[Cell(CellType.number, str(value)) for value in row] for row in grid],
+        source_path=path,
+    )
+
+
+def _scalar_table(path: str, leaf: str, epoch_dir: str, storage: StoragePort) -> Table:
+    rows = [
+        [Cell(CellType.number, str(value)) for value in (
+            row["step"], row["samples_seen"], row["wall_time"], row["rank"], row["scalars"][leaf]
+        )]
+        for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl")
+        if leaf in row["scalars"]
+    ]
+    if not rows:
+        raise FileNotFoundError(f"{leaf} not found in {path}")
+    return Table(
+        name=leaf,
+        kind=TableKind.column,
+        column_names=["step", "samples_seen", "wall_time", "rank", leaf],
+        cells=rows,
+        source_path=path,
+        representation=Representation.line,
+    )
+
+
+def _folder_table(name: str, source_path: str | None, entries: list[tuple[str, str]]) -> Table:
+    return Table(
+        name=name,
+        kind=TableKind.folder,
+        column_names=None,
+        cells=[[Cell(CellType.table_ref, label, ref)] for label, ref in entries],
+        source_path=source_path,
+    )
+
+
+def _keyvalue_table(name: str, source_path: str, pairs) -> Table:
+    return Table(
+        name=name,
+        kind=TableKind.column,
+        column_names=["key", "value"],
+        cells=[[Cell(CellType.string, str(key)), Cell(CellType.string, str(value))] for key, value in pairs],
+        source_path=source_path,
+    )
+
+
 def _child_dirs(storage: StoragePort, path: str) -> list[str]:
     prefix = f"{path}/" if path else ""
     return sorted(
         name
         for name in storage.list_dir(path)
         if not name.startswith(".") and storage.is_dir(f"{prefix}{name}")
-    )
-
-
-DERIVED_STATE_DIRS = {"views", "workspaces"}
-
-
-def read_table(path: str, storage: StoragePort) -> Table:
-    segments = path.split(".") if path else []
-
-    if not segments:
-        cells = [
-            [Cell(type=CellType.table_ref, value=name, ref=name)]
-            for name in _child_dirs(storage, "")
-            if name not in DERIVED_STATE_DIRS
-        ]
-        return Table(
-            name="Projects",
-            kind=TableKind.folder,
-            column_names=None,
-            row_names=None,
-            cells=cells,
-            representation=Representation.grid,
-            source_path=None,
-        )
-
-    if len(segments) == 1:
-        project = segments[0]
-        if not storage.exists(project):
-            raise FileNotFoundError(f"Project {project} not found")
-        cells = []
-        for run in _child_dirs(storage, project):
-            meta = json.loads(storage.read(f"{project}/{run}/meta.json"))
-            cells.append(
-                [
-                    Cell(type=CellType.table_ref, value=run, ref=f"{project}.{run}"),
-                    Cell(type=CellType.string, value=meta["status"], ref=None),
-                    Cell(type=CellType.number, value=str(meta["samples_seen"]), ref=None),
-                ]
-            )
-        return Table(
-            name=project,
-            kind=TableKind.folder,
-            column_names=["run", "status", "samples_seen"],
-            row_names=None,
-            cells=cells,
-            representation=Representation.grid,
-            source_path=project,
-        )
-
-    project, run = segments[0], segments[1]
-    run_dir = f"{project}/{run}"
-    if not storage.exists(run_dir):
-        raise FileNotFoundError(f"Run {project}.{run} not found")
-    base = f"{project}.{run}"
-
-    if len(segments) == 2:
-        entries = [("config", f"{base}.config"), ("meta", f"{base}.meta")]
-        for name in sorted(n for n in storage.list_dir(run_dir) if n.startswith("epoch_")):
-            entries.append((name, f"{base}.{name}"))
-        if storage.exists(f"{run_dir}/checkpoints"):
-            entries.append(("checkpoints", f"{base}.checkpoints"))
-        return _folder(run, base, entries)
-
-    third = segments[2]
-
-    if len(segments) == 3 and third == "config":
-        params = json.loads(storage.read(f"{run_dir}/config.json"))["params"]
-        return _keyvalue("config", f"{base}.config", params.items())
-
-    if len(segments) == 3 and third == "meta":
-        meta = json.loads(storage.read(f"{run_dir}/meta.json"))
-        return _keyvalue("meta", f"{base}.meta", meta.items())
-
-    if len(segments) == 3 and third == "checkpoints":
-        tags = [[Cell(type=CellType.string, value=r["tag"], ref=None)] for r in read_jsonl(storage, f"{run_dir}/checkpoints/index.jsonl")]
-        return Table(
-            name="checkpoints", kind=TableKind.folder, column_names=["tag"],
-            row_names=None, cells=tags, representation=Representation.grid,
-            source_path=f"{base}.checkpoints",
-        )
-
-    epoch = third
-    epoch_dir = f"{run_dir}/{epoch}"
-
-    if len(segments) == 3:
-        entries = []
-        seen = set()
-        for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
-            for name in row["scalars"]:
-                if name not in seen:
-                    seen.add(name)
-                    entries.append((name, f"{base}.{epoch}.{name}"))
-        for row in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl"):
-            if row["path"] not in seen:
-                seen.add(row["path"])
-                entries.append((row["path"], f"{base}.{epoch}.{row['path']}"))
-        return _folder(epoch, f"{base}.{epoch}", entries)
-
-    leaf = ".".join(segments[3:])
-
-    tensors = [r for r in read_jsonl(storage, f"{epoch_dir}/tensors/index.jsonl") if r["path"] == leaf]
-    if tensors:
-        latest = max(tensors, key=lambda r: r["step"])
-        arr = storage.read_array(f"{epoch_dir}/tensors/{latest['file']}")
-        grid = arr if arr.ndim == 2 else arr.reshape(1, -1) if arr.ndim < 2 else arr.reshape(arr.shape[0], -1)
-        cells = [[Cell(type=CellType.number, value=str(v), ref=None) for v in row] for row in grid]
-        return Table(
-            name=leaf, kind=TableKind.grid, column_names=None, row_names=None,
-            cells=cells, representation=Representation.grid, source_path=path,
-        )
-
-    rows = []
-    for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl"):
-        if leaf in row["scalars"]:
-            rows.append([
-                Cell(type=CellType.number, value=str(row["step"]), ref=None),
-                Cell(type=CellType.number, value=str(row["samples_seen"]), ref=None),
-                Cell(type=CellType.number, value=str(row["wall_time"]), ref=None),
-                Cell(type=CellType.number, value=str(row["rank"]), ref=None),
-                Cell(type=CellType.number, value=str(row["scalars"][leaf]), ref=None),
-            ])
-    if not rows:
-        raise FileNotFoundError(f"{leaf} not found in {base}.{epoch}")
-    return Table(
-        name=leaf, kind=TableKind.column,
-        column_names=["step", "samples_seen", "wall_time", "rank", leaf],
-        row_names=None, cells=rows, representation=Representation.line, source_path=path,
     )

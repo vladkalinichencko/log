@@ -1,6 +1,6 @@
 import { Cell, CellType, Frame, SavedView, Table, TableFunction } from "../../types/domain";
 import type { SetStore, StoreData } from "../store";
-import type { Bounds } from "../selectors/tableSelectors";
+import { Bounds, cell_key } from "../selectors/tableSelectors";
 
 interface Edit {
   tableId: string;
@@ -31,8 +31,17 @@ const valueCell = (value: string): Cell => ({
   ref: null,
 });
 
-export const cell_matches = (cell: Cell, find: string) =>
-  find !== "" && cell.type !== CellType.TableRef && cell.value.includes(find);
+export interface TextQuery {
+  find: string;
+  replacement: string;
+  matchCase: boolean;
+}
+
+const text_pattern = ({ find, matchCase }: TextQuery) =>
+  new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), matchCase ? "g" : "gi");
+
+export const cell_matches = (cell: Cell, query: TextQuery) =>
+  query.find !== "" && cell.type !== CellType.TableRef && cell.value.search(text_pattern(query)) >= 0;
 
 export function fill_values(source: string[], count: number): string[] {
   const numbers = source.map(Number);
@@ -195,14 +204,21 @@ export const createTablesSlice = (set: SetStore) => ({
       })
     ),
 
-  tables_replaceText: (tableId: string, find: string, replacement: string) =>
+  tables_replaceText: (tableId: string, query: TextQuery, scope: { r: number; c: number }[]) =>
     set((state) =>
-      applyEdit(state, tableId, (table) => ({
-        ...table,
-        cells: table.cells.map((row) =>
-          row.map((cell) => (cell_matches(cell, find) ? valueCell(cell.value.split(find).join(replacement)) : cell))
-        ),
-      }))
+      applyEdit(state, tableId, (table) => {
+        const inScope = new Set(scope.map(cell_key));
+        return {
+          ...table,
+          cells: table.cells.map((row, r) =>
+            row.map((cell, c) =>
+              inScope.has(cell_key({ r, c })) && cell_matches(cell, query)
+                ? valueCell(cell.value.replace(text_pattern(query), () => query.replacement))
+                : cell
+            )
+          ),
+        };
+      })
     ),
 
   tables_fill: (tableId: string, source: Bounds, target: Bounds) =>
@@ -211,10 +227,10 @@ export const createTablesSlice = (set: SetStore) => ({
   tables_clearCells: (tableId: string, selected: { r: number; c: number }[]) =>
     set((state) =>
       applyEdit(state, tableId, (table) => {
-        const cleared = new Set(selected.map(({ r, c }) => `${r}:${c}`));
+        const cleared = new Set(selected.map(cell_key));
         return {
           ...table,
-          cells: table.cells.map((row, r) => row.map((cell, c) => (cleared.has(`${r}:${c}`) ? emptyCell() : cell))),
+          cells: table.cells.map((row, r) => row.map((cell, c) => (cleared.has(cell_key({ r, c })) ? emptyCell() : cell))),
         };
       })
     ),

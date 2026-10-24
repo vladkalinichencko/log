@@ -389,4 +389,40 @@ describe("TableView", () => {
     renderR(<TableView table={grid} editable />);
     expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 2 rows");
   });
+
+  it("highlights matches while the panel is open, ignores case unless asked, and limits itself to a selected range", () => {
+    const s = () => useStore.getState();
+    s().focus_clear();
+    const grid: Table = {
+      name: "scope",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [["Adam", "adam"], ["adam", "sgd"]].map((row) =>
+        row.map((value) => ({ type: CellType.String, value, ref: null }))
+      ),
+      representation: Representation.Grid,
+      source_path: "scope",
+    };
+    s().tables_loadTable("scope", grid);
+    const view = () => s().tables.get("scope")!.cells.flat().map((cell) => cell.value);
+    const { rerender } = renderR(<TableView table={grid} editable />);
+    fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
+    fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
+    expect(document.querySelectorAll("td.match")).toHaveLength(3);
+    fireEvent.click(screen.getByLabelText("Match case"));
+    expect(document.querySelectorAll("td.match")).toHaveLength(2);
+    fireEvent.click(document.body);
+    expect(document.querySelectorAll("td.match")).toHaveLength(0);
+
+    fireEvent.mouseDown(screen.getByText("Adam"));
+    fireEvent.mouseEnter(screen.getAllByText("adam")[0]);
+    fireEvent.mouseUp(window);
+    rerender(<MemoryRouter><TableView table={grid} editable /></MemoryRouter>);
+    fireEvent.click(screen.getByTitle("Find text in the selected cells and replace every match"));
+    fireEvent.click(screen.getByLabelText("Match case"));
+    fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "AdamW" } });
+    fireEvent.click(screen.getByText("Replace in 2 selected cells"));
+    expect(view()).toEqual(["AdamW", "AdamW", "adam", "sgd"]);
+  });
 });

@@ -535,6 +535,10 @@ select {
   cursor: crosshair;
 }
 
+.table-view td.match {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .table-view td.fill-target {
   outline: 1px dashed var(--gray-600);
   outline-offset: -1px;

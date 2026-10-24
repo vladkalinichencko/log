@@ -2,11 +2,15 @@ import shutil
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..config import get_index, get_runs_root
+from ..config import get_index, get_runs_root, get_storage
+from ..domain.models import Table
+from ..domain.read_table import read_table
 from ..ports.index_port import IndexPort
+from ..ports.storage_port import StoragePort
+from .errors import ApiError
 
 router = APIRouter()
 
@@ -35,11 +39,19 @@ def get_runs(
     return [asdict(run) for run in index.query(project, status, tag)]
 
 
+@router.get("/api/runs/{project}/{run}")
+def get_run(project: str, run: str, storage: StoragePort = Depends(get_storage)) -> Table:
+    try:
+        return read_table(f"{project}.{run}", storage)
+    except FileNotFoundError:
+        raise ApiError(404, "RUN_NOT_FOUND", f"run {project}/{run} does not exist")
+
+
 @router.delete("/api/runs/{project}/{run}")
 def delete_run(project: str, run: str, runs_root: Path = Depends(get_runs_root)) -> dict:
     run_dir = runs_root / project / run
     if not run_dir.is_dir():
-        raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+        raise ApiError(404, "RUN_NOT_FOUND", f"run {project}/{run} does not exist")
     shutil.rmtree(run_dir)
     return {"deleted": True}
 
@@ -55,9 +67,9 @@ def rename_runs(req: RenameRequest, runs_root: Path = Depends(get_runs_root)) ->
         src = runs_root / project / run
         dst = runs_root / project / new_run
         if not src.is_dir():
-            raise HTTPException(status_code=404, detail="RUN_NOT_FOUND")
+            raise ApiError(404, "RUN_NOT_FOUND", f"run {ref} does not exist")
         if dst.exists():
-            raise HTTPException(status_code=400, detail="INVALID_PATTERN")
+            raise ApiError(400, "INVALID_PATTERN", f"renaming {ref} would overwrite {project}/{new_run}")
         src.rename(dst)
         renamed[ref] = f"{project}/{new_run}"
     return {"renamed": renamed}

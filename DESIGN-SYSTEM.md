@@ -110,4 +110,4 @@ Every media file is accounted for below; related files are grouped because they 
 
 ## Rollout
 
-The first implementation is the `/design-system` laboratory plus semantic tokens in `frontend/src/styles/tokens.css`. Production migration proceeds through chrome/controls, tables/inline encodings, run timeline/status strip, alerts/comparison tray, then additional `Representation` renderers. A renderer is added only after its data predicate and analytical question are defined in `VISUALIZATION-CATALOG.md`.
+The first implementation is the `/design-system` laboratory plus semantic tokens in `frontend/src/styles/tokens.css`. There is one vocabulary: the laboratory uses the same tokens as the product (`--gray-*`, `--accent`, `--series-1…6`, `--text-*`, `--space*`), so a proposal that is accepted moves as markup, never as a second palette. Production migration proceeds through chrome/controls, tables/inline encodings, run timeline/status strip, alerts/comparison tray, then additional `Representation` renderers. A renderer is added only after its data predicate and analytical question are defined in `VISUALIZATION-CATALOG.md`.

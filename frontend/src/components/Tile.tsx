@@ -1,22 +1,16 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { RepresentationSwitcher } from "./RepresentationSwitcher";
 import { Toolbar } from "./Toolbar";
 import { Player } from "./Player";
 import { Button } from "./Button";
+import { LoadError } from "./LoadError";
 import { render, chartReps } from "./render";
 import { Representation } from "../types/domain";
 import { useStore } from "../store/store";
+import { with_param } from "../store/selectors/pathSelectors";
 import { useTable } from "./useTable";
-import { fetchTensorSteps } from "../api/client";
-
-interface TensorFrames {
-  run: string;
-  tensorPath: string;
-  steps: number[];
-}
-
-const TENSOR_PATH = /^([^.]+)\.([^.]+)\.epoch_\d+\.(.+)$/;
+import { useTensor } from "./useTensor";
 
 interface TileProps {
   path: string;
@@ -26,43 +20,20 @@ interface TileProps {
 
 export function Tile({ path, editor, titled }: TileProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { table, loadState } = useTable(path);
-  const chosen = useStore((state: any) => state.tiles.get(path)?.representation);
-  const mode = useStore((state: any) => state.tiles.get(path)?.mode) ?? "table";
-  const [frames, setFrames] = useState<TensorFrames | null>(null);
+  const { table, loadState, error, retry } = useTable(path);
+  const { tensor, leaf } = useTensor(path, table);
+  const chosen = useStore((state) => state.tiles.get(path)?.representation);
+  const mode = useStore((state) => state.tiles.get(path)?.mode) ?? "table";
+  const content = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setFrames(null);
-    const match = path.match(TENSOR_PATH);
-    if (!match) return;
-    const [, project, run, tensorPath] = match;
-    let stale = false;
-    fetchTensorSteps(`${project}/${run}`, tensorPath)
-      .then((steps) => {
-        if (stale || steps === null) return;
-        setFrames({ run: `${project}/${run}`, tensorPath, steps });
-      })
-      .catch((err) => console.error("Failed to fetch tensor steps:", err));
-    return () => {
-      stale = true;
-    };
-  }, [path]);
-
-  if (loadState === "error") return <div>Failed to load {path}</div>;
+  if (loadState === "error") return <LoadError message={error} retry={retry} />;
   if (!table) return <div>Loading…</div>;
 
   const expanded = searchParams.get("modal") === path;
-  const setModal = (nextPath: string | null) => {
-    const next = new URLSearchParams(searchParams);
-    nextPath ? next.set("modal", nextPath) : next.delete("modal");
-    setSearchParams(next);
-  };
+  const setModal = (nextPath: string | null) => setSearchParams(with_param(searchParams, "modal", nextPath));
   const charts = chartReps(table);
-  const representation =
-    mode === "visualization" && charts.length > 0
-      ? charts.includes(chosen) ? chosen : charts[0]
-      : Representation.Grid;
+  const chart = chosen && charts.includes(chosen) ? chosen : charts[0];
+  const representation = mode === "visualization" && chart ? chart : Representation.Grid;
   return (
     <div className="tile-body">
       <div className="bar">
@@ -71,13 +42,13 @@ export function Tile({ path, editor, titled }: TileProps) {
             (editor ? (
               <span className="tile-name">{table.name}</span>
             ) : (
-              <span className="tile-name link" onClick={() => navigate("/" + path)}>
+              <Link className="tile-name link" to={"/" + path}>
                 {table.name}
-              </span>
+              </Link>
             ))}
-          <RepresentationSwitcher table={table} tileId={path} />
+          <RepresentationSwitcher tileId={path} mode={mode} charts={charts} chart={chart} />
         </div>
-        {editor && <Toolbar path={path} table={table} />}
+        {editor && <Toolbar path={path} table={table} content={content} />}
         <div className="group">
           {expanded ? (
             <Button icon="collapse" ghost title="collapse" onClick={() => setModal(null)} />
@@ -86,10 +57,8 @@ export function Tile({ path, editor, titled }: TileProps) {
           )}
         </div>
       </div>
-      <div className="tile-content">{render(table, representation, editor)}</div>
-      {frames && frames.steps.length > 1 && (
-        <Player path={path} run={frames.run} tensorPath={frames.tensorPath} steps={frames.steps} />
-      )}
+      <div className="tile-content" ref={content}>{render(table, representation, editor)}</div>
+      {tensor && tensor.steps.length > 1 && <Player path={path} leaf={leaf} tensor={tensor} />}
     </div>
   );
 }

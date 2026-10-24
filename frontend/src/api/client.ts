@@ -1,166 +1,62 @@
-import { Table } from "../types/domain";
+import { SavedView, Table, TableFunction, Workspace } from "../types/domain";
 
-const API_BASE = "http://localhost:8000";
+export const fetchTable = (path: string) => request<Table>(`/api/table?${query({ path })}`);
 
-export async function fetchTable(path: string): Promise<Table> {
-  const url = `${API_BASE}/api/table?path=${encodeURIComponent(path)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch table: ${response.statusText}`);
-  }
-  return response.json();
-}
+export const fetchPaths = () => request<string[]>("/api/paths");
 
-export async function fetchFunctions(): Promise<any[]> {
-  const response = await fetch(`${API_BASE}/api/tables/functions`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch functions: ${response.statusText}`);
-  }
-  return response.json();
-}
+export const fetchFunctions = () => request<TableFunction[]>("/api/tables/functions");
 
-export async function fetchTensorSteps(run: string, path: string): Promise<number[] | null> {
-  const url = `${API_BASE}/api/series/tensor/steps?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}`;
-  const response = await fetch(url);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tensor steps: ${response.statusText}`);
-  }
-  return (await response.json()).steps;
-}
+export const evalTable = (expression: string) => request<Table>("/api/tables/eval", send("POST", { expression }));
 
-export async function fetchTensorFrame(
-  run: string,
-  path: string,
-  step: number
-): Promise<{ shape: number[]; data: number[] }> {
-  const url = `${API_BASE}/api/series/tensor?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}&step=${step}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tensor frame: ${response.statusText}`);
-  }
-  return response.json();
-}
+export const fetchRunComparison = (runs: string[]) => request<Table>("/api/runs/compare", send("POST", { runs }));
 
-export async function fetchScalarSeries(
-  run: string,
-  path: string
-): Promise<{ x: number[]; y: number[] } | null> {
-  const url = `${API_BASE}/api/series/scalar?run=${encodeURIComponent(run)}&path=${encodeURIComponent(path)}`;
-  const response = await fetch(url);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Failed to fetch scalar series: ${response.statusText}`);
-  }
-  return response.json();
-}
+export const fetchTensorSteps = (run: string, path: string) =>
+  request<{ steps: number[] }>(`/api/series/tensor/steps?${query({ run, path })}`).then((body) => body.steps);
 
-export async function deleteRun(project: string, run: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/runs/${project}/${run}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`Failed to delete run: ${response.statusText}`);
-  }
-}
+export const fetchTensorFrame = (run: string, path: string, step: number) =>
+  request<{ shape: number[]; data: number[] }>(`/api/series/tensor?${query({ run, path, step })}`);
 
-export async function renameRuns(
+export const deleteRun = (project: string, run: string) =>
+  request<{ deleted: true }>(`/api/runs/${project}/${run}`, { method: "DELETE" });
+
+export const renameRuns = (
   run_refs: string[],
-  fields: { prefix?: string; suffix?: string; find?: string; replace?: string }
-): Promise<Record<string, string>> {
-  const response = await fetch(`${API_BASE}/api/runs/rename`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_refs, ...fields }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to rename runs: ${response.statusText}`);
-  }
-  return (await response.json()).renamed;
+  fields: { prefix: string; suffix: string; find: string; replace: string }
+) => request<{ renamed: Record<string, string> }>("/api/runs/rename", send("POST", { run_refs, ...fields }));
+
+export const fetchViews = () => request<SavedView[]>("/api/views");
+
+export const saveView = (view: SavedView) => request<SavedView>(`/api/views/${view.id}`, send("PUT", view));
+
+export const deleteView = (id: string) => request<{ deleted: true }>(`/api/views/${id}`, { method: "DELETE" });
+
+export const fetchWorkspaces = () => request<Workspace[]>("/api/workspaces");
+
+export const saveWorkspace = (workspace: Workspace) =>
+  request<Workspace>(`/api/workspaces/${workspace.id}`, send("PUT", workspace));
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  const text = await response.text();
+  const body = parseJson(text);
+  if (body === undefined) throw new Error(`${response.status} ${response.statusText}: ${url} did not answer JSON`);
+  if (!response.ok) throw new Error(body.error?.message ?? `${response.status} ${response.statusText}`);
+  return body;
 }
 
-export async function evalTable(expression: string): Promise<Table> {
-  const response = await fetch(`${API_BASE}/api/tables/eval`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ expression }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to evaluate expression: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function fetchRunComparison(runs: string[]): Promise<Table> {
-  const response = await fetch(`${API_BASE}/api/runs/compare`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runs }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to compare runs: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function fetchRuns(): Promise<any[]> {
-  const url = `${API_BASE}/api/runs`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch runs: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function fetchWorkspaces(): Promise<any[]> {
-  const response = await fetch(`${API_BASE}/api/workspaces`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function saveWorkspace(id: string, workspace: any): Promise<any> {
-  const response = await fetch(`${API_BASE}/api/workspaces/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workspace),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to save workspace: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function deleteView(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/views/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`Failed to delete view: ${response.statusText}`);
+function parseJson(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 
-export async function fetchPaths(): Promise<string[]> {
-  const response = await fetch(`${API_BASE}/api/paths`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch paths: ${response.statusText}`);
-  }
-  return response.json();
-}
+const send = (method: "POST" | "PUT", body: unknown): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
-export async function fetchViews(): Promise<any[]> {
-  const response = await fetch(`${API_BASE}/api/views`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch views: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function saveView(id: string, view: any): Promise<any> {
-  const response = await fetch(`${API_BASE}/api/views/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(view),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to save view: ${response.statusText}`);
-  }
-  return response.json();
-}
+const query = (params: Record<string, string | number>) =>
+  new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)])).toString();

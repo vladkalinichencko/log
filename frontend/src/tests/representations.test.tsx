@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { RepresentationSwitcher } from "../components/RepresentationSwitcher";
+import { MemoryRouter } from "react-router-dom";
+import { Tile } from "../components/Tile";
 import { chartSpec } from "../components/chartSpec";
 import { applicable } from "../components/render";
 import { useStore } from "../store/store";
@@ -23,10 +24,31 @@ describe("representations", () => {
       ],
       ["step", "samples_seen", "wall_time", "rank", "loss"]
     );
-    const trace = chartSpec(series, "line").data[0] as any;
+    const trace = chartSpec(series, Representation.Line).data[0] as any;
     expect(trace.type).toBe("scatter");
     expect(trace.x).toEqual([0, 1]);
     expect(trace.y).toEqual([2, 1]);
+  });
+
+  it("chartSpec(line) skips unlogged steps instead of drawing zeros and labels each line end", () => {
+    const empty: Cell = { type: CellType.Empty, value: "", ref: null };
+    const metrics = table(
+      TableKind.Grid,
+      Representation.Line,
+      [
+        [num("0"), num("0"), num("2"), empty],
+        [num("1"), num("0"), num("1"), num("0.5")],
+        [num("2"), num("1"), num("0.25"), empty],
+      ],
+      ["step", "epoch", "loss", "acc"]
+    );
+    const spec = chartSpec(metrics, Representation.Line);
+    const [loss, acc] = spec.data as any[];
+    expect(spec.data).toHaveLength(2);
+    expect(loss.x).toEqual([0, 1, 2]);
+    expect(acc.x).toEqual([1]);
+    expect(acc.y).toEqual([0.5]);
+    expect(spec.layout.annotations!.map((note) => note.text)).toEqual(["0.25", "0.5"]);
   });
 
   it("chartSpec(heatmap) maps the grid to z", () => {
@@ -34,7 +56,7 @@ describe("representations", () => {
       [num("0"), num("1")],
       [num("2"), num("3")],
     ]);
-    const trace = chartSpec(grid, "heatmap").data[0] as any;
+    const trace = chartSpec(grid, Representation.Heatmap).data[0] as any;
     expect(trace.type).toBe("heatmap");
     expect(trace.z).toEqual([[0, 1], [2, 3]]);
   });
@@ -53,7 +75,7 @@ describe("representations", () => {
       [[num("0"), num("1")], [num("1"), num("5")], [num("2"), num("9")]],
       ["step", "loss"]
     );
-    const trace = chartSpec(series, "histogram").data[0] as any;
+    const trace = chartSpec(series, Representation.Histogram).data[0] as any;
     expect(trace.type).toBe("histogram");
     expect(trace.x).toEqual([1, 5, 9]);
   });
@@ -63,24 +85,21 @@ describe("representations", () => {
     expect(applicable(col)).toContain(Representation.Histogram);
   });
 
-  it("switcher toggle sets the tile mode", () => {
-    const s = () => useStore.getState() as any;
-    const col = table(TableKind.Column, Representation.Line, [[num("1")]]);
-    render(<RepresentationSwitcher table={col} tileId="t1" />);
-    fireEvent.click(screen.getByTitle("visualization"));
-    expect(s().tiles.get("t1").mode).toBe("visualization");
-    fireEvent.click(screen.getByTitle("table"));
-    expect(s().tiles.get("t1").mode).toBe("table");
-  });
-
-  it("switcher visualization mode picks a chart via the dropdown", () => {
-    const s = () => useStore.getState() as any;
+  it("a tile's switcher toggles its mode and picks a chart from the dropdown", async () => {
     const col = table(TableKind.Column, Representation.Line, [[num("1")]], ["loss"]);
-    render(<RepresentationSwitcher table={col} tileId="t2" />);
-    fireEvent.click(screen.getByTitle("visualization"));
-    expect(s().tiles.get("t2").mode).toBe("visualization");
+    useStore.getState().tables_setViews([{ ...col, id: "t2", source_path: "t2" }]);
+    render(
+      <MemoryRouter>
+        <Tile path="t2" />
+      </MemoryRouter>
+    );
+    fireEvent.click(await screen.findByTitle("visualization"));
+    expect(useStore.getState().tiles.get("t2")?.mode).toBe("visualization");
     fireEvent.click(screen.getByTitle("chart type"));
     fireEvent.click(screen.getByText("histogram"));
-    expect(s().tiles.get("t2").representation).toBe("histogram");
+    expect(useStore.getState().tiles.get("t2")?.representation).toBe("histogram");
+    expect(screen.getByText("histogram ▾")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("table"));
+    expect(useStore.getState().tiles.get("t2")?.mode).toBe("table");
   });
 });

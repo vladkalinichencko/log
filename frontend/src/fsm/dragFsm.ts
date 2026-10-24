@@ -1,9 +1,9 @@
 import { makeFsm } from "./baseFsm";
 
-type ResizeState = "idle" | "dragging";
-type ResizeEvent = "down" | "up";
+type DragState = "idle" | "dragging";
+type DragEvent = "down" | "up";
 
-export const resizeFsm = makeFsm<ResizeState, ResizeEvent>(
+export const dragFsm = makeFsm<DragState, DragEvent>(
   ["idle", "dragging"],
   {
     idle: { down: "dragging" },

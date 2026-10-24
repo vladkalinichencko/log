@@ -1,9 +1,11 @@
+import type { SetStore } from "../store";
+
 export interface SearchState {
   query: string;
   paths: string[];
 }
 
-export const createSearchSlice = (set: any) => ({
+export const createSearchSlice = (set: SetStore) => ({
   query: "",
   paths: [],
 

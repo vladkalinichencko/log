@@ -1,19 +1,22 @@
+import { ComponentType } from "react";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
 import { TableView } from "./TableView";
-import { LineChartView } from "./LineChartView";
-import { HeatmapView } from "./HeatmapView";
-import { HistogramView } from "./HistogramView";
-import { ScatterView } from "./ScatterView";
-import { TrajectoryView } from "./TrajectoryView";
+import { ChartView } from "./ChartView";
 import { InlineView } from "./InlineView";
 
-const RENDERERS = {
+interface ViewProps {
+  table: Table;
+  representation: Representation;
+  editable?: boolean;
+}
+
+const RENDERERS: Record<Representation, ComponentType<ViewProps>> = {
   [Representation.Grid]: TableView,
-  [Representation.Line]: LineChartView,
-  [Representation.Heatmap]: HeatmapView,
-  [Representation.Histogram]: HistogramView,
-  [Representation.Scatter]: ScatterView,
-  [Representation.Trajectory]: TrajectoryView,
+  [Representation.Line]: ChartView,
+  [Representation.Heatmap]: ChartView,
+  [Representation.Histogram]: ChartView,
+  [Representation.Scatter]: ChartView,
+  [Representation.Trajectory]: ChartView,
   [Representation.Inline]: InlineView,
 };
 
@@ -27,7 +30,7 @@ export function applicable(table: Table): Representation[] {
   if (rows.length === 0) return reps;
 
   const lastColumnNumeric = rows.every((row) => row.length > 0 && isNumber(row[row.length - 1]));
-  const allNumeric = rows.every((row) => row.length > 0 && row.every(isNumber));
+  const allNumeric = rows.every((row) => row.length > 0 && row.every((cell) => isNumber(cell) || cell.type === CellType.Empty));
   const isTrajectory =
     allNumeric &&
     table.column_names !== null &&
@@ -54,9 +57,6 @@ export function chartReps(table: Table): Representation[] {
 }
 
 export function render(table: Table, representation: Representation, editable?: boolean) {
-  if (representation === Representation.Grid) {
-    return <TableView table={table} editable={editable} />;
-  }
   const View = RENDERERS[representation];
-  return <View table={table} />;
+  return <View table={table} representation={representation} editable={editable} />;
 }

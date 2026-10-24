@@ -1,5 +1,7 @@
 import type { Data, Layout } from "plotly.js";
-import { Table } from "../types/domain";
+import { Representation, Table } from "../types/domain";
+import { SERIES } from "../store/slices/settingsSlice";
+import { end_value } from "../store/selectors/runSelectors";
 
 const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -11,6 +13,7 @@ const theme = () => ({
   paper: token("--gray-0"),
   accent: token("--accent"),
   font: token("--font"),
+  text: parseFloat(token("--text-meta")),
 });
 
 const baseLayout = (): Partial<Layout> => {
@@ -19,7 +22,7 @@ const baseLayout = (): Partial<Layout> => {
     autosize: true,
     paper_bgcolor: t.paper,
     plot_bgcolor: t.paper,
-    font: { family: t.font, size: 12, color: t.ink },
+    font: { family: t.font, size: t.text, color: t.ink },
     margin: { l: 44, r: 16, t: 16, b: 32 },
     xaxis: { gridcolor: t.grid, zerolinecolor: t.grid },
     yaxis: { gridcolor: t.grid, zerolinecolor: t.grid },
@@ -27,12 +30,9 @@ const baseLayout = (): Partial<Layout> => {
   };
 };
 
-type Kind = "line" | "histogram" | "heatmap" | "scatter" | "trajectory";
-
 function column(table: Table, index: number): number[] {
   return table.cells.map((row) => Number(row[index].value));
 }
-
 export function downsampleSeries(
   xs: number[],
   ys: number[],
@@ -59,7 +59,7 @@ export function downsampleSeries(
 
 export function chartSpec(
   table: Table,
-  kind: Kind,
+  representation: Representation,
   window: [number, number] | null = null
 ): { data: Data[]; layout: Partial<Layout> } {
   const cols = table.column_names ?? [];
@@ -67,60 +67,67 @@ export function chartSpec(
   const t = theme();
   const base = baseLayout();
 
-  if (kind === "line") {
+  if (representation === Representation.Line) {
     const xi = Math.max(0, cols.indexOf("step"));
     const x = column(table, xi);
-    const palette = [t.accent, "#3b82f6", "#a855f7", "#34d399", "#f59e0b", t.muted];
-    const bookkeeping = ["samples_seen", "wall_time", "rank"];
+    const palette = [t.accent, ...SERIES.map(token).filter((color) => color !== t.accent), t.muted];
+    const bookkeeping = ["samples_seen", "wall_time", "rank", "epoch"];
     const series = cols
       .map((name, i) => ({ name, i }))
       .filter(({ name, i }) => i !== xi && !bookkeeping.includes(name.replace(/_\d+$/, "")));
-    const picked = series.length > 0 ? series : [{ name: cols[last] ?? "", i: last }];
+    const picked = (series.length > 0 ? series : [{ name: cols[last] ?? "", i: last }]).map(({ name, i }, order) => {
+      const logged = table.cells.flatMap((row, index) => (row[i]?.value === "" ? [] : [index]));
+      const visible = window ? logged.filter((index) => x[index] >= window[0] && x[index] <= window[1]) : logged;
+      const [xs, ys] = downsampleSeries(
+        visible.map((index) => x[index]),
+        visible.map((index) => Number(table.cells[index][i].value))
+      );
+      return { name, xs, ys, color: palette[order % palette.length] };
+    });
     return {
-      data: picked.map(({ name, i }, order) => {
-        const y = column(table, i);
-        const visible = window
-          ? x.reduce<number[]>((kept, value, index) => {
-              if (value >= window[0] && value <= window[1]) kept.push(index);
-              return kept;
-            }, [])
-          : x.map((_, index) => index);
-        const [xs, ys] = downsampleSeries(
-          visible.map((index) => x[index]),
-          visible.map((index) => y[index])
-        );
-        return {
-          x: xs,
-          y: ys,
-          name,
-          type: "scatter" as const,
-          mode: "lines" as const,
-          line: { color: palette[order % palette.length], width: 2 },
-        };
-      }),
+      data: picked.map(({ name, xs, ys, color }) => ({
+        x: xs,
+        y: ys,
+        name,
+        type: "scatter" as const,
+        mode: "lines" as const,
+        line: { color, width: 2 },
+      })),
       layout: {
         ...base,
+        margin: { ...base.margin, r: 64 },
         showlegend: picked.length > 1,
         xaxis: { ...base.xaxis, ...(window ? { range: window } : {}) },
+        annotations: picked
+          .filter(({ xs }) => xs.length > 0)
+          .map(({ xs, ys, color }) => ({
+            x: xs[xs.length - 1],
+            y: ys[ys.length - 1],
+            text: end_value(ys[ys.length - 1]),
+            xanchor: "left" as const,
+            xshift: 4,
+            showarrow: false,
+            font: { color, size: t.text },
+          })),
       },
     };
   }
 
-  if (kind === "histogram") {
+  if (representation === Representation.Histogram) {
     return {
       data: [{ x: column(table, last), type: "histogram", marker: { color: t.muted } }],
       layout: base,
     };
   }
 
-  if (kind === "scatter") {
+  if (representation === Representation.Scatter) {
     return {
       data: [{ x: column(table, 0), y: column(table, 1), type: "scatter", mode: "markers", marker: { color: t.ink, size: 5 } }],
       layout: base,
     };
   }
 
-  if (kind === "trajectory") {
+  if (representation === Representation.Trajectory) {
     const steps = column(table, 0);
     const points = column(table, 1);
     const xs = column(table, 2);

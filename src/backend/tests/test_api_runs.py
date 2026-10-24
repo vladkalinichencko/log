@@ -1,7 +1,5 @@
 import json
 
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.adapters.sqlite_index import SqliteIndex
@@ -58,9 +56,12 @@ def test_delete_run_removes_dir(tmp_path):
     assert not (tmp_path / "p1" / "run_a").exists()
 
 
-def test_delete_run_missing_raises_404(tmp_path):
-    with pytest.raises(HTTPException):
-        delete_run("nope", "nope", tmp_path)
+def test_delete_missing_run_returns_structured_404(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    with TestClient(app) as client:
+        response = client.delete("/api/runs/nope/nope")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "RUN_NOT_FOUND"
 
 
 def test_rename_names_finder_style():
@@ -78,11 +79,14 @@ def test_rename_runs_moves_dirs(tmp_path):
     assert not (tmp_path / "p1" / "a").exists()
 
 
-def test_rename_runs_collision_raises(tmp_path):
+def test_rename_collision_returns_structured_400(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
     _make_run(tmp_path, "p1", "a", "finished")
     _make_run(tmp_path, "p1", "exp_a", "finished")
-    with pytest.raises(HTTPException):
-        rename_runs(RenameRequest(run_refs=["p1/a"], prefix="exp_"), tmp_path)
+    with TestClient(app) as client:
+        response = client.post("/api/runs/rename", json={"run_refs": ["p1/a"], "prefix": "exp_"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_PATTERN"
 
 
 def test_route_status_filter_through_index(tmp_path, monkeypatch):
@@ -92,3 +96,15 @@ def test_route_status_filter_through_index(tmp_path, monkeypatch):
     with TestClient(app) as client:
         rows = client.get("/api/runs", params={"status": "finished"}).json()
     assert {r["name"] for r in rows} == {"run_a"}
+
+
+def test_get_run_returns_its_folder_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    _make_run(tmp_path, "p1", "run_a", "finished")
+    with TestClient(app) as client:
+        found = client.get("/api/runs/p1/run_a")
+        missing = client.get("/api/runs/p1/nope")
+    assert found.json()["source_path"] == "p1.run_a"
+    assert [row[0]["value"] for row in found.json()["cells"]][:2] == ["config", "meta"]
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "RUN_NOT_FOUND"

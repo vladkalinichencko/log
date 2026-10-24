@@ -13,6 +13,11 @@ async def websocket_endpoint(websocket: WebSocket):
     transport.add(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            message = await websocket.receive_json()
+            if message.get("type") == "subscribe":
+                transport.subscribe(websocket, message["run"])
+                await websocket.send_json({"type": "subscribed", "run": message["run"]})
+            else:
+                await websocket.send_json({"type": "error", "message": f"unknown message {message.get('type')!r}"})
     except WebSocketDisconnect:
         transport.remove(websocket)

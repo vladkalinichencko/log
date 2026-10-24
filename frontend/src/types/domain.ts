@@ -40,3 +40,36 @@ export interface Table {
   representation: Representation;
   source_path: string | null;
 }
+
+export interface TableFunction {
+  name: string;
+  kind: "aggregation" | "transform";
+  windowed: boolean;
+}
+
+export interface SavedView extends Table {
+  id: string;
+  history?: Table[];
+  future?: Table[];
+}
+
+export type TileMode = "table" | "visualization";
+
+export interface WorkspaceTile {
+  id: string;
+  table_path: string;
+  mode: TileMode;
+  representation?: Representation;
+  w?: number;
+  h?: number;
+}
+
+export interface Workspace {
+  id: string;
+  tiles: WorkspaceTile[];
+}
+
+export interface Frame {
+  shape: number[];
+  data: number[];
+}

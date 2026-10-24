@@ -1,16 +1,17 @@
-import { connectionFsm } from "../../fsm/connectionFsm";
+import { connectionFsm, ConnectionEvent, ConnectionStatus } from "../../fsm/connectionFsm";
+import type { SetStore } from "../store";
 
 export interface ConnectionState {
-  status: "connected" | "reconnecting";
+  status: ConnectionStatus;
   liveTick: number;
 }
 
-export const createConnectionSlice = (set: any) => ({
+export const createConnectionSlice = (set: SetStore) => ({
   status: connectionFsm.initial,
   liveTick: 0,
 
-  connection_event: (event: "open" | "close" | "retry") =>
-    set((state: any) => ({ status: connectionFsm.next(state.status, event) })),
+  connection_event: (event: ConnectionEvent) =>
+    set((state) => ({ status: connectionFsm.next(state.status, event) })),
 
-  live_bump: () => set((state: any) => ({ liveTick: state.liveTick + 1 })),
+  connection_bump: () => set((state) => ({ liveTick: state.liveTick + 1 })),
 });

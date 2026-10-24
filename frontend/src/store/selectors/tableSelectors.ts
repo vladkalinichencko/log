@@ -1,34 +1,63 @@
-import { Table } from "../../types/domain";
+import { CellType, Table } from "../../types/domain";
 import { FocusRange, FocusSelection } from "../slices/focusSlice";
+import type { StoreData } from "../store";
 
-export function table_selector(state: any, tableId: string): Table | undefined {
+export function table_selector(state: Pick<StoreData, "tables">, tableId: string): Table | undefined {
   return state.tables.get(tableId);
 }
 
-export const range_bounds = (range: FocusRange) => ({
+export function table_selection_selector(state: Pick<StoreData, "focused">, tableId: string): FocusSelection | null {
+  return state.focused?.tableId === tableId ? state.focused : null;
+}
+
+export interface Bounds {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+export function fill_target_selector(source: Bounds, end: { r: number; c: number }): Bounds | null {
+  const down = end.r - source.bottom;
+  const across = end.c - source.right;
+  if (down <= 0 && across <= 0) return null;
+  return down >= across ? { ...source, bottom: end.r } : { ...source, right: end.c };
+}
+
+export const range_bounds = (range: FocusRange): Bounds => ({
   top: Math.min(range.r, range.endR),
   bottom: Math.max(range.r, range.endR),
   left: Math.min(range.c, range.endC),
   right: Math.max(range.c, range.endC),
 });
 
-export function isFocused(state: any, tableId: string, r: number, c: number): boolean {
-  if (state.focused?.tableId !== tableId) return false;
-  return state.focused.ranges.some((range: FocusRange) => {
+const within = (value: number, from: number, to: number) => value >= from && value <= to;
+
+export function selection_has_cell(selection: FocusSelection | null, r: number, c: number): boolean {
+  return Boolean(selection?.ranges.some((range) => {
     const bounds = range_bounds(range);
-    return range.kind === "cell" &&
-      r >= bounds.top && r <= bounds.bottom &&
-      c >= bounds.left && c <= bounds.right;
-  });
+    return range.kind === "cell" && within(r, bounds.top, bounds.bottom) && within(c, bounds.left, bounds.right);
+  }));
 }
 
-export function isInFocusedLine(state: any, tableId: string, r: number, c: number): boolean {
-  if (state.focused?.tableId !== tableId) return false;
-  return state.focused.ranges.some((range: FocusRange) => {
+export function selection_has_row(selection: FocusSelection | null, r: number): boolean {
+  return Boolean(selection?.ranges.some((range) => {
     const bounds = range_bounds(range);
-    return range.kind === "row"
-      ? r >= bounds.top && r <= bounds.bottom
-      : range.kind === "col" && c >= bounds.left && c <= bounds.right;
+    return range.kind === "row" && within(r, bounds.top, bounds.bottom);
+  }));
+}
+
+export function selection_has_column(selection: FocusSelection | null, c: number): boolean {
+  return Boolean(selection?.ranges.some((range) => {
+    const bounds = range_bounds(range);
+    return range.kind === "col" && within(c, bounds.left, bounds.right);
+  }));
+}
+
+export function selection_run_refs(table: Table, selection: FocusSelection): string[] {
+  return selection_rows(table, selection).flatMap((row) => {
+    const ref = table.cells[row]?.find((cell) => cell.type === CellType.TableRef)?.ref;
+    return ref ? [ref] : [];
   });
 }
 

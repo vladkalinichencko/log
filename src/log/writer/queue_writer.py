@@ -2,15 +2,13 @@ import json
 import os
 import queue
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
 
-from .atomic import append_jsonl, atomic_write_bytes
+from .atomic import append_jsonl, atomic_write_bytes, read_jsonl, update_json
 from .tensor_io import write_npy
 
 
@@ -46,11 +44,15 @@ class TensorJob(WriteJob):
 class CheckpointJob(WriteJob):
     payload: dict
     tag: str
-    run_dir: Path
     epoch: int
     metric: str | None
     mode: str
     keep_top_k: int
+
+
+@dataclass
+class MetaJob(WriteJob):
+    fields: dict
 
 
 class WriterThread:
@@ -109,6 +111,9 @@ class WriterThread:
         elif isinstance(job, CheckpointJob):
             self._write_checkpoint(job)
 
+        elif isinstance(job, MetaJob):
+            update_json(self.meta_path, job.fields)
+
     def _flush_scalars(self) -> None:
         for epoch, step in sorted(set((k[0], k[1]) for k in self.current_step_scalars)):
             self._flush_step(epoch, step)
@@ -117,24 +122,15 @@ class WriterThread:
         keys = [k for k in self.current_step_scalars if k[0] == epoch and k[1] == step]
         for key in keys:
             row = self.current_step_scalars.pop(key)
-            metrics_path = self.run_dir / f"epoch_{epoch:04d}" / "metrics.jsonl"
-            append_jsonl(metrics_path, row)
+            append_jsonl(self.run_dir / f"epoch_{epoch:04d}" / "metrics.jsonl", row)
 
     def _write_tensor(self, job: TensorJob) -> None:
-        epoch_dir = self.run_dir / f"epoch_{job.epoch:04d}"
-        tensors_dir = epoch_dir / "tensors"
-
+        tensors_dir = self.run_dir / f"epoch_{job.epoch:04d}" / "tensors"
         arr = job.tensor.detach().cpu().numpy()
-
-        safe_name = "".join(
-            c if c not in r'/\:*?"<>|' else "_" for c in job.path
-        )
+        safe_name = "".join(c if c not in r'/\:*?"<>|' else "_" for c in job.path)
         filename = f"{safe_name}__step{job.step:09d}.npy"
-        file_path = tensors_dir / filename
-
-        write_npy(file_path, arr)
-
-        index_row = {
+        write_npy(tensors_dir / filename, arr)
+        append_jsonl(tensors_dir / "index.jsonl", {
             "path": job.path,
             "step": job.step,
             "samples_seen": job.samples_seen,
@@ -143,66 +139,47 @@ class WriterThread:
             "file": filename,
             "shape": list(arr.shape),
             "dtype": str(arr.dtype),
-        }
-        append_jsonl(tensors_dir / "index.jsonl", index_row)
+        })
 
     def _write_checkpoint(self, job: CheckpointJob) -> None:
-        ckpt_dir = job.run_dir / "checkpoints"
+        ckpt_dir = self.run_dir / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        final = ckpt_dir / f"{job.tag}.pt"
         tmp = ckpt_dir / f"{job.tag}.pt.tmp"
         torch.save(job.payload, tmp)
-        os.replace(tmp, final)
+        os.replace(tmp, ckpt_dir / f"{job.tag}.pt")
 
         index_path = ckpt_dir / "index.jsonl"
-        rows = [
-            json.loads(line)
-            for line in index_path.read_text().splitlines()
-            if line.strip()
-        ] if index_path.exists() else []
-        rows = [r for r in rows if r["tag"] != job.tag]
-        rows.append({"tag": job.tag, "step": job.payload["step"], "metric": self._read_metric(job)})
+        rows = [r for r in read_jsonl(index_path) if r["tag"] != job.tag]
+        rows.append({"tag": job.tag, "step": job.payload["step"], "metric": self._latest_metric(job)})
 
-        keep = self._rotation_keep(rows, job.metric, job.mode, job.keep_top_k)
+        keep = rotation_keep(rows, job.metric, job.mode, job.keep_top_k)
         for r in rows:
             if r["tag"] not in keep:
                 (ckpt_dir / f"{r['tag']}.pt").unlink(missing_ok=True)
         rows = [{**r, "is_top_k": True} for r in rows if r["tag"] in keep]
-        atomic_write_bytes(
-            index_path, ("\n".join(json.dumps(r) for r in rows) + "\n").encode()
-        )
+        atomic_write_bytes(index_path, ("\n".join(json.dumps(r) for r in rows) + "\n").encode())
 
-    def _read_metric(self, job: CheckpointJob) -> float | None:
+    def _latest_metric(self, job: CheckpointJob) -> float | None:
         if job.metric is None:
             return None
-        metrics_path = job.run_dir / f"epoch_{job.epoch:04d}" / "metrics.jsonl"
-        if not metrics_path.exists():
-            return None
-        value = None
-        for line in metrics_path.read_text().splitlines():
-            if line.strip():
-                scalars = json.loads(line).get("scalars", {})
-                if job.metric in scalars:
-                    value = scalars[job.metric]
-        return value
-
-    def _rotation_keep(self, rows: list[dict], metric: str | None, mode: str, k: int) -> set:
-        latest = max(rows, key=lambda r: r["step"])["tag"]
-        if metric is None:
-            best = sorted(rows, key=lambda r: r["step"], reverse=True)[:k]
-            return {r["tag"] for r in best} | {latest}
-        worst = float("inf") if mode == "min" else float("-inf")
-        ordered = sorted(
-            rows,
-            key=lambda r: r["metric"] if r["metric"] is not None else worst,
-            reverse=(mode == "max"),
-        )
-        return {r["tag"] for r in ordered[:k]} | {latest}
+        rows = read_jsonl(self.run_dir / f"epoch_{job.epoch:04d}" / "metrics.jsonl")
+        values = [row["scalars"][job.metric] for row in rows if job.metric in row.get("scalars", {})]
+        return values[-1] if values else None
 
     def _append_error(self, error: str) -> None:
-        try:
-            meta = json.loads(self.meta_path.read_text())
-            meta.setdefault("writer_errors", []).append(error)
-            atomic_write_bytes(self.meta_path, json.dumps(meta, indent=2).encode())
-        except Exception:
-            pass
+        errors = json.loads(self.meta_path.read_text()).get("writer_errors", [])
+        update_json(self.meta_path, {"writer_errors": [*errors, error]})
+
+
+def rotation_keep(rows: list[dict], metric: str | None, mode: str, k: int) -> set:
+    latest = max(rows, key=lambda r: r["step"])["tag"]
+    if metric is None:
+        best = sorted(rows, key=lambda r: r["step"], reverse=True)[:k]
+        return {r["tag"] for r in best} | {latest}
+    worst = float("inf") if mode == "min" else float("-inf")
+    ordered = sorted(
+        rows,
+        key=lambda r: r["metric"] if r["metric"] is not None else worst,
+        reverse=(mode == "max"),
+    )
+    return {r["tag"] for r in ordered[:k]} | {latest}

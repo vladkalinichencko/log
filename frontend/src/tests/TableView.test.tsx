@@ -268,7 +268,7 @@ describe("TableView", () => {
 
   it("toggles run rows from the collection selection column", () => {
     const s = () => useStore.getState() as any;
-    s().focus_setTarget(null);
+    s().focus_clear();
     const runs: Table = {
       name: "demo",
       kind: TableKind.Folder,
@@ -311,5 +311,70 @@ describe("TableView", () => {
     fireEvent.mouseDown(screen.getByText("2"), { ctrlKey: true });
     fireEvent.mouseUp(window);
     expect((useStore.getState() as any).focused.ranges).toHaveLength(2);
+  });
+
+  it("replaces text in every matching cell as one undoable edit", () => {
+    const s = () => useStore.getState();
+    const grid: Table = {
+      name: "tags",
+      kind: TableKind.Grid,
+      column_names: ["tag", "note"],
+      row_names: null,
+      cells: [
+        ["adam_lr", "adam warmup"].map((value) => ({ type: CellType.String, value, ref: null })),
+        ["sgd_lr", "12"].map((value) => ({ type: CellType.String, value, ref: null })),
+      ],
+      representation: Representation.Grid,
+      source_path: "tags",
+    };
+    s().tables_loadTable("tags", grid);
+    const { unmount } = renderR(<TableView table={grid} editable />);
+    fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
+    fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
+    fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "adamw" } });
+    fireEvent.click(screen.getByText("Replace in 2 cells"));
+    unmount();
+    expect(s().tables.get("tags")!.cells.flat().map((cell) => cell.value)).toEqual(["adamw_lr", "adamw warmup", "sgd_lr", "12"]);
+    s().tables_undo();
+    expect(s().tables.get("tags")!.cells.flat().map((cell) => cell.value)).toEqual(["adam_lr", "adam warmup", "sgd_lr", "12"]);
+  });
+
+  it("zooms the table in steps and keeps the zoom in the URL", () => {
+    renderR(<TableView table={table} />);
+    fireEvent.click(screen.getByTitle("Zoom in"));
+    fireEvent.click(screen.getByTitle("Zoom in"));
+    expect(screen.getByText("120%")).toBeTruthy();
+    expect(document.querySelector<HTMLElement>("table")!.style.zoom).toBe("1.2");
+    expect(screen.getByTestId("loc").textContent).toContain("zoom.p.run.loss=120");
+    fireEvent.click(screen.getByTitle("Zoom out"));
+    fireEvent.click(screen.getByTitle("Zoom out"));
+    expect(screen.getByTestId("loc").textContent).not.toContain("zoom.");
+  });
+
+  it("arrow keys move the active cell in visible order and Shift extends the range", () => {
+    const s = () => useStore.getState();
+    s().focus_clear();
+    const grid: Table = {
+      name: "keys",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [["3", "c"], ["1", "a"], ["2", "b"]].map((row) =>
+        row.map((value) => ({ type: CellType.String, value, ref: null }))
+      ),
+      representation: Representation.Grid,
+      source_path: "keys",
+    };
+    render(<MemoryRouter initialEntries={["/?sort.keys=0:asc"]}><TableView table={grid} editable /></MemoryRouter>);
+    fireEvent.mouseDown(screen.getByText("1"));
+    fireEvent.mouseUp(window);
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 2, c: 0, endR: 2, endC: 0 }]);
+    fireEvent.keyDown(document.body, { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "ArrowDown", shiftKey: true });
+    expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 2, c: 0, endR: 0, endC: 1 }]);
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 0, c: 0, endR: 0, endC: 0 }]);
   });
 });

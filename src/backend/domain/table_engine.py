@@ -6,7 +6,7 @@ from typing import Callable, Literal
 import numpy as np
 
 from ..ports.storage_port import StoragePort
-from .models import Cell, CellType, Representation, Table, TableKind
+from .models import Cell, CellType, Table, TableKind
 from .read_table import read_table
 
 Column = list[float]
@@ -289,10 +289,14 @@ def _read_columns(path: str, storage: StoragePort):
     return names, rows
 
 
-def _col(names, rows, name):
+def _index(names, name):
     if name not in names:
         raise ExpressionError(f"no column {name!r}")
-    i = names.index(name)
+    return names.index(name)
+
+
+def _col(names, rows, name):
+    i = _index(names, name)
     return [r[i] for r in rows]
 
 
@@ -304,20 +308,20 @@ def _function(name, kind):
 
 
 def _eval_select(cols, names, rows, _):
-    idx = [names.index(c) if c in names else _no_column(c) for c in cols]
+    idx = [_index(names, c) for c in cols]
     return cols, [[r[i] for i in idx] for r in rows]
 
 
 def _eval_filter(payload, names, rows, _):
     col, comparator, value = payload
-    i = names.index(col) if col in names else _no_column(col)
+    i = _index(names, col)
     keep = _COMPARE[comparator]
     return names, [r for r in rows if keep(r[i], value)]
 
 
 def _eval_sort(payload, names, rows, _):
     col, descending = payload
-    i = names.index(col) if col in names else _no_column(col)
+    i = _index(names, col)
     return names, sorted(rows, key=lambda r: r[i], reverse=descending)
 
 
@@ -330,7 +334,7 @@ def _eval_derive(payload, names, rows, _):
 def _eval_agg(payload, names, rows, _):
     func_name, by = payload
     func = _function(func_name, "aggregation")
-    bi = names.index(by) if by in names else _no_column(by)
+    bi = _index(names, by)
     others = [n for n in names if n != by]
     groups: dict = {}
     for r in rows:
@@ -407,14 +411,8 @@ EXPR_EVAL: dict[str, Callable[..., Column]] = {
 }
 
 
-def _no_column(name):
-    raise ExpressionError(f"no column {name!r}")
-
-
 def _join(names, rows, names2, rows2, on):
-    if on not in names or on not in names2:
-        raise ExpressionError(f"join column {on!r} missing")
-    i1, i2 = names.index(on), names2.index(on)
+    i1, i2 = _index(names, on), _index(names2, on)
     extra = [(n, j) for j, n in enumerate(names2) if j != i2]
     index2 = {}
     for r in rows2:
@@ -439,23 +437,18 @@ def _concat(names, rows, names2, rows2):
 
 
 def _to_table(names, rows) -> Table:
-    cells = [
-        [
-            Cell(
-                type=CellType.number if isinstance(v, (int, float)) and not isinstance(v, bool) else (CellType.bool if isinstance(v, bool) else CellType.string),
-                value=str(v),
-                ref=None,
-            )
-            for v in row
-        ]
-        for row in rows
-    ]
     return Table(
         name="result",
         kind=TableKind.column,
         column_names=names,
-        row_names=None,
-        cells=cells,
-        representation=Representation.grid,
+        cells=[[Cell(_cell_type(value), str(value)) for value in row] for row in rows],
         source_path=None,
     )
+
+
+def _cell_type(value) -> CellType:
+    if isinstance(value, bool):
+        return CellType.bool
+    if isinstance(value, (int, float)):
+        return CellType.number
+    return CellType.string

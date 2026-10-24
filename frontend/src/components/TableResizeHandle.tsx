@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { resizeFsm } from "../fsm/resizeFsm";
+import { dragFsm } from "../fsm/dragFsm";
 
 interface TableResizeHandleProps {
   axis: "column" | "row";
@@ -7,7 +7,7 @@ interface TableResizeHandleProps {
 }
 
 export function TableResizeHandle({ axis, onResize }: TableResizeHandleProps) {
-  const [state, setState] = useState(resizeFsm.initial);
+  const [state, setState] = useState(dragFsm.initial);
 
   return (
     <span
@@ -20,17 +20,18 @@ export function TableResizeHandle({ axis, onResize }: TableResizeHandleProps) {
         event.preventDefault();
         event.stopPropagation();
         const start = axis === "column" ? event.clientX : event.clientY;
+        const scale = event.currentTarget.currentCSSZoom ?? 1;
         const rect = event.currentTarget.closest(axis === "column" ? "th" : "tr")!
           .getBoundingClientRect();
-        const initial = axis === "column" ? rect.width : rect.height;
+        const initial = (axis === "column" ? rect.width : rect.height) / scale;
         const minimum = axis === "column" ? 80 : 24;
-        setState(resizeFsm.next(state, "down"));
+        setState((current) => dragFsm.next(current, "down"));
         const move = (next: MouseEvent) => {
           const pointer = axis === "column" ? next.clientX : next.clientY;
-          onResize(Math.max(minimum, initial + pointer - start));
+          onResize(Math.max(minimum, initial + (pointer - start) / scale));
         };
         const up = () => {
-          setState((current) => resizeFsm.next(current, "up"));
+          setState((current) => dragFsm.next(current, "up"));
           window.removeEventListener("mousemove", move);
           window.removeEventListener("mouseup", up);
         };

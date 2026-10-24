@@ -2,20 +2,27 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, Cell, CellType } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
-import { HeaderCell } from "./HeaderCell";
+import { EditableText } from "./EditableText";
 import { Button } from "./Button";
 import { Menu } from "./Menu";
+import { MenuButton } from "./MenuButton";
 import { TableResizeHandle } from "./TableResizeHandle";
 import { parsePaste } from "./parsePaste";
-import { selectionFsm } from "../fsm/selectionFsm";
-import { useMenu } from "../fsm/useMenu";
+import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
+import { FocusMode } from "../store/slices/focusSlice";
+import { cell_matches } from "../store/slices/tablesSlice";
+import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
-  isFocused,
-  isInFocusedLine,
   selection_anchor,
   selection_blocks,
   selection_cells,
+  selection_has_cell,
+  selection_has_column,
+  selection_has_row,
+  table_selection_selector,
+  fill_target_selector,
+  range_bounds,
 } from "../store/selectors/tableSelectors";
 import {
   filter_clauses,
@@ -27,11 +34,21 @@ import {
   serialize_heights,
   serialize_sorts,
   serialize_widths,
+  row_window_selector,
+  cell_step_selector,
+  ARROW_STEPS,
   table_view_selector,
   TableSort,
 } from "../store/selectors/tableViewSelectors";
 
 const EDGE = 6;
+const ESTIMATED_ROW_HEIGHT = 30;
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
+
+const selectionMode = (event: React.MouseEvent): FocusMode =>
+  event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
 
 interface TableViewProps {
   table: Table;
@@ -41,25 +58,35 @@ interface TableViewProps {
 export function TableView({ table, editable }: TableViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tableId = table.source_path || table.name;
-  const addRow = useStore((state: any) => state.tables_addRow);
-  const addColumn = useStore((state: any) => state.tables_addColumn);
-  const editName = useStore((state: any) => state.tables_editName);
-  const pasteBlock = useStore((state: any) => state.tables_pasteBlock);
-  const clearCells = useStore((state: any) => state.tables_clearCells);
-  const startRange = useStore((state: any) => state.focus_startRange);
-  const extendRange = useStore((state: any) => state.focus_extendRange);
-  const focused = useStore((state: any) => state.focused);
-  const picking = useStore((state: any) => state.picking);
-  const pickColumn = useStore((state: any) => state.focus_pickColumn);
+  const addRow = useStore((state) => state.tables_addRow);
+  const addColumn = useStore((state) => state.tables_addColumn);
+  const editCell = useStore((state) => state.tables_editCell);
+  const editName = useStore((state) => state.tables_editName);
+  const pasteBlock = useStore((state) => state.tables_pasteBlock);
+  const clearCells = useStore((state) => state.tables_clearCells);
+  const fill = useStore((state) => state.tables_fill);
+  const replaceText = useStore((state) => state.tables_replaceText);
+  const startRange = useStore((state) => state.focus_startRange);
+  const extendRange = useStore((state) => state.focus_extendRange);
+  const selection = useStore((state) => table_selection_selector(state, tableId));
+  const picking = useStore((state) => state.picking);
+  const pickColumn = useStore((state) => state.focus_pickColumn);
   const tableRef = useRef<HTMLTableElement>(null);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [rowHeight, setRowHeight] = useState(ESTIMATED_ROW_HEIGHT);
+  const [visibleBand, setVisibleBand] = useState({ top: 0, bottom: window.innerHeight });
   const filterRef = useRef<HTMLInputElement>(null);
   const columns = table.cells[0]?.length ?? table.column_names?.length ?? 0;
   const paramsRef = useRef<{ value: URLSearchParams; requested: string | null }>({
     value: searchParams,
     requested: null,
   });
-  const [selectionState, setSelectionState] = useState(selectionFsm.initial);
-  const [columnsState, openColumns, closeColumns] = useMenu();
+  const [selectionState, setSelectionState] = useState(dragFsm.initial);
+  const [fillState, setFillState] = useState(dragFsm.initial);
+  const [fillEnd, setFillEnd] = useState<{ r: number; c: number } | null>(null);
+  const [findText, setFindText] = useState("");
+  const [replacement, setReplacement] = useState("");
   const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
@@ -67,6 +94,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const heightKey = `height.${tableId}`;
   const columnsKey = `columns.${tableId}`;
   const freezeKey = `freeze.${tableId}`;
+  const zoomKey = `zoom.${tableId}`;
   const query = searchParams.get(filterKey) ?? "";
   const sorts = parse_sorts(searchParams.get(sortKey));
   const widths = parse_widths(searchParams.get(widthKey));
@@ -76,13 +104,46 @@ export function TableView({ table, editable }: TableViewProps) {
   const frozenCount = Number.isInteger(requestedFrozen)
     ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
     : 0;
+  const requestedZoom = Number(searchParams.get(zoomKey) ?? 100);
+  const zoom = Number.isFinite(requestedZoom) ? Math.max(ZOOM_MIN, Math.min(requestedZoom, ZOOM_MAX)) : 100;
   const view = table_view_selector(table, query, sorts);
-  const runTable = table.source_path?.split(".").length === 1 &&
-    table.cells.every((row) =>
-      row[0]?.type === CellType.TableRef && row[0].ref?.split(".").length === 2
-    );
+  const runTable = path_segments(table.source_path ?? "").length === 1 &&
+    table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
+  const span = visibleColumns.length + (runTable ? 1 : 0) + (table.row_names ? 1 : 0);
+  const activeRange = selection?.ranges[selection.ranges.length - 1];
+  const fillSource = editable && activeRange?.kind === "cell" ? range_bounds(activeRange) : null;
+  const fillTarget = fillSource && fillEnd ? fill_target_selector(fillSource, fillEnd) : null;
+  const inFillTarget = (r: number, c: number) =>
+    fillTarget !== null && fillSource !== null && r <= fillTarget.bottom && c <= fillTarget.right
+      && r >= fillTarget.top && c >= fillTarget.left && (r > fillSource.bottom || c > fillSource.right);
+  const rowWindow = row_window_selector(
+    view.rows.map((row) => heights[row.index] ?? rowHeight),
+    visibleBand.top,
+    visibleBand.bottom
+  );
 
-  const selection = focused && focused.tableId === tableId ? focused : null;
+  useLayoutEffect(() => {
+    const measure = () => {
+      const body = bodyRef.current;
+      const scroller = scrollRef.current;
+      if (!body || !scroller) return;
+      const bodyBox = body.getBoundingClientRect();
+      const scrollBox = scroller.getBoundingClientRect();
+      const scale = body.currentCSSZoom ?? 1;
+      const top = (Math.max(scrollBox.top, 0) - bodyBox.top) / scale;
+      const bottom = (Math.min(scrollBox.bottom, window.innerHeight) - bodyBox.top) / scale;
+      setVisibleBand((band) => (band.top === top && band.bottom === bottom ? band : { top, bottom }));
+      const plainRow = body.querySelector<HTMLElement>("tr[data-row]:not([style])");
+      if (plainRow) setRowHeight(plainRow.getBoundingClientRect().height / scale || ESTIMATED_ROW_HEIGHT);
+    };
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [zoom]);
 
   useEffect(() => {
     const current = searchParams.toString();
@@ -133,6 +194,8 @@ export function TableView({ table, editable }: TableViewProps) {
     setParam(heightKey, serialize_heights({ ...heights, [row]: height }));
   };
 
+  const setZoom = (next: number) => setParam(zoomKey, next === 100 ? "" : String(next));
+
   const setColumns = (next: number[]) => setParam(columnsKey, serialize_columns(next));
 
   const toggleColumn = (column: number) => {
@@ -156,7 +219,7 @@ export function TableView({ table, editable }: TableViewProps) {
     for (const column of visibleColumns.slice(0, frozenCount)) {
       next[column] = left;
       const header = tableRef.current?.querySelector<HTMLElement>(`th[data-column="${column}"]`);
-      left += header?.getBoundingClientRect().width ?? 0;
+      left += header ? header.getBoundingClientRect().width / (header.currentCSSZoom ?? 1) : 0;
     }
     if (JSON.stringify(next) !== JSON.stringify(frozenOffsets)) setFrozenOffsets(next);
   }, [visibleColumns.join(","), frozenCount, searchParams.toString()]);
@@ -184,35 +247,70 @@ export function TableView({ table, editable }: TableViewProps) {
       onCopy(e);
       clearCells(tableId, selection_cells(table, selection));
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const step = ARROW_STEPS[e.key];
+      const active = selection.ranges[selection.ranges.length - 1];
+      if (!step || e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
+      const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
+      const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
+      if (!to) return;
+      e.preventDefault();
+      if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
+      else startRange({ tableId, kind: "cell", ...to }, "replace");
+    };
     document.addEventListener("paste", onPaste);
     document.addEventListener("copy", onCopy);
     document.addEventListener("cut", onCut);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("cut", onCut);
+      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [editable, selection, tableId, table]);
+  }, [editable, selection, tableId, table, searchParams]);
+
+  useEffect(() => {
+    if (activeRange?.kind !== "cell") return;
+    tableRef.current
+      ?.querySelector(`tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeRange?.kind, activeRange?.endR, activeRange?.endC]);
 
   useEffect(() => {
     if (selectionState !== "dragging") return;
-    const end = () => setSelectionState((state) => selectionFsm.next(state, "up"));
+    const end = () => setSelectionState((state) => dragFsm.next(state, "up"));
     window.addEventListener("mouseup", end);
     return () => window.removeEventListener("mouseup", end);
   }, [selectionState]);
 
+  useEffect(() => {
+    if (fillState !== "dragging") return;
+    const end = () => {
+      if (fillSource && fillTarget) fill(tableId, fillSource, fillTarget);
+      setFillEnd(null);
+      setFillState((state) => dragFsm.next(state, "up"));
+    };
+    window.addEventListener("mouseup", end);
+    return () => window.removeEventListener("mouseup", end);
+  }, [fillState, fillSource, fillTarget]);
+
   const beginSelection = (r: number, c: number, event: React.MouseEvent) => {
     if (!editable) return;
     event.preventDefault();
-    const mode = event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
-    startRange({ tableId, kind: "cell", r, c }, mode);
-    setSelectionState((state) => selectionFsm.next(state, "down"));
+    startRange({ tableId, kind: "cell", r, c }, selectionMode(event));
+    setSelectionState((state) => dragFsm.next(state, "down"));
+  };
+
+  const beginFill = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFillState((state) => dragFsm.next(state, "down"));
   };
 
   const extendSelection = (r: number, c: number) => {
-    if (selectionState === "dragging") {
-      extendRange({ tableId, kind: "cell", r, c });
-    }
+    if (selectionState === "dragging") extendRange({ tableId, kind: "cell", r, c });
+    if (fillState === "dragging") setFillEnd({ r, c });
   };
 
   const selectFromEdge = (e: React.MouseEvent) => {
@@ -222,37 +320,28 @@ export function TableView({ table, editable }: TableViewProps) {
       Math.abs(e.clientX - rect.left) <= EDGE || Math.abs(e.clientX - rect.right) <= EDGE;
     const onHorizontalEdge =
       Math.abs(e.clientY - rect.top) <= EDGE || Math.abs(e.clientY - rect.bottom) <= EDGE;
-    const rows = [...tableRef.current.querySelectorAll("tbody tr")];
+    const rows = [...tableRef.current.querySelectorAll<HTMLElement>("tbody tr[data-row]")];
     if (onVerticalEdge && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-      const r = rows.findIndex((row) => {
-        const rowRect = row.getBoundingClientRect();
-        return e.clientY >= rowRect.top && e.clientY <= rowRect.bottom;
+      const row = rows.find((candidate) => {
+        const box = candidate.getBoundingClientRect();
+        return e.clientY >= box.top && e.clientY <= box.bottom;
       });
-      if (r >= 0) {
-        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
-        startRange({ tableId, kind: "row", r, c: -1 }, mode);
-      }
+      if (row) startRange({ tableId, kind: "row", r: Number(row.dataset.row), c: -1 }, selectionMode(e));
     } else if (onHorizontalEdge && e.clientX >= rect.left && e.clientX <= rect.right) {
-      const firstRow = rows[0] ? [...rows[0].children] : [];
-      const domIndex = firstRow.findIndex((cell) => {
-        const cellRect = cell.getBoundingClientRect();
-        return e.clientX >= cellRect.left && e.clientX <= cellRect.right;
+      const cells = [...(rows[0]?.querySelectorAll<HTMLElement>("td[data-column]") ?? [])];
+      const cell = cells.find((candidate) => {
+        const box = candidate.getBoundingClientRect();
+        return e.clientX >= box.left && e.clientX <= box.right;
       });
-      const c = table.row_names ? domIndex - 1 : domIndex;
-      if (c >= 0) {
-        const mode = e.metaKey || e.ctrlKey ? "add" : e.shiftKey ? "extend" : "replace";
-        startRange({ tableId, kind: "col", r: -1, c }, mode);
-      }
+      if (cell) startRange({ tableId, kind: "col", r: -1, c: Number(cell.dataset.column) }, selectionMode(e));
     }
   };
 
-  const focusState = { focused: selection };
-  const rowSelected = (r: number) => isInFocusedLine(focusState, tableId, r, -1);
-  const colSelected = (c: number) => isInFocusedLine(focusState, tableId, -1, c);
-  const colClass = (r: number, c: number) => {
-    if (!colSelected(c)) return undefined;
-    const top = table.column_names ? r === -1 : r === 0;
-    const bottom = r === table.cells.length - 1;
+  const rowSelected = (r: number) => selection_has_row(selection, r);
+  const colClass = (position: number, c: number) => {
+    if (!selection_has_column(selection, c)) return undefined;
+    const top = table.column_names ? position === -1 : position === 0;
+    const bottom = position === view.rows.length - 1;
     return ["col-selected", top ? "col-top" : "", bottom ? "col-bottom" : ""].join(" ").trim();
   };
   const frozen = (column: number) => visibleColumns.indexOf(column) < frozenCount;
@@ -272,13 +361,8 @@ export function TableView({ table, editable }: TableViewProps) {
           onChange={(event) => setParam(filterKey, event.target.value)}
         />
         <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
-        <div className="anchor" onClick={(event) => event.stopPropagation()}>
-          <Button
-            label={`Columns ${visibleColumns.length}/${columns}`}
-            title="Choose, reorder, and freeze columns"
-            onClick={() => columnsState === "open" ? closeColumns() : openColumns()}
-          />
-          {columnsState === "open" && (
+        <MenuButton label={`Columns ${visibleColumns.length}/${columns}`} title="Choose, reorder, and freeze columns">
+          {() => (
             <Menu
               sections={[
                 {
@@ -316,7 +400,31 @@ export function TableView({ table, editable }: TableViewProps) {
               ]}
             />
           )}
-        </div>
+        </MenuButton>
+        <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
+        <span className="subtitle">{zoom}%</span>
+        <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
+        {editable && (
+          <MenuButton label="Replace" title="Find text in cells and replace every match">
+            {(close) => {
+              const matches = table.cells.flat().filter((cell) => cell_matches(cell, findText)).length;
+              return (
+                <Menu>
+                  <input placeholder="find" value={findText} onChange={(e) => setFindText(e.target.value)} />
+                  <input placeholder="replace with" value={replacement} onChange={(e) => setReplacement(e.target.value)} />
+                  <Button
+                    label={`Replace in ${matches} cells`}
+                    disabled={matches === 0}
+                    onClick={() => {
+                      replaceText(tableId, findText, replacement);
+                      close();
+                    }}
+                  />
+                </Menu>
+              );
+            }}
+          </MenuButton>
+        )}
       </div>
       {view.clauses.length > 0 && (
         <div className="filter-chips">
@@ -333,8 +441,8 @@ export function TableView({ table, editable }: TableViewProps) {
       {view.error && <div className="table-filter-error">{view.error}</div>}
       {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
-        <div>
-          <table className="table-view" ref={tableRef}>
+        <div ref={scrollRef}>
+          <table className="table-view" ref={tableRef} style={{ zoom: zoom / 100 }}>
             <colgroup>
               {runTable && <col className="selection-column" />}
               {table.row_names && <col />}
@@ -360,7 +468,7 @@ export function TableView({ table, editable }: TableViewProps) {
                       >
                         <div className="column-header">
                           {editable ? (
-                            <HeaderCell name={name} onRename={(n) => editName(tableId, "col", c, n)} />
+                            <EditableText className="cell" value={name} onCommit={(n) => editName(tableId, "col", c, n)} />
                           ) : (
                             <span className="cell">{name}</span>
                           )}
@@ -392,10 +500,14 @@ export function TableView({ table, editable }: TableViewProps) {
                 </tr>
               </thead>
             )}
-            <tbody>
-              {view.rows.map((row) => (
+            <tbody ref={bodyRef}>
+              {rowWindow.before > 0 && (
+                <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.before }} /></tr>
+              )}
+              {view.rows.slice(rowWindow.from, rowWindow.to).map((row, offset) => (
                 <tr
                   key={row.index}
+                  data-row={row.index}
                   className={rowSelected(row.index) ? "selected" : undefined}
                   style={heights[row.index] ? { height: heights[row.index] } : undefined}
                 >
@@ -415,11 +527,12 @@ export function TableView({ table, editable }: TableViewProps) {
                     </td>
                   )}
                   {table.row_names && (
-                    <th className={colClass(row.index, -2)}>
+                    <th className={colClass(rowWindow.from + offset, -2)}>
                       {editable ? (
-                        <HeaderCell
-                          name={row.rowName!}
-                          onRename={(n) => editName(tableId, "row", row.index, n)}
+                        <EditableText
+                          className="cell"
+                          value={row.rowName!}
+                          onCommit={(n) => editName(tableId, "row", row.index, n)}
                         />
                       ) : (
                         <span className="cell">{row.rowName}</span>
@@ -431,16 +544,22 @@ export function TableView({ table, editable }: TableViewProps) {
                     return (
                     <td
                       key={c}
-                      className={classNames(colClass(row.index, c), frozen(c) && "frozen")}
+                      data-column={c}
+                      className={classNames(
+                        colClass(rowWindow.from + offset, c),
+                        frozen(c) && "frozen",
+                        inFillTarget(row.index, c) && "fill-target"
+                      )}
                       style={frozenStyle(c)}
                     >
+                      {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
+                        <span className="fill-handle" title="Drag to fill down or right" onMouseDown={beginFill} />
+                      )}
                       <CellComponent
                         cell={cell}
-                        tableId={tableId}
-                        rowIndex={row.index}
-                        colIndex={c}
                         editable={editable}
-                        selected={isFocused(focusState, tableId, row.index, c)}
+                        selected={selection_has_cell(selection, row.index, c)}
+                        onCommit={(value) => editCell(tableId, row.index, c, value)}
                         onSelect={(event) => beginSelection(row.index, c, event)}
                         onExtend={() => extendSelection(row.index, c)}
                       />
@@ -455,6 +574,9 @@ export function TableView({ table, editable }: TableViewProps) {
                   })}
                 </tr>
               ))}
+              {rowWindow.after > 0 && (
+                <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.after }} /></tr>
+              )}
             </tbody>
           </table>
           {editable && <Button icon="plus" ghost title="add row" onClick={() => addRow(tableId)} />}

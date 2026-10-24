@@ -5,8 +5,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
-from .errors import ConfigSerializationError, InvalidStepUnitError, RunDirectoryError
-from .writer.atomic import atomic_write_bytes
+from .errors import ConfigSerializationError, InvalidStepUnitError, NoActiveRunError, RunDirectoryError
+from .writer.atomic import atomic_write_bytes, update_json
 from .writer.identity import git_hash, requirements_hash
 from .writer.layout import resolve_run_dir
 from .writer.queue_writer import WriterThread
@@ -31,6 +31,7 @@ class RunContext:
         self.samples_seen = 0
         self.epoch = 0
         self.current_step = 0
+        self.watch_handles: list = []
 
 
 class Config:
@@ -115,11 +116,10 @@ def run(
                 status = "crashed"
                 raise
             finally:
+                for handle in _active_run.watch_handles:
+                    handle.remove()
                 writer.stop_and_join()
-                meta = json.loads(meta_path.read_text())
-                meta["status"] = status
-                meta["samples_seen"] = _active_run.samples_seen
-                atomic_write_bytes(meta_path, json.dumps(meta, indent=2).encode())
+                update_json(meta_path, {"status": status, "samples_seen": _active_run.samples_seen})
                 _active_run = None
 
         return wrapper
@@ -128,8 +128,6 @@ def run(
 
 
 def get_active_run() -> RunContext:
-    from .errors import NoActiveRunError
-
     if _active_run is None:
         raise NoActiveRunError("No active run; wrap your code in @log.run")
     return _active_run

@@ -82,6 +82,14 @@ describe("InlineView", () => {
       "demo.baseline.meta",
       "demo.baseline.config",
     ]);
+
+    fireEvent.keyDown(document.querySelector(".tile-grid > .tile input")!, { key: "ArrowRight", altKey: true });
+    expect((useStore.getState() as any).order.get("demo.baseline")[0]).toBe("demo.baseline.meta");
+    fireEvent.keyDown(document.querySelectorAll(".tile-grid > .tile")[0], { key: "ArrowRight", altKey: true });
+    expect((useStore.getState() as any).order.get("demo.baseline")).toEqual([
+      "demo.baseline.config",
+      "demo.baseline.meta",
+    ]);
   });
 
   it("renders a deep leaf directly", async () => {

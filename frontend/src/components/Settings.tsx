@@ -1,12 +1,22 @@
+import { useEffect } from "react";
 import { Button } from "./Button";
-import { ACCENTS } from "../store/slices/settingsSlice";
+import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
 
+export function useTheme() {
+  const theme = useStore((state) => state.theme);
+  const accent = useStore((state) => state.accent);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.setProperty("--accent", `var(${accent})`);
+  }, [theme, accent]);
+}
+
 export function Settings() {
-  const theme = useStore((state: any) => state.theme);
-  const accent = useStore((state: any) => state.accent);
-  const setTheme = useStore((state: any) => state.settings_setTheme);
-  const setAccent = useStore((state: any) => state.settings_setAccent);
+  const theme = useStore((state) => state.theme);
+  const accent = useStore((state) => state.accent);
+  const setTheme = useStore((state) => state.settings_setTheme);
+  const setAccent = useStore((state) => state.settings_setAccent);
 
   return (
     <div className="content">
@@ -19,13 +29,13 @@ export function Settings() {
       </div>
       <div className="group">
         <span>accent</span>
-        {ACCENTS.map((color) => (
+        {SERIES.map((token) => (
           <button
-            key={color}
-            className={color === accent ? "dot active" : "dot"}
-            style={{ background: color }}
-            title={color}
-            onClick={() => setAccent(color)}
+            key={token}
+            className={token === accent ? "dot active" : "dot"}
+            style={{ background: `var(${token})` }}
+            title={token}
+            onClick={() => setAccent(token)}
           />
         ))}
       </div>

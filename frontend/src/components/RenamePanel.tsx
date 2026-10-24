@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button } from "./Button";
+import { Menu } from "./Menu";
 
 interface RenamePanelProps {
-  onApply: (fields: { prefix: string; suffix: string; find: string; replace: string }) => void;
+  onApply: (fields: { prefix: string; suffix: string; find: string; replace: string }) => Promise<unknown>;
 }
 
 export function RenamePanel({ onApply }: RenamePanelProps) {
@@ -12,12 +13,12 @@ export function RenamePanel({ onApply }: RenamePanelProps) {
   const [replace, setReplace] = useState("");
 
   return (
-    <div className="menu panel">
+    <Menu>
       <input placeholder="prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
       <input placeholder="suffix" value={suffix} onChange={(e) => setSuffix(e.target.value)} />
       <input placeholder="find" value={find} onChange={(e) => setFind(e.target.value)} />
       <input placeholder="replace" value={replace} onChange={(e) => setReplace(e.target.value)} />
       <Button label="rename" onClick={() => onApply({ prefix, suffix, find, replace })} />
-    </div>
+    </Menu>
   );
 }

@@ -75,12 +75,8 @@ class SqliteIndex:
 
     def query(self, project: str | None = None, status: str | None = None, tag: str | None = None) -> list[RunSummary]:
         with self.lock:
-            rows = self.connection.execute(f"SELECT {_COLUMNS} FROM runs").fetchall()
-        runs = [_to_summary(row) for row in rows]
-        if project is not None:
-            runs = [r for r in runs if r.project == project]
-        if status is not None:
-            runs = [r for r in runs if r.status == status]
-        if tag is not None:
-            runs = [r for r in runs if tag in r.tags]
-        return runs
+            rows = self.connection.execute(
+                f"SELECT {_COLUMNS} FROM runs WHERE (?1 IS NULL OR project = ?1) AND (?2 IS NULL OR status = ?2)",
+                (project, status),
+            ).fetchall()
+        return [run for run in map(_to_summary, rows) if tag is None or tag in run.tags]

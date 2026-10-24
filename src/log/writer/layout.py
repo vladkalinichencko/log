@@ -3,25 +3,22 @@ from datetime import datetime
 from pathlib import Path
 
 
+def default_runs_root() -> Path:
+    return Path(os.environ.get("LOG_RUNS_ROOT", "./runs"))
+
+
 def resolve_run_dir(
     project: str,
     name: str | None,
     runs_root: str | None,
 ) -> Path:
-    if runs_root is None:
-        runs_root = os.environ.get("LOG_RUNS_ROOT", "./runs")
-
-    root = Path(runs_root) / project
+    root = (Path(runs_root) if runs_root is not None else default_runs_root()) / project
 
     if name is None:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        hex_suffix = os.urandom(4).hex()
-        name = f"{timestamp}-{hex_suffix}"
+        name = f"{timestamp}-{os.urandom(4).hex()}"
 
     run_dir = root / name
-
     while run_dir.exists():
-        hex_suffix = os.urandom(4).hex()
-        run_dir = root / f"{name}-{hex_suffix}"
-
+        run_dir = root / f"{name}-{os.urandom(4).hex()}"
     return run_dir

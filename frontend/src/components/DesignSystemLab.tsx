@@ -1,4 +1,5 @@
 import { CSSProperties, useState } from "react";
+import { Button } from "./Button";
 
 const stats = [
   ["loss", "0.218", "−0.034", "bad"],
@@ -8,11 +9,11 @@ const stats = [
 ] as const;
 
 const operations = [
-  ["forward", 22, "#7657ff"],
-  ["attention", 14, "#f04f47"],
-  ["backward", 31, "#26bfa6"],
-  ["all-reduce", 12, "#f2b84b"],
-  ["optimizer", 21, "#448ee4"],
+  ["forward", 22, "var(--series-4)"],
+  ["attention", 14, "var(--series-1)"],
+  ["backward", 31, "var(--series-6)"],
+  ["all-reduce", 12, "var(--warning)"],
+  ["optimizer", 21, "var(--series-5)"],
 ] as const;
 
 const rows = [
@@ -22,32 +23,30 @@ const rows = [
   ["all_reduce", "grad sync", "8.7ms", 44, "8%"],
 ] as const;
 
-function MiniLine({ tone = "accent" }: { tone?: "accent" | "blue" | "green" }) {
+const TONES = { accent: "var(--accent)", blue: "var(--series-5)", green: "var(--positive)" };
+
+function MiniLine({ tone = "accent" }: { tone?: keyof typeof TONES }) {
   return (
-    <svg className={`lab-spark lab-spark--${tone}`} viewBox="0 0 120 28" aria-hidden="true">
+    <svg className="sparkline" style={{ color: TONES[tone] }} viewBox="0 0 120 28" aria-hidden="true">
       <path d="M1 21 C16 7 25 22 39 12 S63 17 77 8 S101 17 119 3" />
     </svg>
   );
 }
 
 export function DesignSystemLab() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [density, setDensity] = useState<"compact" | "comfortable">("compact");
   const [focus, setFocus] = useState(78);
 
   return (
-    <main className="lab" data-lab-theme={theme} data-density={density}>
+    <main className="lab" data-density={density}>
       <header className="lab-topbar">
         <div>
-          <p className="lab-kicker">LOG / DESIGN SYSTEM 0.1</p>
+          <p className="subtitle">LOG / DESIGN SYSTEM 0.1</p>
           <h1>Training Run</h1>
         </div>
-        <div className="lab-controls" aria-label="Design system controls">
-          <div className="segmented">
-            <button className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")}>compact</button>
-            <button className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")}>comfortable</button>
-          </div>
-          <button className="square-action" onClick={() => setTheme(theme === "light" ? "dark" : "light")} aria-label="Toggle theme">◐</button>
+        <div className="toggle" aria-label="Table density">
+          <Button label="compact" active={density === "compact"} onClick={() => setDensity("compact")} />
+          <Button label="comfortable" active={density === "comfortable"} onClick={() => setDensity("comfortable")} />
         </div>
       </header>
 
@@ -59,7 +58,7 @@ export function DesignSystemLab() {
         <div className="timeline-panel" style={{ "--focus": `${focus}%` } as CSSProperties}>
           <div className="timeline-legend"><span><i className="red" />train loss</span><span><i className="green" />eval loss</span><b>step 78,320</b></div>
           <svg className="hero-chart" viewBox="0 0 1000 320" preserveAspectRatio="none" role="img" aria-label="Training loss over eight epochs">
-            <defs><linearGradient id="loss-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--signal)" stopOpacity=".28"/><stop offset="1" stopColor="var(--signal)" stopOpacity="0"/></linearGradient></defs>
+            <defs><linearGradient id="loss-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".28"/><stop offset="1" stopColor="var(--accent)" stopOpacity="0"/></linearGradient></defs>
             <g className="chart-grid">{[50,100,150,200,250,300].map(y => <line key={y} x1="0" y1={y} x2="1000" y2={y}/>)}{[125,250,375,500,625,750,875].map(x => <line key={x} x1={x} y1="0" x2={x} y2="320"/>)}</g>
             <path className="hero-area" d="M0 25 C90 170 150 190 230 220 S330 245 400 210 S500 250 600 260 S720 270 800 255 S900 285 1000 278 L1000 320 L0 320 Z"/>
             <path className="hero-line" d="M0 25 C90 170 150 190 230 220 S330 245 400 210 S500 250 600 260 S720 270 800 255 S900 285 1000 278"/>

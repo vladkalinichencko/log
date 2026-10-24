@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createRef } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Toolbar } from "../components/Toolbar";
 import { useStore } from "../store/store";
@@ -21,15 +22,16 @@ const grid: Table = {
 
 describe("Toolbar", () => {
   it("trash is disabled without a row/col selection and deletes after confirm", () => {
-    const s = () => useStore.getState() as any;
+    const s = useStore.getState;
     s().tables_loadTable("t9", grid);
-    s().focus_setTarget(null);
-    const { rerender } = render(<Toolbar path="t9" table={grid} />);
+    s().focus_clear();
+    const content = createRef<HTMLDivElement>();
+    const { rerender } = render(<Toolbar path="t9" table={grid} content={content} />);
     expect((screen.getByTitle("delete selection") as HTMLButtonElement).disabled).toBe(true);
-    s().focus_setTarget({ tableId: "t9", kind: "col", r: -1, c: 1 });
-    rerender(<Toolbar path="t9" table={grid} />);
+    s().focus_startRange({ tableId: "t9", kind: "col", r: -1, c: 1 }, "replace");
+    rerender(<Toolbar path="t9" table={grid} content={content} />);
     fireEvent.click(screen.getByTitle("delete selection"));
     fireEvent.click(screen.getByText("confirm"));
-    expect(s().tables.get("t9").column_names).toEqual(["a"]);
+    expect(s().tables.get("t9")?.column_names).toEqual(["a"]);
   });
 });

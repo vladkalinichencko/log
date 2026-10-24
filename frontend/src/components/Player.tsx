@@ -3,20 +3,14 @@ import { Button } from "./Button";
 import { playerFsm } from "../fsm/playerFsm";
 import { trailFsm } from "../fsm/trailFsm";
 import { TRAJECTORY_COLUMNS } from "./render";
-import { fetchTensorFrame } from "../api/client";
+import { TensorFrames } from "../store/slices/tablesSlice";
 import { useStore } from "../store/store";
-import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
+import { Table, Cell, CellType, Frame, TableKind, Representation } from "../types/domain";
 
 interface PlayerProps {
   path: string;
-  run: string;
-  tensorPath: string;
-  steps: number[];
-}
-
-export interface Frame {
-  shape: number[];
-  data: number[];
+  leaf: string;
+  tensor: TensorFrames;
 }
 
 const numberCell = (value: number): Cell => ({
@@ -66,28 +60,17 @@ export function trajectoryTable(
   return gridTable(name, tileId, [...TRAJECTORY_COLUMNS], cells);
 }
 
-export function Player({ path, run, tensorPath, steps }: PlayerProps) {
-  const loadTable = useStore((state: any) => state.tables_loadTable);
-  const [frames, setFrames] = useState<Frame[] | null>(null);
+export function Player({ path, leaf, tensor: { steps, frames } }: PlayerProps) {
+  const loadTable = useStore((state) => state.tables_loadTable);
   const [playState, setPlayState] = useState(playerFsm.initial);
   const [trailState, setTrailState] = useState(trailFsm.initial);
-  const [index, setIndex] = useState(steps.length - 1);
+  const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+  const last = steps.length - 1;
+  const index = chosenIndex === null ? last : Math.min(chosenIndex, last);
+  const choose = (next: number) => setChosenIndex(next >= last ? null : next);
 
   useEffect(() => {
-    let stale = false;
-    Promise.all(steps.map((step) => fetchTensorFrame(run, tensorPath, step)))
-      .then((list) => {
-        if (!stale) setFrames(list);
-      })
-      .catch((err) => console.error("Failed to fetch frames:", err));
-    return () => {
-      stale = true;
-    };
-  }, [run, tensorPath]);
-
-  useEffect(() => {
-    if (!frames) return;
-    const name = `${tensorPath} @ step ${steps[index]}`;
+    const name = `${leaf} @ step ${steps[index]}`;
     loadTable(
       path,
       trailState === "on"
@@ -98,20 +81,16 @@ export function Player({ path, run, tensorPath, steps }: PlayerProps) {
 
   useEffect(() => {
     if (playState !== "playing") return;
-    const timer = window.setInterval(
-      () => setIndex((i) => (i + 1 < steps.length ? i + 1 : i)),
-      500
-    );
-    return () => window.clearInterval(timer);
-  }, [playState]);
+    const timer = window.setTimeout(() => choose(index + 1), 500);
+    return () => window.clearTimeout(timer);
+  }, [playState, index, last]);
 
   useEffect(() => {
-    if (playState === "playing" && index === steps.length - 1)
-      setPlayState((s) => playerFsm.next(s, "end"));
+    if (playState === "playing" && index === last) setPlayState((s) => playerFsm.next(s, "end"));
   }, [index, playState]);
 
   const playing = playState === "playing";
-  const isPoints = frames !== null && frames.length > 0 && frames[0].shape[1] === 2;
+  const isPoints = frames[0]?.shape[1] === 2;
   return (
     <div className="bar">
       <Button
@@ -119,7 +98,7 @@ export function Player({ path, run, tensorPath, steps }: PlayerProps) {
         ghost
         title={playing ? "pause" : "play"}
         onClick={() => {
-          if (!playing && index === steps.length - 1) setIndex(0);
+          if (!playing && index === last) choose(0);
           setPlayState((s) => playerFsm.next(s, playing ? "pause" : "play"));
         }}
       />
@@ -136,9 +115,9 @@ export function Player({ path, run, tensorPath, steps }: PlayerProps) {
         className="grow"
         type="range"
         min={0}
-        max={steps.length - 1}
+        max={last}
         value={index}
-        onChange={(e) => setIndex(Number(e.target.value))}
+        onChange={(e) => choose(Number(e.target.value))}
       />
       <span>step {steps[index]}</span>
     </div>

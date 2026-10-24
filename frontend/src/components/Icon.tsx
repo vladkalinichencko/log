@@ -22,6 +22,8 @@ const ICONS = { back, forward, plus, trash, pin, save, expand, collapse, table, 
 
 export type IconName = keyof typeof ICONS;
 
+export const ICON_NAMES = Object.keys(ICONS) as IconName[];
+
 interface IconProps {
   name: IconName;
 }

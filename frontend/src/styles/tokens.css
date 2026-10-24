@@ -13,12 +13,29 @@
   --gray-400: #b4b4b4;
   --gray-600: #6b6b6b;
   --gray-900: #1c1c1c;
-  --accent: #e11d1d;
+  --series-1: #e11d1d;
+  --series-2: #e91e8c;
+  --series-3: #a855f7;
+  --series-4: #6366f1;
+  --series-5: #3b82f6;
+  --series-6: #34d399;
+  --accent: var(--series-1);
   --positive: #14a978;
   --warning: #d99a1d;
   --critical: #e11d1d;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
   --font: "IBM Plex Mono", ui-monospace, monospace;
+  --text-page: 40px;
+  --text-section: 20px;
+  --text-tile: 18px;
+  --text-body: 14px;
+  --text-meta: 12px;
+  --icon: 16px;
+  --handle: 12px;
+  --hit: 6px;
+  --menu-width: 220px;
+  --menu-column: 160px;
+  --menu-height: 320px;
 }
 
 :root[data-theme="dark"] {
@@ -40,7 +57,7 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.15;
   color: var(--gray-900);
   background: var(--gray-50);
@@ -54,13 +71,13 @@ body {
 h1 {
   margin: var(--space) 0;
   font-weight: 600;
-  font-size: 40px;
+  font-size: var(--text-page);
 }
 
 .subtitle {
   color: var(--gray-600);
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
 h1,
@@ -112,6 +129,7 @@ tbody tr:hover {
 }
 
 .link {
+  color: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -182,12 +200,20 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
-button:hover {
+button[data-state="hover"] {
   background: var(--gray-100);
 }
 
-button:active {
+button[data-state="pressed"] {
   background: var(--gray-200);
+}
+
+button[data-state="pending"] {
+  cursor: progress;
+}
+
+button[data-state="error"] {
+  outline: 1px solid var(--accent);
 }
 
 button:disabled {
@@ -204,12 +230,8 @@ button.ghost {
   align-items: center;
 }
 
-button.ghost:hover {
+button.ghost[data-state="hover"] {
   background: var(--gray-100);
-}
-
-button.ghost.armed {
-  background: var(--gray-200);
 }
 
 .toggle {
@@ -235,8 +257,8 @@ button.active {
 }
 
 .icon {
-  width: 16px;
-  height: 16px;
+  width: var(--icon);
+  height: var(--icon);
   display: block;
 }
 
@@ -397,7 +419,7 @@ select {
 
 .table-filter-error {
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--text-meta);
   margin-bottom: calc(var(--space) / 2);
 }
 
@@ -429,7 +451,7 @@ select {
 
 .column-actions button {
   color: var(--gray-600);
-  font-size: 11px;
+  font-size: var(--text-meta);
 }
 
 .column-resize,
@@ -442,7 +464,7 @@ select {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 6px;
+  width: var(--hit);
   cursor: col-resize;
 }
 
@@ -450,12 +472,28 @@ select {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 6px;
+  height: var(--hit);
   cursor: row-resize;
 }
 
 .table-view td {
   position: relative;
+}
+
+.fill-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: var(--hit);
+  height: var(--hit);
+  background: var(--gray-600);
+  cursor: crosshair;
+}
+
+.table-view td.fill-target {
+  outline: 1px dashed var(--gray-600);
+  outline-offset: -1px;
 }
 
 .table-view .frozen {
@@ -508,8 +546,8 @@ select {
 }
 
 .resize-handle {
-  width: 12px;
-  height: 12px;
+  width: var(--handle);
+  height: var(--handle);
   cursor: nwse-resize;
   align-self: flex-end;
   flex: 0 0 auto;
@@ -533,7 +571,7 @@ input.picking {
 
 .table-meta {
   color: var(--gray-600);
-  font-size: 12px;
+  font-size: var(--text-meta);
   margin: var(--space) 0 0;
 }
 
@@ -603,7 +641,7 @@ input.picking {
 }
 
 .section-heading h2 {
-  font-size: 20px;
+  font-size: var(--text-section);
 }
 
 .data-section > .table-wrap,
@@ -628,13 +666,13 @@ input.picking {
 }
 
 .tile-name {
-  font-size: 18px;
+  font-size: var(--text-tile);
   font-weight: 600;
 }
 
 .dot {
-  width: 16px;
-  height: 16px;
+  width: var(--icon);
+  height: var(--icon);
   border-radius: 50%;
   border: none;
   padding: 0;
@@ -656,14 +694,120 @@ input.picking {
 
 .menu {
   position: fixed;
-  min-width: 220px;
+  min-width: var(--menu-width);
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   z-index: 10;
-  max-height: 320px;
+  max-height: var(--menu-height);
   overflow: auto;
+}
+
+.row-spacer > td {
+  padding: 0;
+  border: 0;
+}
+
+.run-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-top: var(--space-2);
+}
+
+.run-hero,
+.stat-strip {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-0);
+}
+
+.run-hero {
+  height: calc(var(--menu-height) * 1.25);
+  overflow: hidden;
+}
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--menu-width), 1fr));
+}
+
+.stat {
+  position: relative;
+  min-height: calc(var(--space-4) * 4);
+  padding: var(--space-2);
+  border-right: 1px solid var(--gray-200);
+}
+
+.stat:last-child {
+  border-right: 0;
+}
+
+.stat > span,
+.stat small {
+  display: block;
+  color: var(--gray-600);
+  font-size: var(--text-meta);
+}
+
+.stat strong {
+  display: block;
+  margin-top: var(--space);
+  font-size: var(--text-page);
+  overflow-wrap: anywhere;
+}
+
+.sparkline {
+  position: absolute;
+  right: var(--space);
+  bottom: var(--space);
+  width: calc(var(--space-4) * 3.5);
+  height: var(--space-3);
+  color: var(--accent);
+}
+
+.sparkline > * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.notices {
+  position: fixed;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  max-width: var(--menu-height);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: var(--space);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-left: 2px solid var(--critical);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.notice > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.load-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: var(--space);
+  color: var(--critical);
 }
 
 .menu-origin {
@@ -704,8 +848,8 @@ input.picking {
   display: block;
   padding: 0;
   cursor: default;
-  min-width: 160px;
-  max-height: 320px;
+  min-width: var(--menu-column);
+  max-height: var(--menu-height);
   overflow: auto;
 }
 
@@ -720,7 +864,7 @@ input.picking {
   padding: calc(var(--space) / 1.5) var(--space);
   background: linear-gradient(var(--gray-0) 55%, transparent);
   color: var(--gray-600);
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
 .menu-section > div {
@@ -788,5 +932,5 @@ input.picking {
 }
 
 .content > .tile-body > .tile-content {
-  min-height: 320px;
+  min-height: var(--menu-height);
 }

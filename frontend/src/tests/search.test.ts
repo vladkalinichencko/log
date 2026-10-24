@@ -13,7 +13,7 @@ describe("search_selector", () => {
 
   it("suggests hierarchical table paths in formulas", () => {
     const state = {
-      functions: [{ name: "mean" }],
+      functions: [{ name: "mean", kind: "aggregation" as const, windowed: false }],
       paths: ["demo.baseline.epoch_0000.loss", "demo.high_lr.epoch_0000.loss"],
     };
     expect(formula_selector(state, "join(table(demo.ba", ["step"]).suggestions).toEqual([

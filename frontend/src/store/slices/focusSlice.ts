@@ -1,3 +1,5 @@
+import type { SetStore } from "../store";
+
 export type FocusKind = "cell" | "row" | "col";
 
 export interface FocusTarget {
@@ -23,7 +25,7 @@ export interface FocusState {
   pickedColumn: string | null;
 }
 
-type FocusMode = "replace" | "extend" | "add" | "toggle";
+export type FocusMode = "replace" | "extend" | "add" | "toggle";
 
 const pointRange = ({ kind, r, c }: FocusTarget): FocusRange => ({
   kind,
@@ -65,19 +67,18 @@ export function focus_reducer(
   return { ...focused, ranges };
 }
 
-export const createFocusSlice = (set: any) => ({
+export const createFocusSlice = (set: SetStore) => ({
   focused: null,
   picking: false,
   pickedColumn: null,
 
-  focus_setTarget: (target: FocusTarget | null) =>
-    set({ focused: target ? { tableId: target.tableId, ranges: [pointRange(target)] } : null }),
+  focus_clear: () => set({ focused: null }),
 
   focus_startRange: (target: FocusTarget, mode: FocusMode) =>
-    set((state: FocusState) => ({ focused: focus_reducer(state.focused, target, mode) })),
+    set((state) => ({ focused: focus_reducer(state.focused, target, mode) })),
 
   focus_extendRange: (target: FocusTarget) =>
-    set((state: FocusState) => ({ focused: focus_reducer(state.focused, target, "extend") })),
+    set((state) => ({ focused: focus_reducer(state.focused, target, "extend") })),
 
   focus_setPicking: (picking: boolean) => set({ picking }),
 

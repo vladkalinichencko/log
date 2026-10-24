@@ -108,10 +108,10 @@ For every dependency: one line on what it does and what specifically breaks or m
 | numpy | `.npy` read/write with a documented header and memory-mapped partial reads. Hand-rolling a binary array format is the thing ADR-004 rejects. |
 | fastapi | Typed request/response models (matches the DTO-as-message constraint) + first-class WebSocket in one framework. Without it we hand-wire ASGI routing, validation, and WS handshakes. |
 | uvicorn | ASGI server to run FastAPI (`--workers 1`). Without it, no server process. |
+| websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
-| proplot | A thin styling layer over matplotlib that supplies journal/`"nature"` presets for `log.export.figure(renderer=...)`. Without it we hand-write the journal style dictionaries. |
 | PyYAML `[v2]` | Parses `.yaml`/`.yml` config files at the `log.run` boundary. JSON remains stdlib; without PyYAML we would own a YAML parser. |
 
 Standard library only for: threading, queue, **sqlite3** (derived index — ADR-003), pathlib, os, **json** (no `orjson`; stdlib `json` is fast enough for single-user read responses), hashlib, subprocess (git hash), tempfile, dataclasses, math (LR schedules), fnmatch (glob paths), weakref (ADR-008).
@@ -188,12 +188,9 @@ log/
         __init__.py
         queue_writer.py           # background WriterThread + WriteJob dataclasses
         layout.py                 # `.`-path -> on-disk path resolution (run dir layout)
-        atomic.py                 # atomic_write_bytes, append_jsonl
-        tensor_io.py              # write_npy, read_npy
+        atomic.py                 # atomic_write_bytes, update_json, append_jsonl, read_jsonl
+        tensor_io.py              # write_npy
         identity.py               # git_hash, requirements_hash, rng_state capture
-      ports/
-        __init__.py
-        storage.py                # StoragePort protocol (training-side write)
       errors.py                   # all log-side exception classes (Section 12)
     backend/                      # read-only observability server
       __init__.py
@@ -209,7 +206,8 @@ log/
         local_file_storage.py     # LocalFileStorage implements StoragePort
         sqlite_index.py           # SqliteIndex implements IndexPort
         websocket_transport.py    # WebSocketTransport implements TransportPort
-        file_watcher.py           # FileWatcher (watchfiles) -> events
+        file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
+        json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
       domain/
         __init__.py
         models.py                 # Table, Cell, CellType, TableKind, Representation + on-disk record DTOs
@@ -217,6 +215,7 @@ log/
         table_engine.py           # `.`-path merge language evaluator (Section 9.13)
       api/
         __init__.py
+        errors.py                 # ApiError(status, code, message) + the one handler -> { error: { code, message } }
         runs.py                   # /api/runs endpoints
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
@@ -241,7 +240,8 @@ log/
     vite.config.ts                # vite + vitest config (test.environment = jsdom)
     tsconfig.json
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
-    index.html
+    index.html                    # the app entry
+    design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
     src/
       main.tsx                    # React root, router
       store/
@@ -252,13 +252,16 @@ log/
           searchSlice.ts          # search_state, search_reducer (query)
           focusSlice.ts           # focus_state, focus_reducer (focused path)
           connectionSlice.ts      # connection_state, connection_reducer (websocket FSM)
+          noticesSlice.ts         # notices_state: failures waiting for the user (message, retry)
         selectors/
-          tableSelectors.ts       # table_selector, isFocused, ...
-          runSelectors.ts         # run_selector
+          tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
+          tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
+          pathSelectors.ts        # path_segments, is_run_ref, tensor_source, with_param
           searchSelectors.ts      # search_selector (matching `.`-paths)
+          runSelectors.ts         # run_stats_selector (status strip from meta + metrics), end_value (how a current value is printed)
       api/
-        client.ts                 # typed fetch wrappers
-        websocket.ts              # ws middleware: events -> store actions
+        client.ts                 # one request() + one typed line per route; relative URLs (Vite proxies /api and /ws in dev)
+        websocket.ts              # connectWebSocket(onMessage) on the page's own host
       fsm/
         baseFsm.ts                # makeFsm(states, transitions): the one FSM factory
         buttonFsm.ts              # button_fsm derived from baseFsm
@@ -267,8 +270,7 @@ log/
         menuFsm.ts                # menu_fsm derived from baseFsm
         playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
-        searchFsm.ts              # search_fsm derived from baseFsm
-        resizeFsm.ts              # resize_fsm (idle/dragging) derived from baseFsm
+        dragFsm.ts                # drag_fsm (idle/dragging): every pointer drag — tile resize, column/row resize, range selection, fill
       components/
         App.tsx                   # router outlet + nav bar
         NavBar.tsx                # back/forward + breadcrumb + search box
@@ -278,17 +280,23 @@ log/
         TableView.tsx             # semantic <table> representation
         InlineView.tsx            # parent table whose table_ref cells render read-only child tiles
         Cell.tsx                  # one cell (uses cellEdit_fsm)
-        HeaderCell.tsx            # column/row name cell (double-click edit)
+        EditableText.tsx          # the one double-click/Enter/Esc text editor (cellEdit_fsm) for cells and header names
         Menu.tsx                  # one menu component: search dropdown + right-click context menu
+        MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
+        Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
+        LoadError.tsx             # in-place failure of a view: message + Retry
+        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics + status strip
+        Sparkline.tsx             # hand-rolled SVG polyline trend inside a stat
+        TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
         Toolbar.tsx               # thin action bar
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
-        LineChartView.tsx         # Plotly line chart
-        HeatmapView.tsx           # Plotly heatmap
-        HistogramView.tsx         # Plotly histogram (value distribution)
-        Button.tsx                # base button component (uses button_fsm)
+        ChartView.tsx             # every chart representation: chartSpec(table, representation) -> lazy Plotly
+        Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
+        useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
+        DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
@@ -409,7 +417,8 @@ Field rules:
 |---|---|
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns = run meta (name, status, samples_seen) read from each `meta.json` |
-| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, each `epoch_<N>`, `checkpoints` |
+| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
+| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart and status strip read this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
 | `<project>.<run>.epoch_<N>.<scalar>` | `kind=column`; `column_names=["step","samples_seen","wall_time","rank",<scalar>]`; one row per `metrics.jsonl` row containing that scalar |
 | `<project>.<run>.epoch_<N>.<tensor-path>` (a `tensor_ref` cell) | drilling reads the `.npy` and returns `kind=grid` with the tensor's 2-D values (n-D flattened to 2-D in v1; n-D native is `[v3]`) |
@@ -580,6 +589,9 @@ classDiagram
     class ScalarJob
     class TensorJob
     class CheckpointJob
+    class MetaJob {
+        +dict fields
+    }
     class Logger {
         +RunContext ctx
         +log(path, value, step)
@@ -595,6 +607,7 @@ classDiagram
     WriteJob <|-- ScalarJob
     WriteJob <|-- TensorJob
     WriteJob <|-- CheckpointJob
+    WriteJob <|-- MetaJob
     WriterThread "1" --> "*" WriteJob : consumes
     RunContext "1" --> "1" WriterThread
     Logger --> RunContext
@@ -603,7 +616,7 @@ classDiagram
 Classes (justified by held state):
 - `RunContext` — holds the live run's counters + writer + config; one process-global instance set by `log.run`. Read by `log.log`, `log.tick`, `log.track`, `log.checkpoint`, `log.resume_state`.
 - `WriterThread` — owns the background queue + thread; the only writer of files on the training side.
-- `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` — dataclasses carrying one unit of work to the writer.
+- `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` / `MetaJob` — dataclasses carrying one unit of work to the writer. `MetaJob` exists so that `meta.json` has one writer while the run is live: `resume_state` enqueues its `resume_diff` instead of writing the file beside the thread that records `writer_errors`.
 - `Logger` — thin object bound to `RunContext`; exists so `log.logger()` can return a handle, but `log.log` is the module-level shortcut.
 - `WatchHandle` — holds the `weakref` + registered hook handles so `.remove()` can deregister.
 - `TrackedLoader` — wraps a `DataLoader`, holds the epoch counter.
@@ -626,8 +639,9 @@ Per-function I/O and purpose (training side):
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
-| `append_jsonl(path, row)` | path, dict | `None` | Append one JSON line + flush. |
-| `write_npy(path, array)` / `read_npy(path)` | path, ndarray | `None` / ndarray | Tensor file I/O. |
+| `update_json(path, fields)` | path, dict | `None` | Read-modify-write one JSON document atomically; `meta.json` is updated only by the writer thread while a run is live (`MetaJob`), and by `log.run` after the writer has joined. |
+| `append_jsonl(path, row)` / `read_jsonl(path)` | path, dict / path | `None` / `list[dict]` | Append one JSON line + flush; read every line of a JSONL log (missing file → `[]`). |
+| `write_npy(path, array)` | path, ndarray | `None` | Tensor file write. |
 | `resolve_run_dir(...)` (layout) | run params | `Path` | Compute the run directory path. |
 | `git_hash()` / `requirements_hash()` / `capture_rng()` | — | str / str / dict | Identity + RNG snapshots. |
 
@@ -971,13 +985,13 @@ log.tick(samples: int | None = None, **scalars: float) -> None
 log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 ```
 - Renders the table identified by `view_id` (via the running backend's table engine if reachable on `localhost`, else from files directly) to an image at `path`.
-- `renderer`: `"matplotlib"` (default), `"proplot"`, `"nature"` (a fixed Nature-journal preset over proplot). matplotlib and proplot are core dependencies (Section 4.1) — export works out of the box, no extra install. `RendererUnavailableError` is retained only for a renderer name that maps to a library the environment somehow lacks.
+- `renderer`: `"matplotlib"` (default) or `"nature"` — a fixed Nature-journal preset expressed as matplotlib `rcParams` (single column 89 mm, 7 pt sans-serif, 0.5 pt axes, 300 dpi, no top/right spines). `proplot` was dropped (2026-10): its last release requires matplotlib < 3.5, which has no build for Python ≥ 3.11, so listing it made `pip install -e .` fail on a clean machine. Any other name raises `RendererUnavailableError` naming the supported renderers.
 - Returns the absolute path written.
 - Errors: `ViewNotFoundError`, `RendererUnavailableError`.
 
 ### 9.12 Backend HTTP API
 
-All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status. Server settings a handler needs but the client never sends — `runs_root` above all — are passed in via FastAPI's `Depends(get_runs_root)`, not as query parameters (ADR-017); the only query parameters are the ones listed in the Request column.
+All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status. This holds for every error source, not only the codes in the table: request validation → 422 `INVALID_REQUEST`, routing (unknown `/api/...` path, wrong method) → `HTTP_<status>`, an unexpected crash → 500 `INTERNAL_ERROR`. Server settings a handler needs but the client never sends — `runs_root` above all — are passed in via FastAPI's `Depends(get_runs_root)`, not as query parameters (ADR-017); the only query parameters are the ones listed in the Request column.
 
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
@@ -1004,7 +1018,8 @@ WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
 - On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta" }`.
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
-- Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent.
+- Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
+- A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.
 
 ### 9.13 Merge / table language (v1)
 
@@ -1300,7 +1315,7 @@ A `Table` rendered as a grid carries:
 - **Value cells** — a grid of divs; each shows its value. Numbers are rounded to fit; on hover the full value appears as an **overlay above the cell** (never by widening the cell). Double-click → the cell becomes a text input; Enter commits + deselects; Esc cancels + deselects. (`Cell` + `cellEdit_fsm`.) `[v0]` edit; `[v1]` hover-overlay + rounding.
 - **Scalar table** — just the table name, no grid, until the user presses **＋**. No "1×1 frame". `[v1]`
 - **No context menus.** One minimal per-tile toolbar instead: icons (add row, add column, trash, rename, ƒ, formula, export) are gray/inactive until something is selected. Clicking the table's true outer edge (the outermost divider, not a header cell or a manufactured handle column) selects the whole row or column, drawn as one outline centered on the border (expanding onto neighboring cells, not inset). Deleting shows a second, one-item menu ("confirm") in place of the first — not a modal — before applying; Ctrl+Z still restores. Renaming a single cell/header stays inline (double-click); renaming across a multi-selection (Ctrl/Shift/drag-select, pending range selection — Section 11.4 #7) opens a modal with prefix/suffix/find-replace fields. (`Menu` + `menu_fsm` render the confirm step; the same `Menu` renders the search dropdown.) `[v1]` *(supersedes the earlier right-click context menu, which itself had superseded the ＋ edge controls and corner dot-menu — owner decision 2026-07-19: context menus hide the available actions until you right-click the right thing; a toolbar keeps them visible and discoverable.)*
-- **Table-reference cell** — a collection screen renders it as a normal link inside the parent table. A detail screen promotes the same reference to an independent preview tile with a linked title, switcher, Expand, reorder and resize; a complete interactive table is never nested inside another table. `[v1]`
+- **Table-reference cell** — a collection screen renders it as a normal link inside the parent table. A detail screen promotes the same reference to an independent preview tile with a linked title, switcher, Expand, reorder (drag, or Tab to the tile and Alt+arrow) and resize; a complete interactive table is never nested inside another table. `[v1]`
 - **Tile mode toggle + representation switcher** — on the tile: a table/visualization mode toggle; table mode uses `grid`, while visualization mode opens the chart-type menu (line / heatmap / histogram / …). Same data, render component chosen by `mode` + `representation`. (`RepresentationSwitcher` + `button_fsm`; see Section 11.2a.) `[v0]` toggle present; `[v1]` chart picker.
 - **Expand button** — on every tile (table or chart); opens the tile fullscreen as a route-backed modal (Section 11.2a). `[v1]`
 - **Toolbar** — the formula input in the tile bar: an expression (`derive(...)`, `filter(...)`, a full `table(...)` pipeline) evaluated by `/api/tables/eval`; the result replaces the tile's table as one undoable edit; a bad expression shows an inline error. Merge/aggregate happen through this one input (Section 9.13). Next to the input, an **ƒ catalog button** (the same `Menu`) lists every registry function from `GET /api/tables/functions`; picking one fills the input with `derive(<fn>_<col> = <fn>(<col>[, 20]))` over the table's last column and applies it — a statistic is one click, and the generated expression stays visible and editable. `[v1]`
@@ -1328,8 +1343,10 @@ For a `Table` these are essentially all operations that exist:
 3. Add row / add column (right-click context menu). `[v0]`
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]` Width and height are table-scoped URL state; explicit minima are 80px for a column and 24px for a row so their controls cannot collapse.
-6. Zoom — Excel-like. `[v1]`
-7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end.
+6. Zoom — Excel-like. `[v1]` `−` / `+` in the table's filter bar step the whole table (text, padding, widths) by 10% between 50% and 200% with CSS `zoom`; the level is table-scoped URL state (`zoom.<path>`, absent = 100%). Stored widths, heights and the row window stay in unzoomed CSS pixels: every measured size is divided by the element's `currentCSSZoom`.
+6a. Fill — drag the handle at the bottom-right of the active cell range down or right; an even numeric step continues as a series, anything else repeats; one undoable edit. `[v1]`
+6b. Find / replace — the editor's Replace panel takes a find text and a replacement, shows how many cells contain the text, and replaces every occurrence in every non-reference cell as one undoable edit; matching is plain, case-sensitive substring. `[v1]`
+7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end. Arrow keys move the active cell one step in visible (sorted, filtered, reordered) order, stopping at the edge; Shift+arrow moves the active end of the range instead; the active end is scrolled into view.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`
@@ -1337,7 +1354,7 @@ For a `Table` these are essentially all operations that exist:
 12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
 14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
-15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
+15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`, `zoom.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 
@@ -1401,7 +1418,7 @@ They fall into **two groups**, and you only ever need to remember which group yo
 
 All Group A and Group B errors are synchronous (raised from the call itself) and surface to the user as a normal Python traceback at the call site.
 
-Backend error model: every route returns `{ "error": { "code", "message" } }` with the HTTP status in Section 9.12. The backend never crashes the process on a single bad request; it returns the structured error. The frontend renders backend errors via the `load_fsm` error state (the affected view shows an error + retry), and renders WebSocket disconnect via `connection_fsm` (`connected → reconnecting → connected`, max backoff 30s).
+Backend error model: every route returns `{ "error": { "code", "message" } }` with the HTTP status in Section 9.12. The backend never crashes the process on a single bad request; it returns the structured error. The frontend shows every failure with its `message` in one of two places, neither of which moves the layout: a view whose content failed to load (`Tile`, `MainView`, run comparison) replaces its content with `LoadError` (message + Retry) through its `load_fsm` error state; an action or background job (button actions, saved-view/workspace autosave, boot catalogs, tensor frames, PNG export) becomes an entry in the fixed `Notices` stack (message + Retry that repeats the same job + dismiss) via `attempt(label, work)` or the button's own failure path. It renders WebSocket disconnect via `connection_fsm` (`connected → reconnecting → connected`, max backoff 30s).
 
 Frontend async-state rule (intent vs reality): any UI action that changes server-side state (run delete, view save, workspace save) holds `userIntent`, `serverState`, `confirmedState`; the UI renders from `serverState`/`confirmedState`, shows a pending indicator until confirmed, and reverts on failure. This is the same `button_fsm` `pending → done/error` path.
 

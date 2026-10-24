@@ -74,6 +74,8 @@ describe("run overview", () => {
       slowest: { steps: "1", seconds: 3 },
     });
     expect(execution_strip_selector(ranks, 1)!.lanes[1].cells).toEqual([{ steps: "1–2", seconds: 3 }]);
+    const two = table("demo.two.metrics", TableKind.Grid, ["step", "wall_time"], [["0", "0"], ["1", "1"], ["2", "4"]].map((row) => row.map(number)));
+    expect(execution_strip_selector(two, 120)!.median).toBe(2);
   });
 
   it("the run page shows the execution strip and keeps bookkeeping columns out of the stats", async () => {

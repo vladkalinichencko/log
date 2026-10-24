@@ -238,3 +238,21 @@ def test_export_figure_draws_what_the_ui_shows(tmp_path, monkeypatch):
 
     with pytest.raises(log.errors.ViewNotFoundError):
         log.export.figure("p.gone.metrics", str(tmp_path / "gone.png"))
+
+
+def test_export_figure_skips_boolean_scalars(tmp_path, monkeypatch):
+    import matplotlib.axes
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(3):
+            log.log("loss", 1.0 / (step + 1), step=step)
+            log.log("converged", step == 2, step=step)
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    drawn = []
+    original = matplotlib.axes.Axes.plot
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", lambda self, xs, ys, label=None, **kw: drawn.append(label) or original(self, xs, ys, label=label, **kw))
+    log.export.figure("p.r.metrics", str(tmp_path / "metrics.png"))
+    assert drawn == ["loss"]

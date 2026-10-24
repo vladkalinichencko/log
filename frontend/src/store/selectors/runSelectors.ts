@@ -71,6 +71,8 @@ export function execution_strip_selector(metrics: Table, columns: number): Execu
     };
   });
   const sorted = all.map((cell) => cell.seconds).sort((a, b) => a - b);
+  const middle = sorted.length / 2;
+  const median = sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
   const slowest = all.reduce((worst, cell) => (cell.seconds > worst.seconds ? cell : worst));
-  return { lanes, median: sorted[Math.floor(sorted.length / 2)], slowest };
+  return { lanes, median, slowest };
 }

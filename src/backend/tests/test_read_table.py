@@ -88,3 +88,15 @@ def test_list_paths_walks_tree(tmp_path):
     _make_run(tmp_path)
     paths = list_paths(_storage(tmp_path))
     assert {"p", "p.r", "p.r.epoch_0000", "p.r.epoch_0000.loss", "p.r.epoch_0000.w"} <= set(paths)
+
+
+def test_boolean_scalars_are_bool_cells_not_numbers(tmp_path):
+    _make_run(tmp_path)
+    (tmp_path / "p" / "r" / "epoch_0000" / "metrics.jsonl").write_text(json.dumps(
+        {"step": 0, "samples_seen": 0, "wall_time": 1.0, "rank": 0, "scalars": {"done": True}}
+    ))
+    leaf = read_table("p.r.epoch_0000.done", _storage(tmp_path))
+    metrics = read_table("p.r.metrics", _storage(tmp_path))
+    assert (leaf.cells[0][-1].type.value, leaf.cells[0][-1].value) == ("bool", "True")
+    assert (metrics.cells[0][-1].type.value, metrics.cells[0][-1].value) == ("bool", "True")
+    assert leaf.cells[0][0].type.value == "number"

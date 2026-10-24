@@ -19,7 +19,7 @@ export function Settings() {
   const setAccent = useStore((state) => state.settings_setAccent);
 
   return (
-    <div className="content">
+    <div>
       <div className="group">
         <span>theme</span>
         <div className="toggle">
@@ -30,13 +30,7 @@ export function Settings() {
       <div className="group">
         <span>accent</span>
         {SERIES.map((token) => (
-          <button
-            key={token}
-            className={token === accent ? "dot active" : "dot"}
-            style={{ background: `var(${token})` }}
-            title={token}
-            onClick={() => setAccent(token)}
-          />
+          <Button key={token} swatch={`var(${token})`} ghost active={token === accent} title={token} onClick={() => setAccent(token)} />
         ))}
       </div>
     </div>

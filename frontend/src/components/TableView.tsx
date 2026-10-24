@@ -360,7 +360,6 @@ export function TableView({ table, editable }: TableViewProps) {
           value={query}
           onChange={(event) => setParam(filterKey, event.target.value)}
         />
-        <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
         <MenuButton label={`Columns ${visibleColumns.length}/${columns}`} title="Choose, reorder, and freeze columns">
           {() => (
             <Menu
@@ -401,9 +400,11 @@ export function TableView({ table, editable }: TableViewProps) {
             />
           )}
         </MenuButton>
-        <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
-        <span className="subtitle">{zoom}%</span>
-        <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
+        <div className="toggle">
+          <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
+          <Button label={`${zoom}%`} title="Reset zoom to 100%" onClick={() => setZoom(100)} />
+          <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
+        </div>
         {editable && (
           <MenuButton label="Replace" title="Find text in cells and replace every match">
             {(close) => {
@@ -439,7 +440,9 @@ export function TableView({ table, editable }: TableViewProps) {
         </div>
       )}
       {view.error && <div className="table-filter-error">{view.error}</div>}
-      {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
+      {(editable || query) && (
+        <div className="table-meta">{columns} cols × {query && `${view.rows.length} of `}{table.cells.length} rows</div>
+      )}
       <div className="table-frame" onClick={selectFromEdge}>
         <div ref={scrollRef}>
           <table className="table-view" ref={tableRef} style={{ zoom: zoom / 100 }}>

@@ -260,9 +260,10 @@ describe("TableView", () => {
       source_path: "demo",
     };
     renderR(<TableView table={grid} />);
+    expect(screen.getByRole("columnheader", { name: /^status/ })).toBeTruthy();
     fireEvent.click(screen.getByTitle("Choose, reorder, and freeze columns"));
     fireEvent.click(screen.getByText("✓ status"));
-    expect(screen.queryByRole("columnheader", { name: "status ↕ filter" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^status/ })).toBeNull();
     expect(screen.getByTestId("loc").textContent).toContain("columns.demo=0");
   });
 
@@ -376,5 +377,16 @@ describe("TableView", () => {
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 0, c: 0, endR: 0, endC: 0 }]);
+  });
+
+  it("counts rows under the filter only while filtering, and always in the editor", () => {
+    const grid: Table = { ...table, cells: [...table.cells, table.cells[0].map((cell) => ({ ...cell, value: "7" }))] };
+    const { unmount } = renderR(<TableView table={grid} />);
+    expect(document.querySelector(".table-meta")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("Filter rows…"), { target: { value: "7" } });
+    expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 1 of 2 rows");
+    unmount();
+    renderR(<TableView table={grid} editable />);
+    expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 2 rows");
   });
 });

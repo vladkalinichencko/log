@@ -19,7 +19,7 @@ const TOKENS = {
   color: ["--gray-0", "--gray-50", "--gray-100", "--gray-200", "--gray-400", "--gray-600", "--gray-900", "--accent", "--positive", "--warning", "--critical", ...SERIES],
   space: ["--space-0-5", "--space", "--space-2", "--space-3", "--space-4"],
   text: ["--text-page", "--text-section", "--text-tile", "--text-body", "--text-meta"],
-  size: ["--radius", "--radius-control", "--icon", "--handle", "--hit", "--menu-width", "--menu-column", "--menu-height"],
+  size: ["--radius", "--radius-float", "--control", "--icon", "--handle", "--hit", "--menu-width", "--menu-column", "--menu-height"],
 };
 
 const BUTTON_STATES = ["idle", "hover", "pressed", "pending", "error"];

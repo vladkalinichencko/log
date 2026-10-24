@@ -152,6 +152,7 @@ Neither owns the data model or imposes styles; both are off by default.
 | vitest | Frontend unit tests (reducers, selectors, FSMs). |
 | @testing-library/react | Component render tests. |
 | jsdom | The in-memory DOM that vitest runs component tests against (`test.environment = "jsdom"` in `vite.config.ts`). Without it `render(<Component/>)` throws `document is not defined`. |
+| playwright | Layout check in a real browser (`npm run check:layout`): jsdom computes no layout, so spacing, control heights, insets and overflow can only be measured in Chromium. Dev dependency only; pinned to the version whose Chromium is installed. |
 
 ---
 
@@ -242,6 +243,8 @@ log/
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
     index.html                    # the app entry
     design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
+    scripts/
+      check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens
     src/
       main.tsx                    # React root, router
       store/
@@ -300,7 +303,7 @@ log/
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
-        setup.ts                  # vitest afterEach(cleanup)
+        setup.ts                  # vitest afterEach(cleanup); a no-op scrollIntoView, which jsdom lacks
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx

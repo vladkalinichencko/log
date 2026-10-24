@@ -64,7 +64,10 @@ export function Player({ path, leaf, tensor: { steps, frames } }: PlayerProps) {
   const loadTable = useStore((state) => state.tables_loadTable);
   const [playState, setPlayState] = useState(playerFsm.initial);
   const [trailState, setTrailState] = useState(trailFsm.initial);
-  const [index, setIndex] = useState(steps.length - 1);
+  const [chosenIndex, setChosenIndex] = useState<number | null>(null);
+  const last = steps.length - 1;
+  const index = chosenIndex === null ? last : Math.min(chosenIndex, last);
+  const choose = (next: number) => setChosenIndex(next >= last ? null : next);
 
   useEffect(() => {
     const name = `${leaf} @ step ${steps[index]}`;
@@ -78,16 +81,12 @@ export function Player({ path, leaf, tensor: { steps, frames } }: PlayerProps) {
 
   useEffect(() => {
     if (playState !== "playing") return;
-    const timer = window.setInterval(
-      () => setIndex((i) => (i + 1 < steps.length ? i + 1 : i)),
-      500
-    );
-    return () => window.clearInterval(timer);
-  }, [playState]);
+    const timer = window.setTimeout(() => choose(index + 1), 500);
+    return () => window.clearTimeout(timer);
+  }, [playState, index, last]);
 
   useEffect(() => {
-    if (playState === "playing" && index === steps.length - 1)
-      setPlayState((s) => playerFsm.next(s, "end"));
+    if (playState === "playing" && index === last) setPlayState((s) => playerFsm.next(s, "end"));
   }, [index, playState]);
 
   const playing = playState === "playing";
@@ -99,7 +98,7 @@ export function Player({ path, leaf, tensor: { steps, frames } }: PlayerProps) {
         ghost
         title={playing ? "pause" : "play"}
         onClick={() => {
-          if (!playing && index === steps.length - 1) setIndex(0);
+          if (!playing && index === last) choose(0);
           setPlayState((s) => playerFsm.next(s, playing ? "pause" : "play"));
         }}
       />
@@ -116,9 +115,9 @@ export function Player({ path, leaf, tensor: { steps, frames } }: PlayerProps) {
         className="grow"
         type="range"
         min={0}
-        max={steps.length - 1}
+        max={last}
         value={index}
-        onChange={(e) => setIndex(Number(e.target.value))}
+        onChange={(e) => choose(Number(e.target.value))}
       />
       <span>step {steps[index]}</span>
     </div>

@@ -9,10 +9,11 @@ export function useTensor(path: string, table: Table | undefined) {
   const [loadState, setLoadState] = useState(loadFsm.initial);
   const tensor = useStore((state) => state.tensors.get(path));
   const loadTensor = useStore((state) => state.tables_loadTensor);
+  const liveTick = useStore((state) => state.liveTick);
   const source = table?.kind === TableKind.Grid ? tensor_source(path) : null;
 
   useEffect(() => {
-    if (!source || tensor) return;
+    if (!source) return;
     let stale = false;
     setLoadState((state) => loadFsm.next(state, "fetch"));
     fetchTensorSteps(source.run, source.leaf)
@@ -31,7 +32,7 @@ export function useTensor(path: string, table: Table | undefined) {
     return () => {
       stale = true;
     };
-  }, [path, source?.run, source?.leaf, tensor]);
+  }, [path, source?.run, source?.leaf, liveTick]);
 
   return { tensor, leaf: source?.leaf ?? "", loadState };
 }

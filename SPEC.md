@@ -985,7 +985,7 @@ log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 
 ### 9.12 Backend HTTP API
 
-All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status. Server settings a handler needs but the client never sends — `runs_root` above all — are passed in via FastAPI's `Depends(get_runs_root)`, not as query parameters (ADR-017); the only query parameters are the ones listed in the Request column.
+All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": str, "message": str } }` with the noted HTTP status. This holds for every error source, not only the codes in the table: request validation → 422 `INVALID_REQUEST`, routing (unknown `/api/...` path, wrong method) → `HTTP_<status>`, an unexpected crash → 500 `INTERNAL_ERROR`. Server settings a handler needs but the client never sends — `runs_root` above all — are passed in via FastAPI's `Depends(get_runs_root)`, not as query parameters (ADR-017); the only query parameters are the ones listed in the Request column.
 
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|

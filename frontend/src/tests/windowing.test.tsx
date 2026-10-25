@@ -96,7 +96,7 @@ describe("row windowing", () => {
     useStore.getState().focus_clear();
     const { container } = render(
       <MemoryRouter initialEntries={["/?sort.sorted=0:desc"]}>
-        <TableView table={numbers("sorted", 5)} editable />
+        <TableView table={numbers("sorted", 5)} use="edit" />
       </MemoryRouter>
     );
     fireEvent.click(container.querySelector(".table-frame")!, { clientX: 2, clientY: 50 });

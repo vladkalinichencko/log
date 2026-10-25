@@ -12,6 +12,15 @@ The system has three layers:
 2. **Evidence** — tables, charts, status strips, error lists, and execution timelines share alignments and color roles. Values stay visible without hover.
 3. **Action** — compact square icon actions, segmented representation switches, menus, and a temporary comparison tray sit close to the object they change.
 
+## Product paradigms
+
+Short statements of how the product thinks. Every screen decision should be traceable to one of them.
+
+- **Know where you are on the big map.** Zooming, scrolling or filtering never hides the context of the whole: a zoomed chart keeps the latest value and the full-run overview visible, a filtered table says how many rows it hides, a deep table keeps its breadcrumb.
+- **Progressive disclosure pulls attributes up.** Every level is a view over the files below it. A higher level shows a chosen few attributes of the level below, in the form that helps a decision at that level — the run list shows each run's status as a dot and its start and duration, which are cells of that run's `meta` and `metrics`, not a copy.
+- **One entity in code, many views in the UI.** The code handles one type (`Table`); the UI picks the view per place: an editable grid in the editor, a read-only preview in a tile, a chart, a status strip, a list. Not every view is a grid, and not every view is editable.
+- **Content changes never move the layout.** See CLAUDE.md rule 8b: reserve space or overlay, wrap or ellipsize, never clip grown content.
+
 ## Exact visual rules
 
 - Spacing uses an `8px` base and only `4, 8, 16, 24, 32, 48, 64px`. Dense table cells pad `4px 8px`; comfortable cells use `16px` without changing type size. `npm run check:layout` fails on any other padding, margin or gap, on a font size outside the five text tokens, and on a radius other than `2px` / `6px`.

@@ -1,6 +1,7 @@
 import { useTable } from "./useTable";
 import { render } from "./render";
 import { LoadError } from "./LoadError";
+import { Placeholder } from "./Placeholder";
 import { RunOverview } from "./RunOverview";
 import { CellType, Representation } from "../types/domain";
 import { path_segments } from "../store/selectors/pathSelectors";
@@ -13,7 +14,7 @@ export function MainView({ path }: MainViewProps) {
   const { table, loadState, error, retry } = useTable(path);
 
   if (loadState === "error") return <LoadError message={error} retry={retry} />;
-  if (!table) return <div>Loading…</div>;
+  if (!table) return <Placeholder label="loading" />;
 
   const depth = path_segments(path).length;
   const hasChildren = table.cells.some((row) =>
@@ -23,6 +24,7 @@ export function MainView({ path }: MainViewProps) {
   const sectionTitle = depth === 0 ? "All projects" : depth === 1 ? "Runs" : inline ? "Tables" : "Data";
 
   const runOverview = depth === 2 && table.cells.some((row) => row[0]?.ref === `${path}.metrics`);
+  const shown = runOverview ? { ...table, cells: table.cells.filter((row) => row[0]?.ref !== `${path}.metrics`) } : table;
 
   return (
     <>
@@ -30,9 +32,9 @@ export function MainView({ path }: MainViewProps) {
       <section className="data-section">
         <div className="section-heading">
           <h2>{sectionTitle}</h2>
-          <span className="subtitle">{table.cells.length}</span>
+          <span className="subtitle">{shown.cells.length}</span>
         </div>
-        {render(table, inline ? Representation.Inline : Representation.Grid)}
+        {render(shown, inline ? Representation.Inline : Representation.Grid)}
       </section>
     </>
   );

@@ -100,3 +100,19 @@ def test_boolean_scalars_are_bool_cells_not_numbers(tmp_path):
     assert (leaf.cells[0][-1].type.value, leaf.cells[0][-1].value) == ("bool", "True")
     assert (metrics.cells[0][-1].type.value, metrics.cells[0][-1].value) == ("bool", "True")
     assert leaf.cells[0][0].type.value == "number"
+
+
+def test_project_table_pulls_status_start_and_duration_up_from_each_run(tmp_path):
+    for name, meta in {
+        "done": {"status": "finished", "samples_seen": 8, "start_wall_time": 100.0, "end_wall_time": 160.5},
+        "live": {"status": "running", "samples_seen": 2, "start_wall_time": 1.0},
+        "old": {"status": "finished", "samples_seen": 0, "start_wall_time": 5.0},
+    }.items():
+        (tmp_path / "p" / name).mkdir(parents=True)
+        (tmp_path / "p" / name / "meta.json").write_text(json.dumps(meta))
+    project = read_table("p", _storage(tmp_path))
+    assert project.column_names == ["run", "status", "started", "duration", "samples_seen"]
+    rows = {row[0].value: [c.value for c in row[1:]] for row in project.cells}
+    assert rows["done"] == ["finished", "100.0", "60.5", "8"]
+    assert float(rows["live"][2]) > 1_000_000
+    assert rows["old"] == ["finished", "5.0", "", "0"]

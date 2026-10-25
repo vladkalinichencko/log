@@ -12,6 +12,7 @@ import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
 import { FocusMode } from "../store/slices/focusSlice";
 import { cell_matches, TextQuery } from "../store/slices/tablesSlice";
+import { COLUMN_TEXT } from "../store/selectors/runSelectors";
 import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
   selection_anchor,
@@ -53,13 +54,18 @@ const ZOOM_MAX = 200;
 const selectionMode = (event: React.MouseEvent): FocusMode =>
   event.metaKey || event.ctrlKey ? "add" : event.shiftKey ? "extend" : "replace";
 
+export type TableUse = "browse" | "preview" | "edit";
+
 interface TableViewProps {
   table: Table;
-  editable?: boolean;
+  use?: TableUse;
 }
 
-export function TableView({ table, editable }: TableViewProps) {
+export function TableView({ table, use = "browse" }: TableViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const editable = use === "edit";
+  const preview = use === "preview";
+  const viewParam = (key: string) => (preview ? null : searchParams.get(key));
   const tableId = table.source_path || table.name;
   const addRow = useStore((state) => state.tables_addRow);
   const addColumn = useStore((state) => state.tables_addColumn);
@@ -88,6 +94,7 @@ export function TableView({ table, editable }: TableViewProps) {
   const [selectionState, setSelectionState] = useState(dragFsm.initial);
   const [fillState, setFillState] = useState(dragFsm.initial);
   const [fillEnd, setFillEnd] = useState<{ r: number; c: number } | null>(null);
+  const [filterFocused, setFilterFocused] = useState(false);
   const [textQuery, setTextQuery] = useState<TextQuery>({ find: "", replacement: "", matchCase: false });
   const [replaceOpen, setReplaceOpen] = useState(false);
   const trackReplacePanel = useCallback((input: HTMLInputElement | null) => setReplaceOpen(input !== null), []);
@@ -99,18 +106,19 @@ export function TableView({ table, editable }: TableViewProps) {
   const columnsKey = `columns.${tableId}`;
   const freezeKey = `freeze.${tableId}`;
   const zoomKey = `zoom.${tableId}`;
-  const query = searchParams.get(filterKey) ?? "";
-  const sorts = parse_sorts(searchParams.get(sortKey));
-  const widths = parse_widths(searchParams.get(widthKey));
-  const heights = parse_heights(searchParams.get(heightKey));
-  const visibleColumns = parse_columns(searchParams.get(columnsKey), columns);
-  const requestedFrozen = Number(searchParams.get(freezeKey) ?? 0);
+  const query = viewParam(filterKey) ?? "";
+  const sorts = parse_sorts(viewParam(sortKey));
+  const widths = parse_widths(viewParam(widthKey));
+  const heights = parse_heights(viewParam(heightKey));
+  const visibleColumns = parse_columns(viewParam(columnsKey), columns);
+  const requestedFrozen = Number(viewParam(freezeKey) ?? 0);
   const frozenCount = Number.isInteger(requestedFrozen)
     ? Math.max(0, Math.min(requestedFrozen, visibleColumns.length))
     : 0;
-  const requestedZoom = Number(searchParams.get(zoomKey) ?? 100);
+  const requestedZoom = Number(viewParam(zoomKey) ?? 100);
   const zoom = Number.isFinite(requestedZoom) ? Math.max(ZOOM_MIN, Math.min(requestedZoom, ZOOM_MAX)) : 100;
   const view = table_view_selector(table, query, sorts);
+  const filterCount = view.error ? "invalid filter" : `${view.rows.length} of ${table.cells.length} rows`;
   const runTable = path_segments(table.source_path ?? "").length === 1 &&
     table.cells.every((row) => row[0]?.type === CellType.TableRef && is_run_ref(row[0].ref));
   const span = visibleColumns.length + (runTable ? 1 : 0) + (table.row_names ? 1 : 0);
@@ -377,15 +385,35 @@ export function TableView({ table, editable }: TableViewProps) {
 
   return (
     <div className="table-wrap">
+      {!preview && (
       <div className="table-filter">
-        <input
-          ref={filterRef}
-          aria-label={`Filter rows in ${table.name}`}
-          placeholder="Filter rows…"
-          title="Plain text searches every cell. Use column=value, column~text, or numeric comparisons; separate conditions with commas."
-          value={query}
-          onChange={(event) => setParam(filterKey, event.target.value)}
-        />
+        <label className="filter-field">
+          <input
+            ref={filterRef}
+            aria-label={`Filter rows in ${table.name}`}
+            placeholder="Filter rows…"
+            title="Plain text searches every cell. Use column=value, column~text, or numeric comparisons; separate conditions with commas."
+            value={query}
+            style={query ? { paddingRight: `${filterCount.length + 2}ch` } : undefined}
+            onChange={(event) => setParam(filterKey, event.target.value)}
+            onFocus={() => setFilterFocused(true)}
+            onBlur={() => setFilterFocused(false)}
+          />
+          {query && <span className={view.error ? "filter-count invalid" : "filter-count subtitle"}>{filterCount}</span>}
+          {filterFocused && (view.error || view.clauses.length > 0) && (
+            <div className="filter-overlay" onMouseDown={(event) => event.preventDefault()}>
+              {view.error && <span className="invalid">{view.error}</span>}
+              {view.clauses.map((clause, index) => (
+                <Button
+                  key={`${clause}-${index}`}
+                  label={`${clause} ×`}
+                  title={`Remove filter: ${clause}`}
+                  onClick={() => removeFilter(index)}
+                />
+              ))}
+            </div>
+          )}
+        </label>
         <MenuButton label={`Columns ${visibleColumns.length}/${columns}`} title="Choose, reorder, and freeze columns">
           {() => (
             <Menu
@@ -470,22 +498,8 @@ export function TableView({ table, editable }: TableViewProps) {
           </MenuButton>
         )}
       </div>
-      {view.clauses.length > 0 && (
-        <div className="filter-chips">
-          {view.clauses.map((clause, index) => (
-            <Button
-              key={`${clause}-${index}`}
-              label={`${clause} ×`}
-              title={`Remove filter: ${clause}`}
-              onClick={() => removeFilter(index)}
-            />
-          ))}
-        </div>
       )}
-      {view.error && <div className="table-filter-error">{view.error}</div>}
-      {(editable || query) && (
-        <div className="table-meta">{columns} cols × {query && `${view.rows.length} of `}{table.cells.length} rows</div>
-      )}
+      {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
       <div className="table-frame" onClick={selectFromEdge}>
         <div ref={scrollRef}>
           <table className="table-view" ref={tableRef} style={{ zoom: zoom / 100 }}>
@@ -518,6 +532,7 @@ export function TableView({ table, editable }: TableViewProps) {
                           ) : (
                             <span className="cell">{name}</span>
                           )}
+                          {!preview && (
                           <div className="column-actions">
                             <Button
                               label={sort ? `${sort.direction === "asc" ? "↑" : "↓"}${sortIndex + 1}` : "↕"}
@@ -538,7 +553,8 @@ export function TableView({ table, editable }: TableViewProps) {
                               }}
                             />
                           </div>
-                          <TableResizeHandle axis="column" onResize={(width) => setWidth(c, width)} />
+                          )}
+                          {!preview && <TableResizeHandle axis="column" onResize={(width) => setWidth(c, width)} />}
                         </div>
                       </th>
                     );
@@ -547,6 +563,13 @@ export function TableView({ table, editable }: TableViewProps) {
               </thead>
             )}
             <tbody ref={bodyRef}>
+              {view.rows.length === 0 && (
+                <tr>
+                  <td colSpan={span}>
+                    <span className="cell subtitle">{query ? "no rows match the filter" : "no rows"}</span>
+                  </td>
+                </tr>
+              )}
               {rowWindow.before > 0 && (
                 <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.before }} /></tr>
               )}
@@ -587,6 +610,8 @@ export function TableView({ table, editable }: TableViewProps) {
                   )}
                   {visibleColumns.map((c, visibleIndex) => {
                     const cell: Cell = row.cells[c];
+                    const name = table.column_names?.[c] ?? "";
+                    const form = runTable && cell.value !== "" && COLUMN_TEXT[name] ? COLUMN_TEXT[name](Number(cell.value)) : null;
                     return (
                     <td
                       key={c}
@@ -599,19 +624,21 @@ export function TableView({ table, editable }: TableViewProps) {
                         cell.type === CellType.Number && "number"
                       )}
                       style={frozenStyle(c)}
+                      title={form?.title}
+                      data-status={runTable && name === "status" ? cell.value : undefined}
                     >
                       {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
                         <span className="fill-handle" title="Drag to fill in any direction" onMouseDown={beginFill} />
                       )}
                       <CellComponent
-                        cell={cell}
+                        cell={form ? { ...cell, value: form.text } : cell}
                         editable={editable}
                         selected={selection_has_cell(selection, row.index, c)}
                         onCommit={(value) => editCell(tableId, row.index, c, value)}
                         onSelect={(event) => beginSelection(row.index, c, event)}
                         onExtend={() => extendSelection(row.index, c)}
                       />
-                      {visibleIndex === 0 && (
+                      {visibleIndex === 0 && !preview && (
                         <TableResizeHandle
                           axis="row"
                           onResize={(height) => setHeight(row.index, height)}

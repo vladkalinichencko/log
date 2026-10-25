@@ -6,8 +6,25 @@ export const BOOKKEEPING = ["step", "epoch", "samples_seen", "wall_time", "rank"
 
 export const is_bookkeeping = (name: string) => BOOKKEEPING.includes(name.replace(/_\d+$/, ""));
 
-export const duration = (seconds: number) =>
-  seconds < 1 ? `${end_value(seconds * 1000)} ms` : `${end_value(seconds)} s`;
+export function duration(seconds: number): string {
+  if (seconds < 1) return `${end_value(seconds * 1000)} ms`;
+  if (seconds < 60) return `${end_value(seconds)} s`;
+  const [hours, minutes] = [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60)];
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m ${Math.floor(seconds % 60)}s`;
+}
+
+export function relative_time(seconds: number, now: number): string {
+  const ago = Math.max(0, now - seconds);
+  if (ago < 60) return "just now";
+  if (ago < 3600) return `${Math.floor(ago / 60)} min ago`;
+  if (ago < 86400) return `${Math.floor(ago / 3600)} h ago`;
+  return `${Math.floor(ago / 86400)} d ago`;
+}
+
+export const COLUMN_TEXT: Record<string, (value: number) => { text: string; title: string }> = {
+  started: (value) => ({ text: relative_time(value, Date.now() / 1000), title: new Date(value * 1000).toLocaleString() }),
+  duration: (value) => ({ text: duration(value), title: `${value} s` }),
+};
 
 export interface RunStat {
   label: string;

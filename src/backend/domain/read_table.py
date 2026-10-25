@@ -1,4 +1,5 @@
 import json
+import time
 
 from ..ports.storage_port import StoragePort
 from .models import Cell, CellType, Representation, Table, TableKind
@@ -68,15 +69,23 @@ def _project_table(project: str, storage: StoragePort) -> Table:
         cells.append([
             Cell(CellType.table_ref, run, f"{project}.{run}"),
             Cell(CellType.string, meta["status"]),
-            Cell(CellType.number, str(meta["samples_seen"])),
+            _scalar_cell(meta.get("start_wall_time")),
+            _scalar_cell(_run_duration(meta)),
+            _scalar_cell(meta["samples_seen"]),
         ])
     return Table(
         name=project,
         kind=TableKind.folder,
-        column_names=["run", "status", "samples_seen"],
+        column_names=["run", "status", "started", "duration", "samples_seen"],
         cells=cells,
         source_path=project,
     )
+
+
+def _run_duration(meta: dict) -> float | None:
+    start = meta.get("start_wall_time")
+    end = meta.get("end_wall_time") or (time.time() if meta["status"] == "running" else None)
+    return None if start is None or end is None else round(end - start, 3)
 
 
 def _run_table(run: str, base: str, run_dir: str, storage: StoragePort) -> Table:

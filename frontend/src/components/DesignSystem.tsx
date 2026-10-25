@@ -196,7 +196,7 @@ export function DesignSystem() {
 
       <Section number="07" title="Tables">
         <TableView table={runs} />
-        <TableView table={config} editable />
+        <TableView table={config} use="edit" />
       </Section>
 
       <Section number="08" title="Tiles">

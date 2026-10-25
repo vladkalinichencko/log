@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Tile } from "../components/Tile";
 import { Button } from "../components/Button";
 import { Notices, attempt } from "../components/Notices";
 import { fetchTable } from "../api/client";
 import { useStore } from "../store/store";
+import { MainView } from "../components/MainView";
+import { TableView } from "../components/TableView";
+import { Representation, TableKind } from "../types/domain";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
@@ -52,5 +55,17 @@ describe("errors reach the screen", () => {
   it("a non-JSON answer is reported as such instead of a parser error", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>bad gateway</html>", { status: 502, statusText: "Bad Gateway" })));
     await expect(fetchTable("p")).rejects.toThrow("502 Bad Gateway: /api/table?path=p did not answer JSON");
+  });
+
+  it("while a page loads it shows a placeholder in the page's place, and an empty table says so in one row", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<MemoryRouter><MainView path="p.pending" /></MemoryRouter>);
+    expect(document.querySelector(".placeholder")!.textContent).toBe("loading");
+    cleanup();
+    const empty = { name: "e", kind: TableKind.Grid, column_names: ["a"], row_names: null, cells: [], representation: Representation.Grid, source_path: "e" };
+    render(<MemoryRouter><TableView table={empty} /></MemoryRouter>);
+    expect(screen.getByText("no rows")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Filter rows…"), { target: { value: "x" } });
+    expect(screen.getByText("no rows match the filter")).toBeTruthy();
   });
 });

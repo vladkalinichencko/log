@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
+import { TableView } from "../components/TableView";
 import { execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
 import { chartSpec } from "../components/chartSpec";
 import { useStore } from "../store/store";
@@ -59,6 +60,8 @@ describe("run overview", () => {
     ]);
     expect(document.querySelector(".run-overview")!.compareDocumentPosition(screen.getByText("Tables")))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector(".run-overview a.tile-name")!.getAttribute("href")).toBe("/demo.base.metrics");
+    expect([...document.querySelectorAll(".tile-grid .tile-name")].map((title) => title.textContent)).toEqual(["meta"]);
   });
 
   it("turns wall times into per-rank lanes of the gap before each logged step", () => {
@@ -94,14 +97,62 @@ describe("run overview", () => {
     ]);
   });
 
-  it("a zoomed line keeps the whole run for the overview and every point inside the window", () => {
+  it("a zoomed line keeps the whole run for the overview, every point inside the window, and the latest value pinned to the right edge", () => {
     const long = table("demo.long.metrics", TableKind.Grid, ["step", "loss"],
       Array.from({ length: 10_000 }, (_, step) => [number(String(step)), number(String(Math.sin(step)))]));
     const spec = chartSpec(long, Representation.Line, [5000, 5099]);
     const [line] = spec.data as { x: number[] }[];
     expect(line.x[0]).toBe(0);
     expect(line.x[line.x.length - 1]).toBe(9999);
-    expect(spec.layout.annotations![0].text).toBe(String(Number(Math.sin(9999).toPrecision(4))));
+    expect(spec.layout.annotations![0]).toMatchObject({
+      xref: "paper",
+      x: 1,
+      y: Math.sin(5099),
+      text: `${String(Number(Math.sin(9999).toPrecision(4)))} →`,
+    });
+    expect(chartSpec(long, Representation.Line, null).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
     expect(new Set(line.x.filter((step) => step >= 5000 && step <= 5099)).size).toBe(100);
+  });
+
+  it("the run list shows a status dot, how long ago each run started and how long it took", () => {
+    vi.spyOn(Date, "now").mockReturnValue(10_000 * 1000);
+    const runs = table("demo", TableKind.Folder, ["run", "status", "started", "duration", "samples_seen"], [
+      [link("base", "demo.base"), text("finished"), number(String(10_000 - 7_300)), number("4800"), number("512")],
+      [link("live", "demo.live"), text("running"), number("9990"), number("10.5"), number("2")],
+    ]);
+    render(<MemoryRouter><TableView table={runs} /></MemoryRouter>);
+    const cells = [...document.querySelectorAll("tbody tr")].map((row) => [...row.querySelectorAll("td[data-column]")].map((td) => td.textContent));
+    expect(cells).toEqual([["base", "finished", "2 h ago", "1h 20m", "512"], ["live", "running", "just now", "10.5 s", "2"]]);
+    expect([...document.querySelectorAll("td[data-status]")].map((td) => td.getAttribute("data-status"))).toEqual(["finished", "running"]);
+    expect(screen.getByText("2 h ago").closest("td")!.title).toBe(new Date((10_000 - 7_300) * 1000).toLocaleString());
+  });
+
+  it("the execution strip keeps one lane per rank from meta while loading and after a run too short to time", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const ddpMeta = table("demo.ddp.meta", TableKind.Column, ["key", "value"], [
+      [text("status"), text("running")], [text("samples_seen"), text("0")], [text("world_size"), text("2")],
+    ]);
+    const run = table("demo.ddp", TableKind.Folder, null, [[link("meta", "demo.ddp.meta")], [link("metrics", "demo.ddp.metrics")]]);
+    useStore.getState().tables_setViews([run, ddpMeta].map((view) => ({ ...view, id: view.source_path! })));
+    const { unmount } = render(<MemoryRouter><MainView path="demo.ddp" /></MemoryRouter>);
+    await screen.findByText("Tables");
+    expect(document.querySelectorAll(".execution-lane")).toHaveLength(2);
+    unmount();
+    const oneRow = table("demo.ddp.metrics", TableKind.Grid, ["step", "epoch", "wall_time", "rank", "loss"], [
+      ["0", "0", "1", "0", "2"].map(number), ["0", "0", "1", "1", "2"].map(number),
+    ]);
+    useStore.getState().tables_setViews([run, ddpMeta, oneRow].map((view) => ({ ...view, id: view.source_path! })));
+    render(<MemoryRouter><MainView path="demo.ddp" /></MemoryRouter>);
+    expect(await screen.findByText("fewer than two logged steps per rank")).toBeTruthy();
+    expect(document.querySelectorAll(".execution-lane")).toHaveLength(2);
+  });
+
+  it("run-list formats apply only to the run list, never to a metric that happens to be called duration", () => {
+    const scalars = table("demo.base.epoch_0000.timing", TableKind.Column, ["step", "started", "duration", "status"], [
+      [number("1"), number("5"), number("4800"), text("ok")],
+    ]);
+    render(<MemoryRouter><TableView table={scalars} /></MemoryRouter>);
+    expect([...document.querySelectorAll("tbody td[data-column]")].map((td) => td.textContent)).toEqual(["1", "5", "4800", "ok"]);
+    expect(document.querySelector("td[data-status]")).toBeNull();
   });
 });

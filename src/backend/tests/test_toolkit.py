@@ -256,3 +256,19 @@ def test_export_figure_skips_boolean_scalars(tmp_path, monkeypatch):
     monkeypatch.setattr(matplotlib.axes.Axes, "plot", lambda self, xs, ys, label=None, **kw: drawn.append(label) or original(self, xs, ys, label=label, **kw))
     log.export.figure("p.r.metrics", str(tmp_path / "metrics.png"))
     assert drawn == ["loss"]
+
+
+def test_a_finished_run_records_its_end_and_the_project_shows_its_duration(tmp_path):
+    from backend.adapters.local_file_storage import LocalFileStorage
+    from backend.domain.read_table import read_table
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        log.log("loss", 1.0, step=0)
+
+    main()
+    meta = json.loads((tmp_path / "p" / "r" / "meta.json").read_text())
+    assert meta["end_wall_time"] >= meta["start_wall_time"]
+    row = read_table("p", LocalFileStorage(tmp_path)).cells[0]
+    assert [cell.value for cell in row[:2]] == ["r", "finished"]
+    assert float(row[3].value) == round(meta["end_wall_time"] - meta["start_wall_time"], 3)

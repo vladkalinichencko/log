@@ -1,13 +1,13 @@
 import { ComponentType } from "react";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
-import { TableView } from "./TableView";
+import { TableUse, TableView } from "./TableView";
 import { ChartView } from "./ChartView";
 import { InlineView } from "./InlineView";
 
 interface ViewProps {
   table: Table;
   representation: Representation;
-  editable?: boolean;
+  use?: TableUse;
 }
 
 const RENDERERS: Record<Representation, ComponentType<ViewProps>> = {
@@ -56,7 +56,7 @@ export function chartReps(table: Table): Representation[] {
   return applicable(table).filter((r) => r !== Representation.Grid && r !== Representation.Inline);
 }
 
-export function render(table: Table, representation: Representation, editable?: boolean) {
+export function render(table: Table, representation: Representation, use?: TableUse) {
   const View = RENDERERS[representation];
-  return <View table={table} representation={representation} editable={editable} />;
+  return <View table={table} representation={representation} use={use} />;
 }

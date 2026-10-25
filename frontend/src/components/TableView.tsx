@@ -562,6 +562,13 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
               </thead>
             )}
             <tbody ref={bodyRef}>
+              {view.rows.length === 0 && (
+                <tr>
+                  <td colSpan={span}>
+                    <span className="cell subtitle">{query ? "no rows match the filter" : "no rows"}</span>
+                  </td>
+                </tr>
+              )}
               {rowWindow.before > 0 && (
                 <tr className="row-spacer" aria-hidden="true"><td colSpan={span} style={{ height: rowWindow.before }} /></tr>
               )}

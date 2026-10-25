@@ -5,6 +5,7 @@ import { Toolbar } from "./Toolbar";
 import { Player } from "./Player";
 import { Button } from "./Button";
 import { LoadError } from "./LoadError";
+import { Placeholder } from "./Placeholder";
 import { render, chartReps } from "./render";
 import { Representation } from "../types/domain";
 import { useStore } from "../store/store";
@@ -27,7 +28,7 @@ export function Tile({ path, editor, titled }: TileProps) {
   const content = useRef<HTMLDivElement>(null);
 
   if (loadState === "error") return <LoadError message={error} retry={retry} />;
-  if (!table) return <div>Loading…</div>;
+  if (!table) return <Placeholder label="loading" />;
 
   const expanded = searchParams.get("modal") === path;
   const setModal = (nextPath: string | null) => setSearchParams(with_param(searchParams, "modal", nextPath));

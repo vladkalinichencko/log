@@ -1,6 +1,7 @@
 import { useTable } from "./useTable";
 import { render } from "./render";
 import { LoadError } from "./LoadError";
+import { Placeholder } from "./Placeholder";
 import { RunOverview } from "./RunOverview";
 import { CellType, Representation } from "../types/domain";
 import { path_segments } from "../store/selectors/pathSelectors";
@@ -13,7 +14,7 @@ export function MainView({ path }: MainViewProps) {
   const { table, loadState, error, retry } = useTable(path);
 
   if (loadState === "error") return <LoadError message={error} retry={retry} />;
-  if (!table) return <div>Loading…</div>;
+  if (!table) return <Placeholder label="loading" />;
 
   const depth = path_segments(path).length;
   const hasChildren = table.cells.some((row) =>

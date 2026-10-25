@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import type { PlotRelayoutEvent } from "plotly.js";
 import { Representation, Table } from "../types/domain";
 import { chartSpec } from "./chartSpec";
+import { Placeholder } from "./Placeholder";
 
 const Plot = lazy(() => import("react-plotly.js"));
 
@@ -25,7 +26,7 @@ export function ChartView({ table, representation, overview }: ChartViewProps) {
   const xaxis = { ...spec.layout.xaxis, rangeslider: { visible: true, thickness: 0.12, bgcolor: "transparent" } };
 
   return (
-    <Suspense fallback={<div>Loading chart…</div>}>
+    <Suspense fallback={<Placeholder label="loading chart" />}>
       <Plot
         data={spec.data}
         layout={overview ? { ...spec.layout, xaxis } : spec.layout}

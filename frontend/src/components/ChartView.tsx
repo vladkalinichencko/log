@@ -16,9 +16,8 @@ export function ChartView({ table, representation, overview }: ChartViewProps) {
   const [window, setWindow] = useState<[number, number] | null>(null);
 
   const onRelayout = (event: Readonly<PlotRelayoutEvent>) => {
-    const from = event["xaxis.range[0]"];
-    const to = event["xaxis.range[1]"];
-    if (from !== undefined && to !== undefined) setWindow([from, to]);
+    const [from, to] = event["xaxis.range"] ?? [event["xaxis.range[0]"], event["xaxis.range[1]"]];
+    if (from !== undefined && to !== undefined) setWindow([Number(from), Number(to)]);
     else if (event["xaxis.autorange"]) setWindow(null);
   };
 

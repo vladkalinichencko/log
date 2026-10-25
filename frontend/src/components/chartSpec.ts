@@ -101,15 +101,19 @@ export function chartSpec(
         xaxis: { ...base.xaxis, ...(window ? { range: window } : {}) },
         annotations: picked
           .filter(({ xs }) => xs.length > 0)
-          .map(({ xs, ys, color }) => ({
-            x: xs[xs.length - 1],
-            y: ys[ys.length - 1],
-            text: end_value(ys[ys.length - 1]),
-            xanchor: "left" as const,
-            xshift: 4,
-            showarrow: false,
-            font: { color, size: t.text },
-          })),
+          .map(({ xs, ys, color }) => {
+            const last = xs.length - 1;
+            const edge = window && xs[last] > window[1] ? xs.filter((at) => at <= window[1]).length - 1 : -1;
+            const place = edge >= 0 ? { xref: "paper" as const, x: 1, y: ys[edge] } : { x: xs[last], y: ys[last] };
+            return {
+              ...place,
+              text: edge >= 0 ? `${end_value(ys[last])} →` : end_value(ys[last]),
+              xanchor: "left" as const,
+              xshift: 4,
+              showarrow: false,
+              font: { color, size: t.text },
+            };
+          }),
       },
     };
   }

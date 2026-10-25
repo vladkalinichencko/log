@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Representation } from "../types/domain";
 import { duration, execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
 import { useTable } from "./useTable";
-import { ChartView } from "./ChartView";
+import { Chart } from "../modules/chart";
 import { LoadError } from "./LoadError";
 import { Sparkline } from "./Sparkline";
 import { Placeholder } from "./Placeholder";
@@ -32,7 +32,7 @@ export function RunOverview({ path }: { path: string }) {
         <Link className="tile-name link" to={`/${path}.metrics`}>metrics</Link>
       </div>
       <div className="run-hero">
-        {metrics.table ? <ChartView table={metrics.table} representation={Representation.Line} overview /> : <Placeholder label="loading" />}
+        {metrics.table ? <Chart table={metrics.table} representation={Representation.Line} overview /> : <Placeholder label="loading" />}
       </div>
       <div className="stat-strip">
         {stats.map((stat) => (

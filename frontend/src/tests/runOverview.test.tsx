@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
 import { TableView } from "../components/TableView";
 import { execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
-import { chartSpec } from "../components/chartSpec";
+import { chartSpec } from "../modules/chart/plotly";
 import { useStore } from "../store/store";
 import { Cell, CellType, Representation, Table, TableKind } from "../types/domain";
 

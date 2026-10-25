@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { applicable, TRAJECTORY_COLUMNS } from "../components/render";
-import { chartSpec } from "../components/chartSpec";
+import { chartSpec } from "../modules/chart/plotly";
 import { frameTable, trajectoryTable } from "../components/Player";
 import { functionExpression } from "../components/Toolbar";
 import { Representation } from "../types/domain";

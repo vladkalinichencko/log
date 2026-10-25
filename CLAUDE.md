@@ -22,6 +22,8 @@ Read before writing or reviewing any code in this repo. `SPEC.md` says WHAT to b
 
 8b. **Layout never moves or clips because content changed.** Lay out for the content's whole range from the start: a value that gains a digit, a label that gets translated, a count that appears, an error that arrives. Anything that appears later is an overlay or occupies space reserved for it from the first frame; long text wraps or is cut with an ellipsis and stays readable in full on hover; numbers use tabular figures and a width that fits their largest value. Grown content is never cut off. A loading or empty state has the same geometry as the loaded block.
 
+8c. **One dependency, one adapter file.** A third-party library that provides a capability (charts, drag-and-drop, animation, compression, file formats, plotting for export, file watching) is imported in exactly one file — its adapter — which implements our own interface for that capability; every caller imports the interface, never the library. Trying another library means writing a second adapter and switching one export line; removing it means deleting one file. Only the platform is used directly everywhere: the language runtimes, React, the router (the URL is the app's state), FastAPI/pydantic, torch, numpy. Nothing that needs a paid tier is used at all — not even the free part of a freemium library.
+
 ## Where bugs hide — three seams to close (any language)
 
 A unified data flow governs one layer only; real defects live at the **seams** where data leaves it. These caught every real bug in this project, so they are non-negotiable too:

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Tile } from "../components/Tile";
-import { chartSpec } from "../components/chartSpec";
+import { chartSpec } from "../modules/chart/plotly";
 import { applicable } from "../components/render";
 import { useStore } from "../store/store";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";

@@ -97,7 +97,9 @@ Trainer-style API (`log.fit(model, data)`); auto-instrumentation of Lightning/Ac
 
 Dependencies are named, **not pinned to exact versions**. The repo commits a lockfile (`uv.lock` / `package-lock.json`) that captures the resolved versions at install time; the spec lists names + the one capability that justifies each. No version is written into this document, so "latest compatible at install" is the rule and the lockfile is the record.
 
-For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected.
+For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected. Nothing with a paid tier is used, not even its free part.
+
+Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`). Swapping one is a new adapter plus one changed export line.
 
 ### 4.1 Python package + backend
 
@@ -297,10 +299,16 @@ log/
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
-        ChartView.tsx             # every chart representation: chartSpec(table, representation) -> lazy Plotly
+        (charts live in modules/chart — see below)
         Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
         useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
         DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
+      modules/                    # one folder per capability (CLAUDE.md 8a/8c): index.ts is the interface every caller imports; each other file is the one adapter allowed to import its library
+        chart/
+          index.ts                # ChartProps { table, representation, overview? }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
+          series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
+          plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
+          plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
@@ -310,6 +318,7 @@ log/
         TableView.test.tsx
         inlineView.test.tsx       # parent stays a table; child controls live inside its row
         representations.test.tsx  # chartSpec mapping + applicable + switcher
+        dependencies.test.ts      # fails when a capability library is imported outside its adapter or an import is unregistered (CLAUDE.md 8c)
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close
@@ -1550,7 +1559,7 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Consequences**: We own ~30 lines of `load_fsm` and a memo helper; in exchange the frontend has one async-state mechanism and a smaller dependency set. Client-rendered SPA only; build artifacts are static files servable by the backend.
 
 ### ADR-006: Charts = Plotly.js, one declarative framework behind the render dispatch
-**Decision**: Line, heatmap, histogram (and future 3D / node-link / embedding-projection views) are rendered with **Plotly.js** (`react-plotly.js`). One pure function `chartSpec(table, kind)` maps a `Table` to a Plotly figure (`{ data, layout }`, monochrome theme); each representation component is a one-liner `<Plot {...chartSpec(table, kind)} />`. The framework lives **only** inside the RENDER slot — the `render(table, representation)` dispatch and `applicable(table)` are unchanged, and store/selectors never see Plotly.
+**Decision**: Line, heatmap, histogram (and future 3D / node-link / embedding-projection views) are rendered with **Plotly.js** (`react-plotly.js`), behind the `modules/chart` interface (revised 2026-10: Plotly is imported only by `modules/chart/plotly.tsx`; library-neutral series logic lives in `modules/chart/series.ts`, so a second renderer such as uPlot is a new adapter, not a rewrite). One pure function `chartSpec(table, kind)` maps a `Table` to a Plotly figure (`{ data, layout }`, monochrome theme); each representation component is a one-liner `<Plot {...chartSpec(table, kind)} />`. The framework lives **only** inside the RENDER slot — the `render(table, representation)` dispatch and `applicable(table)` are unchanged, and store/selectors never see Plotly.
 **Why** (revised — supersedes the original hand-drawn-SVG decision): the owner needs many chart styles, fine control, *and* low effort, plus eventual complex 3D interpretability views (trajectories with correspondence lines, embedding projections). Hand-drawn SVG cannot reach 3D / interactivity without re-implementing a charting engine. Plotly gives ~40 chart types incl. native 3D, built-in zoom/pan/hover, a single JSON config that fits our dispatch, and a monochrome theme. It maps `Table → figure` as one `chartSpec`, preserving WHAT (data) vs HOW (drawing).
 **Cost accepted**: a ~1 MB(gz) dependency — negligible for a local-first single-user tool; the owner chose this trade explicitly. Truly bespoke diagrams Plotly cannot express get a separate representation on D3/three.js *later*, only when a concrete case appears.
 **Alternatives considered**: hand-drawn SVG (original choice; no 3D, no interactivity, reimplements a chart engine for anything nontrivial); ECharts (comparable, slightly more 3D setup); Vega-Lite (great 2D grammar, no real 3D); D3/three.js (max control, far more work — kept as a later escape hatch).

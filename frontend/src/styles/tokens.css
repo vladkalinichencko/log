@@ -444,29 +444,55 @@ select {
   gap: var(--space);
 }
 
-.table-filter input {
+.filter-field {
+  position: relative;
+  display: flex;
   flex: 1 1 var(--menu-column);
   min-width: 0;
 }
 
+.filter-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-count {
+  position: absolute;
+  top: 50%;
+  right: var(--space);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 @container (max-width: 480px) {
-  .table-filter input {
+  .filter-field {
     flex-basis: 100%;
   }
 }
 
-.filter-chips {
+.filter-overlay {
+  position: absolute;
+  top: calc(100% + var(--space-0-5));
+  left: 0;
+  right: 0;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-0-5);
+  padding: var(--space);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-float);
+  box-shadow: var(--shadow);
 }
 
-.filter-chips button {
+.filter-overlay button {
   color: var(--gray-600);
 }
 
-.table-filter-error {
-  color: var(--accent);
+.invalid {
+  color: var(--critical);
   font-size: var(--text-meta);
 }
 

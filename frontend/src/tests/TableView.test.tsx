@@ -35,7 +35,7 @@ const table: Table = {
 
 describe("TableView", () => {
   it("renders every cell value and the dimensions line in the editor", () => {
-    renderR(<TableView table={table} editable />);
+    renderR(<TableView table={table} use="edit" />);
     expect(screen.getByText("2 cols × 1 rows")).toBeTruthy();
     expect(screen.getByText("2.5").closest("td")!.classList.contains("number")).toBe(true);
     expect(screen.getByText("2.5")).toBeTruthy();
@@ -84,7 +84,7 @@ describe("TableView", () => {
       source_path: "g2",
     };
     s().tables_loadTable(grid.source_path, grid);
-    renderR(<TableView table={grid} editable />);
+    renderR(<TableView table={grid} use="edit" />);
     fireEvent.click(screen.getByTitle("add row"));
     expect(s().tables.get("g2").cells.length).toBe(2);
   });
@@ -102,7 +102,7 @@ describe("TableView", () => {
     const readOnly = renderR(<TableView table={grid} />);
     expect(readOnly.queryByTitle("add row")).toBeNull();
     readOnly.unmount();
-    const editor = renderR(<TableView table={grid} editable />);
+    const editor = renderR(<TableView table={grid} use="edit" />);
     expect(editor.getByTitle("add row")).toBeTruthy();
   });
 
@@ -118,7 +118,7 @@ describe("TableView", () => {
       source_path: "g4",
     };
     s().tables_loadTable(grid.source_path, grid);
-    renderR(<TableView table={grid} editable />);
+    renderR(<TableView table={grid} use="edit" />);
     fireEvent.doubleClick(screen.getByText("a"));
     const input = screen.getByDisplayValue("a");
     fireEvent.change(input, { target: { value: "alpha" } });
@@ -304,7 +304,7 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "range",
     };
-    renderR(<TableView table={grid} editable />);
+    renderR(<TableView table={grid} use="edit" />);
     fireEvent.mouseDown(screen.getByText("1"));
     fireEvent.mouseEnter(screen.getByText("4"));
     fireEvent.mouseUp(window);
@@ -330,7 +330,7 @@ describe("TableView", () => {
       source_path: "tags",
     };
     s().tables_loadTable("tags", grid);
-    const { unmount } = renderR(<TableView table={grid} editable />);
+    const { unmount } = renderR(<TableView table={grid} use="edit" />);
     fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
     fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
     fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "adamw" } });
@@ -367,7 +367,7 @@ describe("TableView", () => {
       representation: Representation.Grid,
       source_path: "keys",
     };
-    render(<MemoryRouter initialEntries={["/?sort.keys=0:asc"]}><TableView table={grid} editable /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/?sort.keys=0:asc"]}><TableView table={grid} use="edit" /></MemoryRouter>);
     fireEvent.mouseDown(screen.getByText("1"));
     fireEvent.mouseUp(window);
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
@@ -380,15 +380,28 @@ describe("TableView", () => {
     expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 0, c: 0, endR: 0, endC: 0 }]);
   });
 
-  it("counts rows under the filter only while filtering, and always in the editor", () => {
+  it("shows the filtered count inside the filter field, reserving its width, and the size line only in the editor", () => {
     const grid: Table = { ...table, cells: [...table.cells, table.cells[0].map((cell) => ({ ...cell, value: "7" }))] };
     const { unmount } = renderR(<TableView table={grid} />);
+    expect(document.querySelector(".filter-count")).toBeNull();
     expect(document.querySelector(".table-meta")).toBeNull();
-    fireEvent.change(screen.getByPlaceholderText("Filter rows…"), { target: { value: "7" } });
-    expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 1 of 2 rows");
+    const field = screen.getByPlaceholderText("Filter rows…") as HTMLInputElement;
+    fireEvent.change(field, { target: { value: "7" } });
+    expect(document.querySelector(".filter-field .filter-count")!.textContent).toBe("1 of 2 rows");
+    expect(field.style.paddingRight).toBe(`${"1 of 2 rows".length + 2}ch`);
     unmount();
-    renderR(<TableView table={grid} editable />);
+    renderR(<TableView table={grid} use="edit" />);
     expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 2 rows");
+  });
+
+  it("a preview is the bare table: no filter bar, header actions or resize handles, and no view parameters applied", () => {
+    const grid: Table = {
+      name: "pv", kind: TableKind.Grid, column_names: ["a"], row_names: null, representation: Representation.Grid, source_path: "pv",
+      cells: [["2"], ["1"]].map((row) => row.map((value) => ({ type: CellType.Number, value, ref: null }))),
+    };
+    render(<MemoryRouter initialEntries={["/?sort.pv=0:asc&filter.pv=1"]}><TableView table={grid} use="preview" /></MemoryRouter>);
+    expect(document.querySelector(".table-filter, .column-actions, .column-resize, .row-resize")).toBeNull();
+    expect([...document.querySelectorAll("tbody td")].map((td) => td.textContent)).toEqual(["2", "1"]);
   });
 
   it("highlights matches while the panel is open, ignores case unless asked, and limits itself to a selected range", () => {
@@ -407,7 +420,7 @@ describe("TableView", () => {
     };
     s().tables_loadTable("scope", grid);
     const view = () => s().tables.get("scope")!.cells.flat().map((cell) => cell.value);
-    const { rerender } = renderR(<TableView table={grid} editable />);
+    const { rerender } = renderR(<TableView table={grid} use="edit" />);
     fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
     fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
     expect(document.querySelectorAll("td.match")).toHaveLength(3);
@@ -419,7 +432,7 @@ describe("TableView", () => {
     fireEvent.mouseDown(screen.getByText("Adam"));
     fireEvent.mouseEnter(screen.getAllByText("adam")[0]);
     fireEvent.mouseUp(window);
-    rerender(<MemoryRouter><TableView table={grid} editable /></MemoryRouter>);
+    rerender(<MemoryRouter><TableView table={grid} use="edit" /></MemoryRouter>);
     fireEvent.click(screen.getByTitle("Find text in the selected cells and replace every match"));
     fireEvent.click(screen.getByLabelText("Match case"));
     fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "AdamW" } });
@@ -443,8 +456,8 @@ describe("TableView", () => {
     };
     s().tables_loadTable("editkeys", grid);
     const values = () => s().tables.get("editkeys")!.cells.map((row) => row.map((cell) => cell.value));
-    const { rerender } = renderR(<TableView table={grid} editable />);
-    const refresh = () => rerender(<MemoryRouter><TableView table={s().tables.get("editkeys")!} editable /></MemoryRouter>);
+    const { rerender } = renderR(<TableView table={grid} use="edit" />);
+    const refresh = () => rerender(<MemoryRouter><TableView table={s().tables.get("editkeys")!} use="edit" /></MemoryRouter>);
     fireEvent.mouseDown(screen.getByText("1"));
     fireEvent.mouseUp(window);
     expect(document.activeElement).toBe(screen.getByText("1"));
@@ -474,5 +487,26 @@ describe("TableView", () => {
     fireEvent.mouseUp(window);
     fireEvent.keyDown(document.body, { key: " ", ctrlKey: true });
     expect(s().focused!.ranges).toEqual([{ kind: "col", r: -1, c: 0, endR: -1, endC: 0 }]);
+  });
+
+  it("shows filter clauses and errors in an overlay while the field has focus, never as rows that push the table", () => {
+    const grid: Table = {
+      name: "chips", kind: TableKind.Grid, column_names: ["step", "tag"], row_names: null, representation: Representation.Grid, source_path: "chips",
+      cells: [["1", "a"], ["2", "b"]].map((row) => [{ type: CellType.Number, value: row[0], ref: null }, { type: CellType.String, value: row[1], ref: null }]),
+    };
+    renderR(<TableView table={grid} />);
+    const field = screen.getByPlaceholderText("Filter rows…");
+    fireEvent.change(field, { target: { value: "step>1, tag=b" } });
+    expect(document.querySelector(".filter-overlay")).toBeNull();
+    fireEvent.focus(field);
+    const overlay = document.querySelector(".filter-field .filter-overlay")!;
+    expect([...overlay.querySelectorAll("button")].map((chip) => chip.textContent)).toEqual(["step>1 ×", "tag=b ×"]);
+    fireEvent.click(screen.getByTitle("Remove filter: tag=b"));
+    expect(screen.getByTestId("loc").textContent).toContain("filter.chips=step%3E1");
+    fireEvent.change(field, { target: { value: "step~1" } });
+    expect(document.querySelector(".filter-count")!.textContent).toBe("invalid filter");
+    expect(document.querySelector(".filter-overlay .invalid")!.textContent).toBe("~ is only valid for text columns");
+    fireEvent.blur(field);
+    expect(document.querySelector(".filter-overlay")).toBeNull();
   });
 });

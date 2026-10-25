@@ -59,7 +59,7 @@ describe("fill", () => {
     const store = useStore.getState;
     store().tables_loadTable("fill", table);
     store().focus_clear();
-    const view = () => render(<MemoryRouter><TableView table={store().tables.get("fill")!} editable /></MemoryRouter>);
+    const view = () => render(<MemoryRouter><TableView table={store().tables.get("fill")!} use="edit" /></MemoryRouter>);
     const { unmount } = view();
     fireEvent.mouseDown(screen.getByText("1"));
     fireEvent.mouseEnter(screen.getByText("2"));

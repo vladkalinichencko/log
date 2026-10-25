@@ -57,7 +57,7 @@ export function Tile({ path, editor, titled }: TileProps) {
           )}
         </div>
       </div>
-      <div className="tile-content" ref={content}>{render(table, representation, editor)}</div>
+      <div className="tile-content" ref={content}>{render(table, representation, editor ? "edit" : "preview")}</div>
       {tensor && tensor.steps.length > 1 && <Player path={path} leaf={leaf} tensor={tensor} />}
     </div>
   );

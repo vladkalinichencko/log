@@ -12,6 +12,7 @@ import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
 import { FocusMode } from "../store/slices/focusSlice";
 import { cell_matches, TextQuery } from "../store/slices/tablesSlice";
+import { COLUMN_TEXT } from "../store/selectors/runSelectors";
 import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
   selection_anchor,
@@ -609,6 +610,8 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
                   )}
                   {visibleColumns.map((c, visibleIndex) => {
                     const cell: Cell = row.cells[c];
+                    const name = table.column_names?.[c] ?? "";
+                    const form = !editable && cell.value !== "" && COLUMN_TEXT[name] ? COLUMN_TEXT[name](Number(cell.value)) : null;
                     return (
                     <td
                       key={c}
@@ -621,12 +624,14 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
                         cell.type === CellType.Number && "number"
                       )}
                       style={frozenStyle(c)}
+                      title={form?.title}
+                      data-status={name === "status" ? cell.value : undefined}
                     >
                       {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
                         <span className="fill-handle" title="Drag to fill in any direction" onMouseDown={beginFill} />
                       )}
                       <CellComponent
-                        cell={cell}
+                        cell={form ? { ...cell, value: form.text } : cell}
                         editable={editable}
                         selected={selection_has_cell(selection, row.index, c)}
                         onCommit={(value) => editCell(tableId, row.index, c, value)}

@@ -119,7 +119,7 @@ def run(
                 for handle in _active_run.watch_handles:
                     handle.remove()
                 writer.stop_and_join()
-                update_json(meta_path, {"status": status, "samples_seen": _active_run.samples_seen})
+                update_json(meta_path, {"status": status, "samples_seen": _active_run.samples_seen, "end_wall_time": time.time()})
                 _active_run = None
 
         return wrapper

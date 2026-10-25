@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
+import { TableView } from "../components/TableView";
 import { execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
 import { chartSpec } from "../components/chartSpec";
 import { useStore } from "../store/store";
@@ -111,5 +112,18 @@ describe("run overview", () => {
     });
     expect(chartSpec(long, Representation.Line, null).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
     expect(new Set(line.x.filter((step) => step >= 5000 && step <= 5099)).size).toBe(100);
+  });
+
+  it("the run list shows a status dot, how long ago each run started and how long it took", () => {
+    vi.spyOn(Date, "now").mockReturnValue(10_000 * 1000);
+    const runs = table("demo", TableKind.Folder, ["run", "status", "started", "duration", "samples_seen"], [
+      [link("base", "demo.base"), text("finished"), number(String(10_000 - 7_300)), number("4800"), number("512")],
+      [link("live", "demo.live"), text("running"), number("9990"), number("10.5"), number("2")],
+    ]);
+    render(<MemoryRouter><TableView table={runs} /></MemoryRouter>);
+    const cells = [...document.querySelectorAll("tbody tr")].map((row) => [...row.querySelectorAll("td[data-column]")].map((td) => td.textContent));
+    expect(cells).toEqual([["base", "finished", "2 h ago", "1h 20m", "512"], ["live", "running", "just now", "10.5 s", "2"]]);
+    expect([...document.querySelectorAll("td[data-status]")].map((td) => td.getAttribute("data-status"))).toEqual(["finished", "running"]);
+    expect(screen.getByText("2 h ago").closest("td")!.title).toBe(new Date((10_000 - 7_300) * 1000).toLocaleString());
   });
 });

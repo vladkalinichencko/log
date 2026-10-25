@@ -420,7 +420,7 @@ Field rules:
 | `.`-path resolves to | Returned `Table` |
 |---|---|
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
-| `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns = run meta (name, status, samples_seen) read from each `meta.json` |
+| `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns `run, status, started, duration, samples_seen`, pulled up from each run's `meta.json` (progressive disclosure: the run list shows a few attributes of each run's files): `started` = `start_wall_time`; `duration` = `end_wall_time − start_wall_time`, or now − start while `running`, empty when an older run never recorded its end. The UI shows `started` as relative time (`2 h ago`, exact time on hover), `duration` as `1h 20m` / `3.008 s` (one `duration` formatter for every duration), and a status dot (finished = `--positive`, crashed = `--critical`, running = `--series-5`); sort and filter use the raw numbers. |
 | `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
 | `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; a line that continues past the visible window shows its last value pinned at the plot's right edge as `value →` (the slider reports `xaxis.range`, a drag zoom `xaxis.range[0]/[1]`; both set the window); (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
@@ -443,6 +443,7 @@ classDiagram
         +string git_hash
         +string requirements_hash
         +float start_wall_time
+        +float end_wall_time
         +int samples_seen
         +int world_size
         +string status
@@ -555,6 +556,7 @@ Field-level rules:
 ```json
 { "git_hash": "a1b2c3d", "requirements_hash": "sha256:9f86d0...", "start_wall_time": 1748534400.123, "samples_seen": 0, "world_size": 1, "status": "running", "resume_diff": null, "writer_errors": [] }
 ```
+When the run ends (finished or crashed) the toolkit adds `"end_wall_time": <time.time()>` in the same write that sets the final `status`.
 `metrics.jsonl` row example:
 ```json
 { "step": 1000, "samples_seen": 32000, "wall_time": 1748534512.5, "rank": 0, "scalars": { "loss": 2.31, "lr": 0.00009 } }

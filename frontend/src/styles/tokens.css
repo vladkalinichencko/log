@@ -569,6 +569,28 @@ select {
   text-align: right;
 }
 
+.table-view td[data-status] .cell::before {
+  content: "";
+  display: inline-block;
+  width: var(--space);
+  height: var(--space);
+  margin-right: var(--space);
+  border-radius: 50%;
+  background: var(--gray-400);
+}
+
+.table-view td[data-status="running"] .cell::before {
+  background: var(--series-5);
+}
+
+.table-view td[data-status="finished"] .cell::before {
+  background: var(--positive);
+}
+
+.table-view td[data-status="crashed"] .cell::before {
+  background: var(--critical);
+}
+
 .table-view td.match {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }

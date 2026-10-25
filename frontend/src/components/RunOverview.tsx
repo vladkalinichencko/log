@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Representation } from "../types/domain";
 import { duration, execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
 import { useTable } from "./useTable";
@@ -16,6 +17,9 @@ export function RunOverview({ path }: { path: string }) {
 
   return (
     <section className="run-overview">
+      <div className="bar">
+        <Link className="tile-name link" to={`/${path}.metrics`}>metrics</Link>
+      </div>
       <div className="run-hero">
         {metrics.table ? <ChartView table={metrics.table} representation={Representation.Line} overview /> : "Loading…"}
       </div>

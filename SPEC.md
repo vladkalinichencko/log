@@ -288,7 +288,7 @@ log/
         MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
         Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
         LoadError.tsx             # in-place failure of a view: message + Retry
-        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics with its range slider, status strip, execution strip
+        RunOverview.tsx           # run screen head: a `metrics` link, the hero line chart of <run>.metrics with its range slider, status strip, execution strip (the run's tile grid then omits `metrics`)
         Sparkline.tsx             # hand-rolled SVG polyline trend inside a stat
         TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)

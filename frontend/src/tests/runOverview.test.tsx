@@ -59,6 +59,8 @@ describe("run overview", () => {
     ]);
     expect(document.querySelector(".run-overview")!.compareDocumentPosition(screen.getByText("Tables")))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector(".run-overview a.tile-name")!.getAttribute("href")).toBe("/demo.base.metrics");
+    expect([...document.querySelectorAll(".tile-grid .tile-name")].map((title) => title.textContent)).toEqual(["meta"]);
   });
 
   it("turns wall times into per-rank lanes of the gap before each logged step", () => {

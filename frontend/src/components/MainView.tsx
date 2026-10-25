@@ -23,6 +23,7 @@ export function MainView({ path }: MainViewProps) {
   const sectionTitle = depth === 0 ? "All projects" : depth === 1 ? "Runs" : inline ? "Tables" : "Data";
 
   const runOverview = depth === 2 && table.cells.some((row) => row[0]?.ref === `${path}.metrics`);
+  const shown = runOverview ? { ...table, cells: table.cells.filter((row) => row[0]?.ref !== `${path}.metrics`) } : table;
 
   return (
     <>
@@ -30,9 +31,9 @@ export function MainView({ path }: MainViewProps) {
       <section className="data-section">
         <div className="section-heading">
           <h2>{sectionTitle}</h2>
-          <span className="subtitle">{table.cells.length}</span>
+          <span className="subtitle">{shown.cells.length}</span>
         </div>
-        {render(table, inline ? Representation.Inline : Representation.Grid)}
+        {render(shown, inline ? Representation.Inline : Representation.Grid)}
       </section>
     </>
   );

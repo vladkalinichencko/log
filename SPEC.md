@@ -110,6 +110,8 @@ Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runti
 | numpy | `.npy` read/write with a documented header and memory-mapped partial reads. Hand-rolling a binary array format is the thing ADR-004 rejects. |
 | fastapi | Typed request/response models (matches the DTO-as-message constraint) + first-class WebSocket in one framework. Without it we hand-wire ASGI routing, validation, and WS handshakes. |
 | uvicorn | ASGI server to run FastAPI (`--workers 1`). Without it, no server process. |
+
+Every HTTP response over 500 bytes is gzip-compressed by FastAPI's built-in `GZipMiddleware` when the client accepts it (a 20 000-row table: 4.9 MB → 336 KB).
 | websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |

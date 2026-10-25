@@ -10,7 +10,11 @@ import { Placeholder } from "./Placeholder";
 const EXECUTION_COLUMNS = 120;
 const BLANK = "\u00a0";
 const BLANK_STATS = [{ label: BLANK, value: BLANK, trend: [] }];
-const BLANK_STRIP = { lanes: [{ rank: "", cells: [] }], median: 0, slowest: { steps: "", seconds: 0 } };
+const blank_strip = (ranks: number) => ({
+  lanes: Array.from({ length: ranks }, () => ({ rank: "", cells: [] })),
+  median: 0,
+  slowest: { steps: "", seconds: 0 },
+});
 
 export function RunOverview({ path }: { path: string }) {
   const metrics = useTable(`${path}.metrics`);
@@ -18,7 +22,9 @@ export function RunOverview({ path }: { path: string }) {
   const failed = [metrics, meta].find((load) => load.loadState === "error");
   if (failed) return <LoadError message={failed.error} retry={failed.retry} />;
   const stats = metrics.table && meta.table ? run_stats_selector(meta.table, metrics.table) : BLANK_STATS;
-  const strip = metrics.table ? execution_strip_selector(metrics.table, EXECUTION_COLUMNS) : BLANK_STRIP;
+  const ranks = Number(meta.table?.cells.find(([key]) => key.value === "world_size")?.[1].value) || 1;
+  const timing = metrics.table && execution_strip_selector(metrics.table, EXECUTION_COLUMNS);
+  const strip = timing || blank_strip(ranks);
 
   return (
     <section className="run-overview">
@@ -40,12 +46,12 @@ export function RunOverview({ path }: { path: string }) {
       {strip && (
         <div className="execution-strip">
           <span className="subtitle">
-            {strip === BLANK_STRIP
-              ? BLANK
-              : `time between logged steps · median ${duration(strip.median)} · slowest ${duration(strip.slowest.seconds)} at step ${strip.slowest.steps}`}
+            {timing
+              ? `time between logged steps · median ${duration(timing.median)} · slowest ${duration(timing.slowest.seconds)} at step ${timing.slowest.steps}`
+              : metrics.table ? "fewer than two logged steps per rank" : BLANK}
           </span>
-          {strip.lanes.map((lane) => (
-            <div key={lane.rank} className="execution-lane">
+          {strip.lanes.map((lane, index) => (
+            <div key={index} className="execution-lane">
               <span className="subtitle">{lane.rank ? `rank ${lane.rank}` : BLANK}</span>
               <div>
                 {lane.cells.map((cell) => (

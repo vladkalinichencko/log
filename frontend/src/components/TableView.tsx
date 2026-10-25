@@ -611,7 +611,7 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
                   {visibleColumns.map((c, visibleIndex) => {
                     const cell: Cell = row.cells[c];
                     const name = table.column_names?.[c] ?? "";
-                    const form = !editable && cell.value !== "" && COLUMN_TEXT[name] ? COLUMN_TEXT[name](Number(cell.value)) : null;
+                    const form = runTable && cell.value !== "" && COLUMN_TEXT[name] ? COLUMN_TEXT[name](Number(cell.value)) : null;
                     return (
                     <td
                       key={c}
@@ -625,7 +625,7 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
                       )}
                       style={frozenStyle(c)}
                       title={form?.title}
-                      data-status={name === "status" ? cell.value : undefined}
+                      data-status={runTable && name === "status" ? cell.value : undefined}
                     >
                       {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
                         <span className="fill-handle" title="Drag to fill in any direction" onMouseDown={beginFill} />

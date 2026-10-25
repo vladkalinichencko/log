@@ -58,13 +58,14 @@ def test_run_metrics_table_spans_epochs_with_gaps_left_empty(tmp_path):
         {"step": 2, "samples_seen": 0, "wall_time": 3.0, "rank": 0, "scalars": {"loss": 0.5, "acc": 0.9}}
     ))
     metrics = read_table("p.r.metrics", _storage(tmp_path))
-    assert metrics.column_names == ["step", "epoch", "loss", "acc"]
-    assert [[c.value for c in r] for r in metrics.cells] == [
-        ["0", "0", "2.0", ""],
-        ["1", "0", "1.0", ""],
-        ["2", "1", "0.5", "0.9"],
+    assert metrics.column_names == ["step", "epoch", "wall_time", "rank", "loss", "acc"]
+    assert [[c.value for c in r][:2] + [c.value for c in r][3:] for r in metrics.cells] == [
+        ["0", "0", "0", "2.0", ""],
+        ["1", "0", "0", "1.0", ""],
+        ["2", "1", "0", "0.5", "0.9"],
     ]
-    assert metrics.cells[0][3].type.value == "empty"
+    assert metrics.cells[2][2].value == "3.0"
+    assert metrics.cells[0][5].type.value == "empty"
 
 
 def test_drill_tensor(tmp_path):
@@ -87,3 +88,15 @@ def test_list_paths_walks_tree(tmp_path):
     _make_run(tmp_path)
     paths = list_paths(_storage(tmp_path))
     assert {"p", "p.r", "p.r.epoch_0000", "p.r.epoch_0000.loss", "p.r.epoch_0000.w"} <= set(paths)
+
+
+def test_boolean_scalars_are_bool_cells_not_numbers(tmp_path):
+    _make_run(tmp_path)
+    (tmp_path / "p" / "r" / "epoch_0000" / "metrics.jsonl").write_text(json.dumps(
+        {"step": 0, "samples_seen": 0, "wall_time": 1.0, "rank": 0, "scalars": {"done": True}}
+    ))
+    leaf = read_table("p.r.epoch_0000.done", _storage(tmp_path))
+    metrics = read_table("p.r.metrics", _storage(tmp_path))
+    assert (leaf.cells[0][-1].type.value, leaf.cells[0][-1].value) == ("bool", "True")
+    assert (metrics.cells[0][-1].type.value, metrics.cells[0][-1].value) == ("bool", "True")
+    assert leaf.cells[0][0].type.value == "number"

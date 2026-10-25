@@ -37,6 +37,7 @@ describe("TableView", () => {
   it("renders every cell value and the dimensions line in the editor", () => {
     renderR(<TableView table={table} editable />);
     expect(screen.getByText("2 cols × 1 rows")).toBeTruthy();
+    expect(screen.getByText("2.5").closest("td")!.classList.contains("number")).toBe(true);
     expect(screen.getByText("2.5")).toBeTruthy();
     expect(screen.getByText("1.9")).toBeTruthy();
   });
@@ -260,9 +261,10 @@ describe("TableView", () => {
       source_path: "demo",
     };
     renderR(<TableView table={grid} />);
+    expect(screen.getByRole("columnheader", { name: /^status/ })).toBeTruthy();
     fireEvent.click(screen.getByTitle("Choose, reorder, and freeze columns"));
     fireEvent.click(screen.getByText("✓ status"));
-    expect(screen.queryByRole("columnheader", { name: "status ↕ filter" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^status/ })).toBeNull();
     expect(screen.getByTestId("loc").textContent).toContain("columns.demo=0");
   });
 
@@ -376,5 +378,101 @@ describe("TableView", () => {
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     expect(s().focused!.ranges).toEqual([{ kind: "cell", r: 0, c: 0, endR: 0, endC: 0 }]);
+  });
+
+  it("counts rows under the filter only while filtering, and always in the editor", () => {
+    const grid: Table = { ...table, cells: [...table.cells, table.cells[0].map((cell) => ({ ...cell, value: "7" }))] };
+    const { unmount } = renderR(<TableView table={grid} />);
+    expect(document.querySelector(".table-meta")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("Filter rows…"), { target: { value: "7" } });
+    expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 1 of 2 rows");
+    unmount();
+    renderR(<TableView table={grid} editable />);
+    expect(document.querySelector(".table-meta")!.textContent).toBe("2 cols × 2 rows");
+  });
+
+  it("highlights matches while the panel is open, ignores case unless asked, and limits itself to a selected range", () => {
+    const s = () => useStore.getState();
+    s().focus_clear();
+    const grid: Table = {
+      name: "scope",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [["Adam", "adam"], ["adam", "sgd"]].map((row) =>
+        row.map((value) => ({ type: CellType.String, value, ref: null }))
+      ),
+      representation: Representation.Grid,
+      source_path: "scope",
+    };
+    s().tables_loadTable("scope", grid);
+    const view = () => s().tables.get("scope")!.cells.flat().map((cell) => cell.value);
+    const { rerender } = renderR(<TableView table={grid} editable />);
+    fireEvent.click(screen.getByTitle("Find text in cells and replace every match"));
+    fireEvent.change(screen.getByPlaceholderText("find"), { target: { value: "adam" } });
+    expect(document.querySelectorAll("td.match")).toHaveLength(3);
+    fireEvent.click(screen.getByLabelText("Match case"));
+    expect(document.querySelectorAll("td.match")).toHaveLength(2);
+    fireEvent.click(document.body);
+    expect(document.querySelectorAll("td.match")).toHaveLength(0);
+
+    fireEvent.mouseDown(screen.getByText("Adam"));
+    fireEvent.mouseEnter(screen.getAllByText("adam")[0]);
+    fireEvent.mouseUp(window);
+    rerender(<MemoryRouter><TableView table={grid} editable /></MemoryRouter>);
+    fireEvent.click(screen.getByTitle("Find text in the selected cells and replace every match"));
+    fireEvent.click(screen.getByLabelText("Match case"));
+    fireEvent.change(screen.getByPlaceholderText("replace with"), { target: { value: "AdamW" } });
+    fireEvent.click(screen.getByText("Replace in 2 selected cells"));
+    expect(view()).toEqual(["AdamW", "AdamW", "adam", "sgd"]);
+  });
+
+  it("edits the active cell with F2 or Enter, fills down with Ctrl+D, and selects a row or column with Shift/Ctrl+Space", () => {
+    const s = () => useStore.getState();
+    s().focus_clear();
+    const grid: Table = {
+      name: "editkeys",
+      kind: TableKind.Grid,
+      column_names: ["a", "b"],
+      row_names: null,
+      cells: [["1", "x"], ["2", "y"], ["3", "z"]].map((row) =>
+        row.map((value) => ({ type: CellType.String, value, ref: null }))
+      ),
+      representation: Representation.Grid,
+      source_path: "editkeys",
+    };
+    s().tables_loadTable("editkeys", grid);
+    const values = () => s().tables.get("editkeys")!.cells.map((row) => row.map((cell) => cell.value));
+    const { rerender } = renderR(<TableView table={grid} editable />);
+    const refresh = () => rerender(<MemoryRouter><TableView table={s().tables.get("editkeys")!} editable /></MemoryRouter>);
+    fireEvent.mouseDown(screen.getByText("1"));
+    fireEvent.mouseUp(window);
+    expect(document.activeElement).toBe(screen.getByText("1"));
+    fireEvent.keyDown(document.activeElement!, { key: "F2" });
+    fireEvent.change(document.querySelector(".cell-input")!, { target: { value: "10" } });
+    fireEvent.keyDown(document.querySelector(".cell-input")!, { key: "Enter" });
+    refresh();
+    expect(values()[0][0]).toBe("10");
+    expect(document.activeElement?.textContent).toBe("10");
+    fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+    expect(document.querySelector(".cell-input")).toBeTruthy();
+    fireEvent.keyDown(document.querySelector(".cell-input")!, { key: "Escape" });
+
+    fireEvent.keyDown(document.body, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    expect(values().map((row) => row[0])).toEqual(["10", "10", "10"]);
+    refresh();
+    fireEvent.mouseDown(screen.getByText("z"));
+    fireEvent.mouseUp(window);
+    fireEvent.keyDown(document.body, { key: "d", metaKey: true });
+    expect(values().map((row) => row[1])).toEqual(["x", "y", "y"]);
+
+    fireEvent.keyDown(document.body, { key: " ", shiftKey: true });
+    expect(s().focused!.ranges).toEqual([{ kind: "row", r: 2, c: -1, endR: 2, endC: -1 }]);
+    fireEvent.mouseDown(screen.getAllByText("10")[0]);
+    fireEvent.mouseUp(window);
+    fireEvent.keyDown(document.body, { key: " ", ctrlKey: true });
+    expect(s().focused!.ranges).toEqual([{ kind: "col", r: -1, c: 0, endR: -1, endC: 0 }]);
   });
 });

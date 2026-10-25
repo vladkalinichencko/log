@@ -18,11 +18,19 @@ export interface Bounds {
 }
 
 export function fill_target_selector(source: Bounds, end: { r: number; c: number }): Bounds | null {
-  const down = end.r - source.bottom;
-  const across = end.c - source.right;
-  if (down <= 0 && across <= 0) return null;
-  return down >= across ? { ...source, bottom: end.r } : { ...source, right: end.c };
+  const reach = {
+    bottom: end.r - source.bottom,
+    top: source.top - end.r,
+    right: end.c - source.right,
+    left: source.left - end.c,
+  };
+  const [side, distance] = Object.entries(reach).reduce((best, entry) => (entry[1] > best[1] ? entry : best));
+  if (distance <= 0) return null;
+  return { ...source, [side]: side === "top" || side === "bottom" ? end.r : end.c };
 }
+
+export const in_bounds = (bounds: Bounds, r: number, c: number) =>
+  r >= bounds.top && r <= bounds.bottom && c >= bounds.left && c <= bounds.right;
 
 export const range_bounds = (range: FocusRange): Bounds => ({
   top: Math.min(range.r, range.endR),
@@ -83,10 +91,16 @@ export function selection_blocks(table: Table, selection: FocusSelection): strin
   );
 }
 
+export const selection_is_range = (selection: FocusSelection | null) =>
+  selection !== null && (selection.ranges.length > 1 || selection.ranges.some((range) =>
+    range.kind !== "cell" || range.r !== range.endR || range.c !== range.endC));
+
+export const cell_key = ({ r, c }: { r: number; c: number }) => `${r}:${c}`;
+
 export function selection_cells(table: Table, selection: FocusSelection) {
   const unique = new Map<string, { r: number; c: number }>();
   selection.ranges.flatMap((range) => cells_in_range(table, range)).flat().forEach((cell) => {
-    unique.set(`${cell.r}:${cell.c}`, cell);
+    unique.set(cell_key(cell), cell);
   });
   return [...unique.values()];
 }

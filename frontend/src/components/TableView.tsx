@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, Cell, CellType } from "../types/domain";
 import { Cell as CellComponent } from "./Cell";
@@ -11,17 +11,20 @@ import { parsePaste } from "./parsePaste";
 import { dragFsm } from "../fsm/dragFsm";
 import { useStore } from "../store/store";
 import { FocusMode } from "../store/slices/focusSlice";
-import { cell_matches } from "../store/slices/tablesSlice";
+import { cell_matches, TextQuery } from "../store/slices/tablesSlice";
 import { is_run_ref, path_segments } from "../store/selectors/pathSelectors";
 import {
   selection_anchor,
   selection_blocks,
   selection_cells,
+  selection_is_range,
+  cell_key,
   selection_has_cell,
   selection_has_column,
   selection_has_row,
   table_selection_selector,
   fill_target_selector,
+  in_bounds,
   range_bounds,
 } from "../store/selectors/tableSelectors";
 import {
@@ -85,8 +88,9 @@ export function TableView({ table, editable }: TableViewProps) {
   const [selectionState, setSelectionState] = useState(dragFsm.initial);
   const [fillState, setFillState] = useState(dragFsm.initial);
   const [fillEnd, setFillEnd] = useState<{ r: number; c: number } | null>(null);
-  const [findText, setFindText] = useState("");
-  const [replacement, setReplacement] = useState("");
+  const [textQuery, setTextQuery] = useState<TextQuery>({ find: "", replacement: "", matchCase: false });
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const trackReplacePanel = useCallback((input: HTMLInputElement | null) => setReplaceOpen(input !== null), []);
   const [frozenOffsets, setFrozenOffsets] = useState<Record<number, number>>({});
   const filterKey = `filter.${tableId}`;
   const sortKey = `sort.${tableId}`;
@@ -114,8 +118,13 @@ export function TableView({ table, editable }: TableViewProps) {
   const fillSource = editable && activeRange?.kind === "cell" ? range_bounds(activeRange) : null;
   const fillTarget = fillSource && fillEnd ? fill_target_selector(fillSource, fillEnd) : null;
   const inFillTarget = (r: number, c: number) =>
-    fillTarget !== null && fillSource !== null && r <= fillTarget.bottom && c <= fillTarget.right
-      && r >= fillTarget.top && c >= fillTarget.left && (r > fillSource.bottom || c > fillSource.right);
+    fillTarget !== null && fillSource !== null && in_bounds(fillTarget, r, c) && !in_bounds(fillSource, r, c);
+  const inSelection = selection_is_range(selection);
+  const matchedCells = replaceOpen
+    ? (inSelection ? selection_cells(table, selection!) : table.cells.flatMap((row, r) => row.map((_, c) => ({ r, c }))))
+      .filter(({ r, c }) => table.cells[r]?.[c] && cell_matches(table.cells[r][c], textQuery))
+    : [];
+  const matchedKeys = new Set(matchedCells.map(cell_key));
   const rowWindow = row_window_selector(
     view.rows.map((row) => heights[row.index] ?? rowHeight),
     visibleBand.top,
@@ -249,14 +258,29 @@ export function TableView({ table, editable }: TableViewProps) {
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const step = ARROW_STEPS[e.key];
+      const command = e.metaKey || e.ctrlKey;
       const active = selection.ranges[selection.ranges.length - 1];
-      if (!step || e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
-      const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
-      const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
-      if (!to) return;
-      e.preventDefault();
-      if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
-      else startRange({ tableId, kind: "cell", ...to }, "replace");
+      if (e.defaultPrevented || e.target instanceof HTMLInputElement || active?.kind !== "cell") return;
+      if (step) {
+        const from = e.shiftKey ? { r: active.endR, c: active.endC } : { r: active.r, c: active.c };
+        const to = cell_step_selector(view.rows.map((row) => row.index), visibleColumns, from, step);
+        if (!to) return;
+        e.preventDefault();
+        if (e.shiftKey) extendRange({ tableId, kind: "cell", ...to });
+        else startRange({ tableId, kind: "cell", ...to }, "replace");
+      } else if (e.key === " " && (e.shiftKey || command)) {
+        e.preventDefault();
+        startRange(
+          e.shiftKey ? { tableId, kind: "row", r: active.endR, c: -1 } : { tableId, kind: "col", r: -1, c: active.endC },
+          "replace"
+        );
+      } else if (command && e.key.toLowerCase() === "d") {
+        const bounds = range_bounds(active);
+        const top = bounds.top === bounds.bottom ? bounds.top - 1 : bounds.top;
+        if (top < 0) return;
+        e.preventDefault();
+        fill(tableId, { ...bounds, top, bottom: top }, { ...bounds, top });
+      }
     };
     document.addEventListener("paste", onPaste);
     document.addEventListener("copy", onCopy);
@@ -272,9 +296,11 @@ export function TableView({ table, editable }: TableViewProps) {
 
   useEffect(() => {
     if (activeRange?.kind !== "cell") return;
-    tableRef.current
-      ?.querySelector(`tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const cell = tableRef.current?.querySelector<HTMLElement>(
+      `tr[data-row="${activeRange.endR}"] td[data-column="${activeRange.endC}"] .cell`
+    );
+    cell?.focus({ preventScroll: true });
+    cell?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeRange?.kind, activeRange?.endR, activeRange?.endC]);
 
   useEffect(() => {
@@ -360,7 +386,6 @@ export function TableView({ table, editable }: TableViewProps) {
           value={query}
           onChange={(event) => setParam(filterKey, event.target.value)}
         />
-        <span className="subtitle">{view.rows.length}/{table.cells.length} rows</span>
         <MenuButton label={`Columns ${visibleColumns.length}/${columns}`} title="Choose, reorder, and freeze columns">
           {() => (
             <Menu
@@ -401,28 +426,47 @@ export function TableView({ table, editable }: TableViewProps) {
             />
           )}
         </MenuButton>
-        <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
-        <span className="subtitle">{zoom}%</span>
-        <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
+        <div className="toggle">
+          <Button label="−" title="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(zoom - ZOOM_STEP)} />
+          <Button label={`${zoom}%`} title="Reset zoom to 100%" onClick={() => setZoom(100)} />
+          <Button label="+" title="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(zoom + ZOOM_STEP)} />
+        </div>
         {editable && (
-          <MenuButton label="Replace" title="Find text in cells and replace every match">
-            {(close) => {
-              const matches = table.cells.flat().filter((cell) => cell_matches(cell, findText)).length;
-              return (
-                <Menu>
-                  <input placeholder="find" value={findText} onChange={(e) => setFindText(e.target.value)} />
-                  <input placeholder="replace with" value={replacement} onChange={(e) => setReplacement(e.target.value)} />
-                  <Button
-                    label={`Replace in ${matches} cells`}
-                    disabled={matches === 0}
-                    onClick={() => {
-                      replaceText(tableId, findText, replacement);
-                      close();
-                    }}
+          <MenuButton
+            label={inSelection ? "Replace in selection" : "Replace"}
+            title={inSelection ? "Find text in the selected cells and replace every match" : "Find text in cells and replace every match"}
+          >
+            {(close) => (
+              <Menu>
+                <input
+                  ref={trackReplacePanel}
+                  placeholder="find"
+                  value={textQuery.find}
+                  onChange={(e) => setTextQuery({ ...textQuery, find: e.target.value })}
+                />
+                <input
+                  placeholder="replace with"
+                  value={textQuery.replacement}
+                  onChange={(e) => setTextQuery({ ...textQuery, replacement: e.target.value })}
+                />
+                <label className="group">
+                  <input
+                    type="checkbox"
+                    checked={textQuery.matchCase}
+                    onChange={(e) => setTextQuery({ ...textQuery, matchCase: e.target.checked })}
                   />
-                </Menu>
-              );
-            }}
+                  Match case
+                </label>
+                <Button
+                  label={`Replace in ${matchedCells.length} ${inSelection ? "selected " : ""}cells`}
+                  disabled={matchedCells.length === 0}
+                  onClick={() => {
+                    replaceText(tableId, textQuery, matchedCells);
+                    close();
+                  }}
+                />
+              </Menu>
+            )}
           </MenuButton>
         )}
       </div>
@@ -439,7 +483,9 @@ export function TableView({ table, editable }: TableViewProps) {
         </div>
       )}
       {view.error && <div className="table-filter-error">{view.error}</div>}
-      {editable && <div className="table-meta">{columns} cols × {table.cells.length} rows</div>}
+      {(editable || query) && (
+        <div className="table-meta">{columns} cols × {query && `${view.rows.length} of `}{table.cells.length} rows</div>
+      )}
       <div className="table-frame" onClick={selectFromEdge}>
         <div ref={scrollRef}>
           <table className="table-view" ref={tableRef} style={{ zoom: zoom / 100 }}>
@@ -548,12 +594,14 @@ export function TableView({ table, editable }: TableViewProps) {
                       className={classNames(
                         colClass(rowWindow.from + offset, c),
                         frozen(c) && "frozen",
-                        inFillTarget(row.index, c) && "fill-target"
+                        inFillTarget(row.index, c) && "fill-target",
+                        matchedKeys.has(cell_key({ r: row.index, c })) && "match",
+                        cell.type === CellType.Number && "number"
                       )}
                       style={frozenStyle(c)}
                     >
                       {fillSource && row.index === fillSource.bottom && c === fillSource.right && (
-                        <span className="fill-handle" title="Drag to fill down or right" onMouseDown={beginFill} />
+                        <span className="fill-handle" title="Drag to fill in any direction" onMouseDown={beginFill} />
                       )}
                       <CellComponent
                         cell={cell}

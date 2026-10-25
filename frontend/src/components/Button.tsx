@@ -6,6 +6,7 @@ import { Icon, IconName } from "./Icon";
 export interface ButtonProps {
   label?: string;
   icon?: IconName;
+  swatch?: string;
   ghost?: boolean;
   active?: boolean;
   disabled?: boolean;
@@ -13,7 +14,7 @@ export interface ButtonProps {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<unknown>;
 }
 
-export function Button({ label, icon, ghost, active, disabled, title, onClick }: ButtonProps) {
+export function Button({ label, icon, swatch, ghost, active, disabled, title, onClick }: ButtonProps) {
   const [state, setState] = useState(buttonFsm.initial);
   const notify = useStore((store) => store.notices_push);
   const send = (event: Parameters<typeof buttonFsm.next>[1]) => setState((current) => buttonFsm.next(current, event));
@@ -42,7 +43,7 @@ export function Button({ label, icon, ghost, active, disabled, title, onClick }:
       onMouseUp={() => send("mouseup")}
       onClick={perform}
     >
-      {icon ? <Icon name={icon} /> : label}
+      {icon ? <Icon name={icon} /> : swatch ? <span className="dot" style={{ background: swatch }} /> : label}
     </button>
   );
 }

@@ -1,6 +1,6 @@
 import { Cell, CellType, Frame, SavedView, Table, TableFunction } from "../../types/domain";
 import type { SetStore, StoreData } from "../store";
-import type { Bounds } from "../selectors/tableSelectors";
+import { Bounds, cell_key } from "../selectors/tableSelectors";
 
 interface Edit {
   tableId: string;
@@ -31,8 +31,17 @@ const valueCell = (value: string): Cell => ({
   ref: null,
 });
 
-export const cell_matches = (cell: Cell, find: string) =>
-  find !== "" && cell.type !== CellType.TableRef && cell.value.includes(find);
+export interface TextQuery {
+  find: string;
+  replacement: string;
+  matchCase: boolean;
+}
+
+const text_pattern = ({ find, matchCase }: TextQuery) =>
+  new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), matchCase ? "g" : "gi");
+
+export const cell_matches = (cell: Cell, query: TextQuery) =>
+  query.find !== "" && cell.type !== CellType.TableRef && cell.value.search(text_pattern(query)) >= 0;
 
 export function fill_values(source: string[], count: number): string[] {
   const numbers = source.map(Number);
@@ -47,20 +56,26 @@ export function fill_values(source: string[], count: number): string[] {
   );
 }
 
+const span = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
 function fill_cells(cells: Cell[][], source: Bounds, target: Bounds): Cell[][] {
   const next = cells.map((row) => [...row]);
-  if (target.bottom > source.bottom) {
-    for (let c = source.left; c <= source.right; c++) {
-      const values = cells.slice(source.top, source.bottom + 1).map((row) => row[c].value);
-      fill_values(values, target.bottom - source.bottom)
-        .forEach((value, i) => (next[source.bottom + 1 + i][c] = valueCell(value)));
-    }
-  } else {
-    for (let r = source.top; r <= source.bottom; r++) {
-      const values = cells[r].slice(source.left, source.right + 1).map((cell) => cell.value);
-      fill_values(values, target.right - source.right)
-        .forEach((value, i) => (next[r][source.right + 1 + i] = valueCell(value)));
-    }
+  const vertical = target.top !== source.top || target.bottom !== source.bottom;
+  const forward = vertical ? target.bottom > source.bottom : target.right > source.right;
+  const step = forward ? 1 : -1;
+  const count = vertical
+    ? target.bottom - target.top - (source.bottom - source.top)
+    : target.right - target.left - (source.right - source.left);
+  for (const line of vertical ? span(source.left, source.right) : span(source.top, source.bottom)) {
+    const along = vertical ? span(source.top, source.bottom) : span(source.left, source.right);
+    const ordered = forward ? along : along.reverse();
+    const values = ordered.map((at) => (vertical ? cells[at][line] : cells[line][at]).value);
+    const edge = ordered[ordered.length - 1];
+    fill_values(values, count).forEach((value, i) => {
+      const at = edge + step * (i + 1);
+      if (vertical) next[at][line] = valueCell(value);
+      else next[line][at] = valueCell(value);
+    });
   }
   return next;
 }
@@ -195,14 +210,21 @@ export const createTablesSlice = (set: SetStore) => ({
       })
     ),
 
-  tables_replaceText: (tableId: string, find: string, replacement: string) =>
+  tables_replaceText: (tableId: string, query: TextQuery, scope: { r: number; c: number }[]) =>
     set((state) =>
-      applyEdit(state, tableId, (table) => ({
-        ...table,
-        cells: table.cells.map((row) =>
-          row.map((cell) => (cell_matches(cell, find) ? valueCell(cell.value.split(find).join(replacement)) : cell))
-        ),
-      }))
+      applyEdit(state, tableId, (table) => {
+        const inScope = new Set(scope.map(cell_key));
+        return {
+          ...table,
+          cells: table.cells.map((row, r) =>
+            row.map((cell, c) =>
+              inScope.has(cell_key({ r, c })) && cell_matches(cell, query)
+                ? valueCell(cell.value.replace(text_pattern(query), () => query.replacement))
+                : cell
+            )
+          ),
+        };
+      })
     ),
 
   tables_fill: (tableId: string, source: Bounds, target: Bounds) =>
@@ -211,10 +233,10 @@ export const createTablesSlice = (set: SetStore) => ({
   tables_clearCells: (tableId: string, selected: { r: number; c: number }[]) =>
     set((state) =>
       applyEdit(state, tableId, (table) => {
-        const cleared = new Set(selected.map(({ r, c }) => `${r}:${c}`));
+        const cleared = new Set(selected.map(cell_key));
         return {
           ...table,
-          cells: table.cells.map((row, r) => row.map((cell, c) => (cleared.has(`${r}:${c}`) ? emptyCell() : cell))),
+          cells: table.cells.map((row, r) => row.map((cell, c) => (cleared.has(cell_key({ r, c })) ? emptyCell() : cell))),
         };
       })
     ),

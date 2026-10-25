@@ -90,6 +90,36 @@ def test_watch_paths_are_globs_and_hooks_end_with_the_run(tmp_path):
     assert all(not module._forward_hooks for module in net.modules())
 
 
+def test_watch_a_module_called_twice_in_one_step_keeps_both_outputs(tmp_path):
+    import numpy as np
+
+    class Shared(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.block = torch.nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.block(torch.relu(self.block(x)))
+
+    net = Shared()
+    outputs = []
+    net.block.register_forward_hook(lambda _m, _i, out: outputs.append(out.detach().numpy().copy()))
+
+    @log.run(project="p", runs_root=str(tmp_path))
+    def main():
+        log.watch(net, paths=["block"])
+        for step in range(2):
+            log.log("loss", 1.0, step=step)
+            net(torch.ones(1, 2))
+
+    main()
+    tensors = _rundir(tmp_path) / "epoch_0000" / "tensors"
+    rows = [json.loads(line) for line in (tensors / "index.jsonl").read_text().splitlines() if line.strip()]
+    assert [(row["path"], row["step"]) for row in rows] == [("block", 0), ("block@2", 0), ("block", 1), ("block@2", 1)]
+    assert np.allclose(np.load(tensors / rows[0]["file"]), outputs[0])
+    assert np.allclose(np.load(tensors / rows[1]["file"]), outputs[1])
+
+
 def test_checkpoint_cadence(tmp_path):
     net = torch.nn.Linear(2, 2)
 
@@ -171,3 +201,58 @@ def test_export_figure_nature_preset_is_a_single_column_figure(tmp_path, monkeyp
     assert width_mm <= 89
     with pytest.raises(log.errors.RendererUnavailableError):
         log.export.figure("p.r.epoch_0000.loss", str(out), renderer="proplot")
+
+
+def test_export_figure_draws_what_the_ui_shows(tmp_path, monkeypatch):
+    import matplotlib.axes
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(3):
+            log.log("loss", 1.0 / (step + 1), step=step)
+            log.log("accuracy", step / 2, step=step)
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    drawn = {}
+    original = matplotlib.axes.Axes.plot
+
+    def record(self, xs, ys, label=None, **kwargs):
+        drawn[label] = (list(xs), list(ys))
+        return original(self, xs, ys, label=label, **kwargs)
+
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", record)
+    log.export.figure("p.r.metrics", str(tmp_path / "metrics.png"))
+    assert drawn == {"loss": ([0, 1, 2], [1.0, 0.5, 1 / 3]), "accuracy": ([0, 1, 2], [0.0, 0.5, 1.0])}
+
+    edited = {
+        "name": "loss", "kind": "column", "column_names": ["step", "loss"], "row_names": None,
+        "source_path": "p.r.epoch_0000.loss", "representation": "line",
+        "cells": [[{"type": "number", "value": str(step), "ref": None}, {"type": "number", "value": "7", "ref": None}] for step in range(2)],
+    }
+    (tmp_path / "views").mkdir()
+    (tmp_path / "views" / "p.r.epoch_0000.loss.json").write_text(json.dumps(edited))
+    drawn.clear()
+    log.export.figure("p.r.epoch_0000.loss", str(tmp_path / "edited.png"))
+    assert drawn == {"loss": ([0.0, 1.0], [7.0, 7.0])}
+
+    with pytest.raises(log.errors.ViewNotFoundError):
+        log.export.figure("p.gone.metrics", str(tmp_path / "gone.png"))
+
+
+def test_export_figure_skips_boolean_scalars(tmp_path, monkeypatch):
+    import matplotlib.axes
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(3):
+            log.log("loss", 1.0 / (step + 1), step=step)
+            log.log("converged", step == 2, step=step)
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    drawn = []
+    original = matplotlib.axes.Axes.plot
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", lambda self, xs, ys, label=None, **kw: drawn.append(label) or original(self, xs, ys, label=label, **kw))
+    log.export.figure("p.r.metrics", str(tmp_path / "metrics.png"))
+    assert drawn == ["loss"]

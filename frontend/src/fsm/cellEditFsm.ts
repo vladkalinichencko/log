@@ -1,12 +1,12 @@
 import { makeFsm } from "./baseFsm";
 
 type CellEditState = "display" | "editing";
-type CellEditEvent = "dblclick" | "enter" | "esc";
+type CellEditEvent = "begin" | "enter" | "esc";
 
 export const cellEditFsm = makeFsm<CellEditState, CellEditEvent>(
   ["display", "editing"],
   {
-    display: { dblclick: "editing" },
+    display: { begin: "editing" },
     editing: { enter: "display", esc: "display" },
   },
 );

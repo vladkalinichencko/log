@@ -110,9 +110,9 @@ def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
     return Table(
         name="metrics",
         kind=TableKind.grid,
-        column_names=["step", "epoch", *names],
+        column_names=["step", "epoch", "wall_time", "rank", *names],
         cells=[
-            [Cell(CellType.number, str(row["step"])), Cell(CellType.number, str(epoch))]
+            [_scalar_cell(row["step"]), _scalar_cell(epoch), _scalar_cell(row["wall_time"]), _scalar_cell(row["rank"])]
             + [_scalar_cell(row["scalars"].get(name)) for name in names]
             for epoch, row in rows
         ],
@@ -122,7 +122,9 @@ def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
 
 
 def _scalar_cell(value) -> Cell:
-    return Cell(CellType.empty, "") if value is None else Cell(CellType.number, str(value))
+    if value is None:
+        return Cell(CellType.empty, "")
+    return Cell(CellType.bool if isinstance(value, bool) else CellType.number, str(value))
 
 
 def _epoch_table(epoch_path: str, epoch_dir: str, storage: StoragePort) -> Table:
@@ -154,7 +156,7 @@ def _tensor_table(path: str, leaf: str, epoch_dir: str, latest: dict, storage: S
 
 def _scalar_table(path: str, leaf: str, epoch_dir: str, storage: StoragePort) -> Table:
     rows = [
-        [Cell(CellType.number, str(value)) for value in (
+        [_scalar_cell(value) for value in (
             row["step"], row["samples_seen"], row["wall_time"], row["rank"], row["scalars"][leaf]
         )]
         for row in read_jsonl(storage, f"{epoch_dir}/metrics.jsonl")

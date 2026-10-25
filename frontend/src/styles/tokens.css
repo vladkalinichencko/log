@@ -4,8 +4,9 @@
   --space-2: 16px;
   --space-3: 24px;
   --space-4: 32px;
-  --radius: 6px;
-  --radius-control: 2px;
+  --radius: 2px;
+  --radius-float: 6px;
+  --control: 32px;
   --gray-0: #ffffff;
   --gray-50: #fafafa;
   --gray-100: #f2f2f2;
@@ -64,14 +65,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-:root[data-theme="dark"] .icon {
-  filter: invert(1);
-}
-
 h1 {
   margin: var(--space) 0;
   font-weight: 600;
   font-size: var(--text-page);
+  overflow-wrap: anywhere;
 }
 
 .subtitle {
@@ -85,6 +83,10 @@ h2,
 h3 {
   margin: var(--space) 0;
   font-weight: 600;
+}
+
+p {
+  margin: var(--space) 0;
 }
 
 table {
@@ -101,6 +103,7 @@ caption {
 
 th,
 td {
+  padding: 0;
   border: 1px solid var(--gray-200);
   text-align: left;
   vertical-align: middle;
@@ -125,13 +128,17 @@ tbody tr:hover {
 
 .cell {
   display: block;
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
 }
 
 .link {
   color: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.cell:focus {
+  outline: none;
 }
 
 .cell.selected {
@@ -163,7 +170,7 @@ th.col-selected {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
   border: none;
   background: transparent;
   font: inherit;
@@ -178,17 +185,19 @@ ul {
 }
 
 li {
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
   border-bottom: 1px solid var(--gray-200);
 }
 
 button {
   font: inherit;
-  padding: calc(var(--space) / 1.5) var(--space);
+  height: var(--control);
+  padding: 0 var(--space);
   border: 1px solid var(--gray-200);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--gray-0);
   color: var(--gray-900);
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -223,11 +232,19 @@ button:disabled {
 }
 
 button.ghost {
-  padding: calc(var(--space) / 2);
+  min-width: var(--control);
+  padding: 0 var(--space-0-5);
   border: none;
   background: none;
+  color: var(--gray-600);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+}
+
+button.ghost[data-state="hover"],
+button.ghost.active {
+  color: var(--gray-900);
 }
 
 button.ghost[data-state="hover"] {
@@ -260,12 +277,17 @@ button.active {
   width: var(--icon);
   height: var(--icon);
   display: block;
+  background: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
 }
 
 input {
   font: inherit;
-  padding: calc(var(--space) / 1.5) var(--space);
-  border: 1px solid var(--gray-400);
+  height: var(--control);
+  padding: 0 var(--space);
+  border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   background: var(--gray-0);
   color: var(--gray-900);
@@ -275,7 +297,9 @@ input::placeholder {
   color: var(--gray-400);
 }
 
-input[type="range"] {
+input[type="range"],
+input[type="checkbox"] {
+  height: auto;
   border: none;
   padding: 0;
   background: none;
@@ -284,7 +308,8 @@ input[type="range"] {
 
 select {
   font: inherit;
-  padding: calc(var(--space) / 1.5) var(--space);
+  height: var(--control);
+  padding: 0 var(--space);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   background: var(--gray-0);
@@ -297,7 +322,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: var(--space);
-  padding: var(--space) calc(var(--space) * 1.5);
+  padding: var(--space) var(--space-3);
 }
 
 .content .bar {
@@ -305,9 +330,9 @@ select {
   padding-right: 0;
 }
 
-.tile .bar {
-  padding-left: var(--space);
-  padding-right: var(--space);
+.tile .bar,
+.modal .bar {
+  padding: 0;
 }
 
 .tile .bar button,
@@ -335,7 +360,6 @@ select {
 
 .tile table {
   width: 100%;
-  height: 100%;
   margin: 0;
 }
 
@@ -360,6 +384,19 @@ select {
 
 .push {
   margin-left: auto;
+}
+
+.bar nav {
+  min-width: 0;
+}
+
+.bar .push {
+  flex: 0 1 var(--menu-width);
+  min-width: 0;
+}
+
+.bar .push > input {
+  width: 100%;
 }
 
 .error {
@@ -389,38 +426,48 @@ select {
 .table-frame > div {
   width: 100%;
   height: 100%;
-  max-width: 100%;
+  min-width: 0;
   overflow: auto;
+}
+
+.table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  container-type: inline-size;
 }
 
 .table-filter {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space);
-  margin-bottom: calc(var(--space) / 2);
 }
 
 .table-filter input {
-  flex: 1 1 auto;
+  flex: 1 1 var(--menu-column);
   min-width: 0;
+}
+
+@container (max-width: 480px) {
+  .table-filter input {
+    flex-basis: 100%;
+  }
 }
 
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: calc(var(--space) / 2);
-  margin-bottom: calc(var(--space) / 2);
+  gap: var(--space-0-5);
 }
 
 .filter-chips button {
-  padding: calc(var(--space) / 2) var(--space);
   color: var(--gray-600);
 }
 
 .table-filter-error {
   color: var(--accent);
   font-size: var(--text-meta);
-  margin-bottom: calc(var(--space) / 2);
 }
 
 .table-view {
@@ -446,11 +493,12 @@ select {
   display: flex;
   align-items: center;
   margin-left: auto;
-  padding-right: calc(var(--space) / 2);
+  padding-right: var(--space-0-5);
 }
 
 .column-actions button {
-  color: var(--gray-600);
+  min-width: var(--space-3);
+  height: var(--space-3);
   font-size: var(--text-meta);
 }
 
@@ -491,6 +539,14 @@ select {
   cursor: crosshair;
 }
 
+.table-view td.number {
+  text-align: right;
+}
+
+.table-view td.match {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .table-view td.fill-target {
   outline: 1px dashed var(--gray-600);
   outline-offset: -1px;
@@ -502,13 +558,20 @@ select {
   background: var(--gray-0);
 }
 
-.table-view th.frozen {
+.table-view thead th {
+  position: sticky;
+  top: 0;
   z-index: 3;
+  background: var(--gray-100);
+}
+
+.table-view thead th.frozen {
+  z-index: 4;
 }
 
 .table-view .selection-column,
 .table-view .run-selection {
-  width: 40px;
+  width: var(--control);
 }
 
 .table-view .run-selection button {
@@ -528,13 +591,13 @@ select {
   margin: var(--space) auto;
   padding: var(--space);
   border: 1px solid var(--gray-400);
-  border-radius: var(--radius);
+  border-radius: var(--radius-float);
   background: var(--gray-0);
   box-shadow: var(--shadow);
 }
 
 .comparison-panel {
-  margin-top: calc(var(--space) * 2);
+  margin-top: var(--space-2);
 }
 
 .table-frame > button {
@@ -542,7 +605,7 @@ select {
 }
 
 .table-frame > div > button {
-  margin: 0 0 calc(var(--space) * 2);
+  margin: 0 0 var(--space-2);
 }
 
 .resize-handle {
@@ -572,7 +635,6 @@ input.picking {
 .table-meta {
   color: var(--gray-600);
   font-size: var(--text-meta);
-  margin: var(--space) 0 0;
 }
 
 .fade-scroll-x {
@@ -585,18 +647,18 @@ input.picking {
   mask-image: linear-gradient(
     to right,
     transparent,
-    black calc(var(--space) * 2),
+    black var(--space-2),
     black calc(100% - var(--space) * 2),
     transparent
   );
   -webkit-mask-image: linear-gradient(
     to right,
     transparent,
-    black calc(var(--space) * 2),
+    black var(--space-2),
     black calc(100% - var(--space) * 2),
     transparent
   );
-  padding: 0 calc(var(--space) * 2);
+  padding: 0 var(--space-2);
 }
 
 .fade-scroll-x::-webkit-scrollbar {
@@ -611,13 +673,13 @@ input.picking {
 .fade-scroll-y.scrollable {
   mask-image: linear-gradient(
     transparent,
-    black calc(var(--space) * 1.5),
+    black var(--space-2),
     black calc(100% - var(--space) * 1.5),
     transparent
   );
   -webkit-mask-image: linear-gradient(
     transparent,
-    black calc(var(--space) * 1.5),
+    black var(--space-2),
     black calc(100% - var(--space) * 1.5),
     transparent
   );
@@ -628,7 +690,7 @@ input.picking {
 }
 
 .data-section {
-  margin-top: calc(var(--space) * 2);
+  margin-top: var(--space-2);
 }
 
 .section-heading {
@@ -671,21 +733,22 @@ input.picking {
 }
 
 .dot {
+  display: block;
   width: var(--icon);
   height: var(--icon);
   border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.dot.active {
-  outline: 2px solid var(--gray-600);
-  outline-offset: 2px;
 }
 
 .content {
-  padding: calc(var(--space) * 1.5);
+  padding: var(--space) var(--space-3) var(--space-3);
+}
+
+@media (max-width: 600px) {
+  .bar,
+  .content {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
 }
 
 .anchor {
@@ -697,7 +760,7 @@ input.picking {
   min-width: var(--menu-width);
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
+  border-radius: var(--radius-float);
   box-shadow: var(--shadow);
   z-index: 10;
   max-height: var(--menu-height);
@@ -717,7 +780,8 @@ input.picking {
 }
 
 .run-hero,
-.stat-strip {
+.stat-strip,
+.execution-strip {
   border: 1px solid var(--gray-200);
   border-radius: var(--radius);
   background: var(--gray-0);
@@ -728,6 +792,41 @@ input.picking {
   overflow: hidden;
 }
 
+.run-hero .rangeslider-mask-min,
+.run-hero .rangeslider-mask-max {
+  fill: var(--gray-100) !important;
+  fill-opacity: 0.8 !important;
+}
+
+.run-hero .rangeslider-handle-min,
+.run-hero .rangeslider-handle-max {
+  fill: var(--gray-0) !important;
+  stroke: var(--gray-600) !important;
+}
+
+.execution-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: var(--space-2);
+}
+
+.execution-lane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4) * 2) 1fr;
+  align-items: center;
+  gap: var(--space);
+}
+
+.execution-lane > div {
+  display: flex;
+  height: var(--space-3);
+}
+
+.execution-lane i {
+  flex: 1;
+}
+
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--menu-width), 1fr));
@@ -735,7 +834,6 @@ input.picking {
 
 .stat {
   position: relative;
-  min-height: calc(var(--space-4) * 4);
   padding: var(--space-2);
   border-right: 1px solid var(--gray-200);
 }
@@ -753,8 +851,8 @@ input.picking {
 
 .stat strong {
   display: block;
-  margin-top: var(--space);
-  font-size: var(--text-page);
+  margin: var(--space) 0 var(--space-3);
+  font-size: var(--text-section);
   overflow-wrap: anywhere;
 }
 
@@ -793,7 +891,7 @@ input.picking {
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
   border-left: 2px solid var(--critical);
-  border-radius: var(--radius);
+  border-radius: var(--radius-float);
   box-shadow: var(--shadow);
 }
 
@@ -815,12 +913,12 @@ input.picking {
 }
 
 .menu > div {
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
   cursor: pointer;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: calc(var(--space) / 2);
+  gap: var(--space-0-5);
 }
 
 .menu:not(.columns) > div:hover,
@@ -835,7 +933,7 @@ input.picking {
 .menu.panel {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--space) / 2);
+  gap: var(--space);
   padding: var(--space);
 }
 
@@ -861,19 +959,19 @@ input.picking {
   position: sticky;
   top: 0;
   margin: 0;
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
   background: linear-gradient(var(--gray-0) 55%, transparent);
   color: var(--gray-600);
   font-size: var(--text-meta);
 }
 
 .menu-section > div {
-  padding: calc(var(--space) / 1.5) var(--space);
+  padding: var(--space-0-5) var(--space);
   cursor: pointer;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: calc(var(--space) / 2);
+  gap: var(--space-0-5);
 }
 
 .menu-section > div:hover {
@@ -882,17 +980,16 @@ input.picking {
 
 .modal {
   position: fixed;
-  inset: calc(var(--space) * 2);
+  z-index: 9;
+  inset: var(--space-2);
+  padding: var(--space-2);
   background: var(--gray-0);
   border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
+  border-radius: var(--radius-float);
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-}
-
-.modal .bar {
-  padding: var(--space);
+  gap: var(--space-2);
 }
 
 .tile {
@@ -908,8 +1005,13 @@ input.picking {
 .tile-body {
   display: flex;
   flex-direction: column;
+  gap: var(--space);
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.tile > .tile-body {
+  padding: var(--space);
 }
 
 .tile-content {

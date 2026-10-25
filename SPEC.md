@@ -152,6 +152,7 @@ Neither owns the data model or imposes styles; both are off by default.
 | vitest | Frontend unit tests (reducers, selectors, FSMs). |
 | @testing-library/react | Component render tests. |
 | jsdom | The in-memory DOM that vitest runs component tests against (`test.environment = "jsdom"` in `vite.config.ts`). Without it `render(<Component/>)` throws `document is not defined`. |
+| playwright | Layout check in a real browser (`npm run check:layout`): jsdom computes no layout, so spacing, control heights, insets and overflow can only be measured in Chromium. Dev dependency only; pinned to the version whose Chromium is installed. |
 
 ---
 
@@ -242,6 +243,8 @@ log/
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
     index.html                    # the app entry
     design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
+    scripts/
+      check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens, and on any page element painted over an open modal
     src/
       main.tsx                    # React root, router
       store/
@@ -285,7 +288,7 @@ log/
         MenuButton.tsx            # a Button that toggles its own popup (menu_fsm), closes on outside click
         Notices.tsx               # fixed failure stack + attempt(label, work): a failed job becomes a notice whose Retry repeats it
         LoadError.tsx             # in-place failure of a view: message + Retry
-        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics + status strip
+        RunOverview.tsx           # run screen head: hero line chart of <run>.metrics with its range slider, status strip, execution strip
         Sparkline.tsx             # hand-rolled SVG polyline trend inside a stat
         TileFrame.tsx             # one tile's size, resize handle and snap; shared by Dashboard and InlineView
         Player.tsx                # frame player over tensor steps (player_fsm)
@@ -300,7 +303,7 @@ log/
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
-        setup.ts                  # vitest afterEach(cleanup)
+        setup.ts                  # vitest afterEach(cleanup); a no-op scrollIntoView, which jsdom lacks
         tableSelectors.test.ts
         cellEditFsm.test.ts
         TableView.test.tsx
@@ -418,7 +421,7 @@ Field rules:
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns = run meta (name, status, samples_seen) read from each `meta.json` |
 | `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
-| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart and status strip read this table. |
+| `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
 | `<project>.<run>.epoch_<N>.<scalar>` | `kind=column`; `column_names=["step","samples_seen","wall_time","rank",<scalar>]`; one row per `metrics.jsonl` row containing that scalar |
 | `<project>.<run>.epoch_<N>.<tensor-path>` (a `tensor_ref` cell) | drilling reads the `.npy` and returns `kind=grid` with the tensor's 2-D values (n-D flattened to 2-D in v1; n-D native is `[v3]`) |
@@ -715,7 +718,7 @@ The one FSM factory and its derivations:
 - `makeFsm(states, transitions)` (`baseFsm.ts`) → returns `{ initial, next(state, event) }`. Input: a states list + a `(state,event)->state` transition table. Output: a pure FSM object. Invalid transitions return the current state unchanged.
 - `button_fsm` = `makeFsm(["idle","hover","pressed","pending","done","error"], …)`. Every button and every `＋`/toolbar/representation control derives from this.
 - `load_fsm` = `makeFsm(["idle","loading","loaded","error"], …)`. Replaces a query library: every async fetch tracks its state here.
-- `cellEdit_fsm` = `makeFsm(["display","editing"], …)`. `display --dblclick--> editing`, `editing --enter/esc--> display`.
+- `cellEdit_fsm` = `makeFsm(["display","editing"], …)`. `display --begin--> editing` (double-click, or Enter / F2 on the focused cell), `editing --enter/esc--> display`; after editing, focus returns to the cell so the keyboard can continue.
 - `menu_fsm` = `makeFsm(["closed","open"], …)`. Right-click → `open`; pick / click-away → `closed`.
 - `player_fsm` = `makeFsm(["paused","playing"], …)`. Play → `playing`; pause or last frame → `paused`.
 - `connection_fsm` = `makeFsm(["connected","reconnecting"], …)` with max backoff 30s.
@@ -897,7 +900,7 @@ log.watch(
 - `paths`: optional `fnmatch` glob patterns (e.g. `"encoder.*"`); only matching module paths are hooked. `None` = all named modules with ≥1 parameter or that produce a tensor output.
 - Reference semantics (ADR-008): `WatchHandle` holds a `weakref` to `model`; hooks capture each tensor by `.detach()` and enqueue the detached tensor object (not a deep copy); the writer thread performs the CPU/NumPy copy. One `.detach()` + one `queue.put()` per hooked module per step on the main thread.
 - Returns `WatchHandle` with `.remove()`; hooks also auto-removed on run finish.
-- Documented (not errors): functional ops not captured; tied modules fire multiple times and get a numeric suffix `path#2`; dynamically created modules need a new `log.watch`.
+- Documented (not errors): functional ops not captured; a module called more than once in one step (a shared block applied twice, tied layers) logs each call: the first as `path`, the n-th as `path@n`, counted per (epoch, step) — before this the second call silently overwrote the first's file. The suffix is `@`, not `#`: a `#` in a UI link starts the URL fragment, so `/…block#2` would open `block`; dynamically created modules need a new `log.watch`.
 - Errors: `NoActiveRunError`, `InvalidPathError` (malformed glob).
 
 ### 9.5 `log.track`
@@ -984,7 +987,8 @@ log.tick(samples: int | None = None, **scalars: float) -> None
 ```
 log.export.figure(view_id: str, path: str, renderer: str = "matplotlib") -> str
 ```
-- Renders the table identified by `view_id` (via the running backend's table engine if reachable on `localhost`, else from files directly) to an image at `path`.
+- Renders the table identified by `view_id` to an image at `path`, through the backend's own table engine called in process (both packages install together; the engine is pure functions over the runs root). A saved view `views/<view_id>.json` — the table as edited in the UI — wins; otherwise `read_table(view_id)`, so any path the UI opens can be exported (a scalar leaf, `<project>.<run>.metrics`, a derived table). It is drawn as the UI's `line` representation: x is the `step` column (else the first column), every other column whose non-empty cells are all numbers is a line except bookkeeping (`samples_seen`, `wall_time`, `rank`, `epoch`), empty cells are gaps, a legend appears for more than one line. *(Revised 2026-10: the earlier text said "via the running backend if reachable on localhost, else from files"; both routes read the same files with the same code, so the HTTP route would only add a failure mode.)*
+- A table with no numeric series raises `ViewNotFoundError` naming the view.
 - `renderer`: `"matplotlib"` (default) or `"nature"` — a fixed Nature-journal preset expressed as matplotlib `rcParams` (single column 89 mm, 7 pt sans-serif, 0.5 pt axes, 300 dpi, no top/right spines). `proplot` was dropped (2026-10): its last release requires matplotlib < 3.5, which has no build for Python ≥ 3.11, so listing it made `pip install -e .` fail on a clean machine. Any other name raises `RendererUnavailableError` naming the supported renderers.
 - Returns the absolute path written.
 - Errors: `ViewNotFoundError`, `RendererUnavailableError`.
@@ -1338,15 +1342,15 @@ Every stateful element above is an explicit FSM named `<element>_fsm`, derived f
 
 For a `Table` these are essentially all operations that exist:
 
-1. Edit cell value (double-click → input; Enter = commit + deselect; Esc = cancel + deselect). `[v0]`
+1. Edit cell value (double-click, or Enter / F2 on the active cell → input; Enter = commit; Esc = cancel; focus stays on the cell). `[v0]` double-click; `[v1]` keyboard.
 2. Edit column name / row name (double-click). `[v1]`
 3. Add row / add column (right-click context menu). `[v0]`
 4. Remove row / remove column (right-click context menu; no confirm click — Ctrl+Z restores). `[v1]`
 5. Resize column width / row height (drag the border) — Excel-like. `[v1]` Width and height are table-scoped URL state; explicit minima are 80px for a column and 24px for a row so their controls cannot collapse.
 6. Zoom — Excel-like. `[v1]` `−` / `+` in the table's filter bar step the whole table (text, padding, widths) by 10% between 50% and 200% with CSS `zoom`; the level is table-scoped URL state (`zoom.<path>`, absent = 100%). Stored widths, heights and the row window stay in unzoomed CSS pixels: every measured size is divided by the element's `currentCSSZoom`.
-6a. Fill — drag the handle at the bottom-right of the active cell range down or right; an even numeric step continues as a series, anything else repeats; one undoable edit. `[v1]`
-6b. Find / replace — the editor's Replace panel takes a find text and a replacement, shows how many cells contain the text, and replaces every occurrence in every non-reference cell as one undoable edit; matching is plain, case-sensitive substring. `[v1]`
-7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end. Arrow keys move the active cell one step in visible (sorted, filtered, reordered) order, stopping at the edge; Shift+arrow moves the active end of the range instead; the active end is scrolled into view.
+6a. Fill — drag the handle at the bottom-right of the active cell range in any of the four directions; the dominant direction wins. An even numeric step continues as a series (backwards when filling up or left), anything else repeats cyclically (in reverse order when filling up or left); one undoable edit. Ctrl/Cmd+D fills down the way a spreadsheet does: the top row of the active range is copied into the rest of it, or, for a one-row range, the row above is copied into it. `[v1]`
+6b. Find / replace — the editor's Replace panel takes a find text, a replacement and a Match case box (off = ignore case); while it is open every matching cell is highlighted, and the button says how many cells it will change. With a range of more than one cell selected, the toolbar button reads `Replace in selection` and only the selected cells are searched. Every occurrence in every matching non-reference cell is replaced as one undoable edit; the find text is plain text, not a pattern. `[v1]`
+7. Select a cell / drag-select a range / select a whole row / a whole column. `[v1]` Shift extends the active rectangle from its anchor; Ctrl/Cmd adds another rectangle; drag moves the active end. Arrow keys move the active cell one step in visible (sorted, filtered, reordered) order, stopping at the edge; Shift+arrow moves the active end of the range instead; the active end is focused and scrolled into view. Shift+Space selects the active cell's row, Ctrl/Cmd+Space its column.
 8. Copy / cut / paste (Excel-compatible TSV, markdown tables, whitespace-separated numbers; a pasted block anchors at the active range's top-left cell and grows the table to fit; one undoable edit). `[v1]` Multiple copied ranges are emitted in selection order with a blank line between TSV blocks; Cut clears every selected cell as one edit.
 9. Aggregate a column / row / range → sum / mean / min / max / count; appears as a derived row/column. `[v1]`
 10. Merge / combine tables via the formula language (hierarchical `.`-addressing, Section 9.13); merging several tables allowed. `[v1]`
@@ -1354,7 +1358,7 @@ For a `Table` these are essentially all operations that exist:
 12. Change representation (grid / line / heatmap / histogram / scatter / trajectory as applicable). `[v0]` switch.
 13. Drill into a table-reference cell (click → navigate). `[v0]`
 14. Sort by one column; Shift-click adds an ordered secondary sort, and active sort indicators show precedence. `[v1]`
-15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`, `zoom.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. A comma separates filter clauses, so quoted values containing commas are not expressible yet.
+15. Filter rows, hide/reorder/freeze columns, and encode view choices in the URL. `[v1]` typed filters, ordered sorts, widths/heights, visible column order and the frozen leading prefix are table-scoped URL state (`filter.<path>`, `sort.<path>`, `width.<path>`, `height.<path>`, `columns.<path>`, `freeze.<path>`, `zoom.<path>`). `columns=none` is valid and the Columns menu remains available to restore a view. The header row stays at the top of the table's scroll box while its rows scroll (a collection table that scrolls with the page keeps its header in place only inside its own box). A comma separates filter clauses, so quoted values containing commas are not expressible yet.
 
 All edits create derived state / derived columns; source files are never mutated (consistent with `views/<id>.json`). Every edit is recorded in a change history (the undo stack), persisted into the same `views/<id>.json` so it survives closing and reopening a view (ADR-018) — the owner was explicit that reset-to-source must never be *the* way to undo a mistake; forward/back is, and it must keep working after the tab is gone.
 

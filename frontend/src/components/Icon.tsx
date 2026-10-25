@@ -29,5 +29,5 @@ interface IconProps {
 }
 
 export function Icon({ name }: IconProps) {
-  return <img className="icon" src={ICONS[name]} alt={name} />;
+  return <span className="icon" aria-hidden="true" style={{ maskImage: `url("${ICONS[name]}")` }} />;
 }

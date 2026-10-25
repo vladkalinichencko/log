@@ -38,6 +38,7 @@ Each rule below exists because an agent in this project broke it and a reviewer 
 14. **Read the decision record before deleting.** Before removing something that looks unused, search `SPEC.md` and `STATUS.md` for its name; an ADR may keep it on purpose.
 15. **Reproduce, fix, prove.** Reproduce the bug first, then fix it, then show that the new test fails without the fix. Run the production build and open the changed flow in a browser; dev mode hides build-only failures.
 16. **Report only what was checked.** Every "works" or "real" in a report or in `STATUS.md` names the test or live check behind it. Anything else is written as unverified.
+17. **A visual change passes the layout check.** Build, start the backend, run `npm run check:layout`: it opens every screen at 1400px and 390px and fails on spacing, text size, radius or control height outside the tokens, a second inset inside a surface, and overflow. Looking at one screenshot at one width is how the missing modal padding and the 390px overflow shipped.
 
 ## How to communicate
 

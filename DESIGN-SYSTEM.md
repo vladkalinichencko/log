@@ -14,8 +14,12 @@ The system has three layers:
 
 ## Exact visual rules
 
-- Spacing uses an `8px` base and only `4, 8, 16, 24, 32, 48, 64px`. Dense table cells use `8px`; comfortable cells use `14–16px` without changing type size.
-- Content is at most `1500px` wide, with `24px` desktop and `12px` mobile gutters.
+- Spacing uses an `8px` base and only `4, 8, 16, 24, 32, 48, 64px`. Dense table cells pad `4px 8px`; comfortable cells use `16px` without changing type size. `npm run check:layout` fails on any other padding, margin or gap, on a font size outside the five text tokens, and on a radius other than `2px` / `6px`.
+- Content is at most `1500px` wide, with `24px` desktop and `16px` mobile gutters (the scale has no `12px`).
+- **One inset per surface.** The page pads its content by the gutter, a modal by `16px`, a tile by `8px`; everything inside a surface starts at that inset and is spaced by the surface's gap, never by its own margin. A surface never contains a second page inset.
+- **One control height.** Every button, input and select outside a table is `32px` tall (`--control`); a segmented group shares that height. In-table actions (sort, filter) are `24px`, one level down on purpose.
+- **One ink per control.** Icons are masks filled with `currentColor`, so an icon, its label and its state change color together: muted (`--gray-600`) at rest, ink (`--gray-900`) on hover or when active. Control borders and input borders are the same `--gray-200`.
+- **Counts belong to their cause.** The `N of M rows` count appears under the filter only while a filter is active; the editor always shows `cols × rows` there.
 - Labels align left and numbers right. Property lists are two-column grids; spaces and arbitrary flex gaps may not fake alignment.
 - Section headings align index/title left and rationale right, separated by a `2px` top rule rather than a surrounding card.
 - Corners are `2px` for controls and data surfaces, `6px` only for floating menus/modals. Borders are `1px`; selection may use `2px`. Shadows belong only to floating surfaces.

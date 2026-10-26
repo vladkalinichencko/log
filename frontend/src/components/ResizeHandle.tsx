@@ -24,5 +24,12 @@ export function ResizeHandle({ onResize }: ResizeHandleProps) {
     window.addEventListener("mouseup", up);
   };
 
-  return <div className="resize-handle" data-state={state} onMouseDown={onMouseDown} />;
+  return (
+    <div
+      className="resize-handle"
+      data-state={state}
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={onMouseDown}
+    />
+  );
 }

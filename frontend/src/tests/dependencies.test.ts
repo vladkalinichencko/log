@@ -6,6 +6,8 @@ const ADAPTERS: Record<string, string[]> = {
   "plotly.js": ["modules/chart/plotly.tsx", "modules/chart/plotly-dist.d.ts"],
   "react-plotly.js": ["modules/chart/plotly.tsx"],
   zustand: ["store/store.ts"],
+  "@dnd-kit": ["modules/arrange/dndkit.tsx"],
+  motion: ["modules/arrange/dndkit.tsx"],
   "@fontsource/ibm-plex-mono": ["styles/tokens.css"],
 };
 

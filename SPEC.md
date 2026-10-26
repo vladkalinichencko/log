@@ -132,13 +132,15 @@ Dropped vs the earlier draft: **orjson** (stdlib `json` suffices for one user's 
 | vite | Dev server + production static build. Without it, hand-configured bundler. |
 | zustand | The single canonical state tree (one JS object in browser memory) with subscribe-by-slice. Lighter than Redux for one user, same store/selector/action model. Without it we hand-write a store + subscription. |
 | react-router-dom | URL ↔ route state (URL is state). Without it we hand-parse `location` and manage history. |
+| @dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities | Pointer drag-and-drop with sortable previews for rearranging tiles, including touch (HTML5 drag events never fire on touch screens). MIT, no paid tier. Imported only by `modules/arrange/dndkit.tsx`. Without it we hand-write pointer tracking, collision detection and the live preview of the other tiles shifting. |
+| motion | Layout animation for reorders that do not come from a drag (Alt+arrow): `layout` on an element animates it from its old slot to the new one. MIT, no paid tier. Imported only by `modules/arrange/dndkit.tsx`; duration comes from `--motion-slow`. Without it we hand-write FLIP measurement. |
 | plotly.js + react-plotly.js | The one chart framework behind the RENDER slot (ADR-006): line/heatmap/histogram + future 3D/interpretability views, one `Table → figure` mapping. Without it we hand-write SVG and cannot reach 3D/interactivity. |
 
 Dropped vs the earlier draft, with the replacement named:
 - **@tanstack/react-query** → replaced by our own `load_fsm` (a hand-written `idle → loading → loaded → error` FSM, ~30 lines) + `fetch`. We already require FSM-everywhere; a query library would be a second, redundant async-state system.
 - **@visx/visx** → superseded by **plotly.js** (ADR-006, revised): the owner chose one declarative chart framework for many styles + 3D + low effort over hand-drawn SVG. (The original draft dropped all charting libs and hand-drew SVG; that decision was reversed when 3D/interpretability views entered scope.)
 - **reselect** → selectors are hand-written memoized functions (close over last input/output). For a single-user tree the memo is a three-line helper.
-- **framer-motion** → no animations exist (Constraint), so nothing to interpolate.
+- **framer-motion** → superseded: the owner accepted `motion` (its successor) in 2026-10 for tile reorder animation, behind `modules/arrange`.
 
 ### 4.3 Conditional, only under measured v1+ performance pressure on large tables
 
@@ -311,6 +313,9 @@ log/
           series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
           plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
           plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
+        arrange/
+          index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
+          dndkit.tsx              # the dnd-kit + motion adapter: pointer/touch drag (8px activation), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
@@ -1603,7 +1608,7 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Consequences**: We write the cell, selection, edit FSM, and formula evaluator ourselves (small, testable). We do not get a spreadsheet's batteries for free; we add tiny MIT primitives only when profiling shows a need.
 
 ### ADR-013: Minimal frontend dependency set (drop query lib, selector lib, animation lib)
-**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom, **plotly.js + react-plotly.js** (Section 4.2). TanStack Query, reselect, and framer-motion are not used; their jobs are done by `load_fsm`, a memo helper, and (nothing — no animations). The charting lib is **kept** (plotly.js, ADR-006 revised): one declarative framework earns its place by covering many chart styles + 3D + interactivity that hand-drawn SVG cannot.
+**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom, **plotly.js + react-plotly.js** (Section 4.2). TanStack Query and reselect are not used; their jobs are done by `load_fsm` and a memo helper. (Revised 2026-10: dnd-kit and motion were added for tile rearranging, each behind `modules/arrange`.) The charting lib is **kept** (plotly.js, ADR-006 revised): one declarative framework earns its place by covering many chart styles + 3D + interactivity that hand-drawn SVG cannot.
 **Why**: Each dropped library either duplicates a mechanism we already require (FSM for async state) or exists to do something trivial (memoize a function, draw a polyline) or something the spec forbids (animations). Section 4's rule: a dependency is allowed only when the stdlib / a few lines / plain CSS cannot do the job.
 **Alternatives considered**: keep them for convenience (rejected — convenience alone is not justification per the dependency rule).
 **Consequences**: A little more first-party code (an FSM, a memo helper, SVG scale math), all small and unit-tested. Smaller bundle, fewer upgrade surfaces, one async-state model.

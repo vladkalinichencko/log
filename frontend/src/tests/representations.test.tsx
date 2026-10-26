@@ -24,7 +24,7 @@ describe("representations", () => {
       ],
       ["step", "samples_seen", "wall_time", "rank", "loss"]
     );
-    const trace = chartSpec({ table: series, representation: Representation.Line }).data[0] as any;
+    const trace = chartSpec({ table: series, representation: Representation.Line }).data.find((drawn: any) => drawn.name === "loss") as any;
     expect(trace.type).toBe("scatter");
     expect(trace.x).toEqual([0, 1]);
     expect(trace.y).toEqual([2, 1]);
@@ -116,6 +116,6 @@ describe("end labels", () => {
       source_path: null,
     };
     const labels = chartSpec({ table: overlay, representation: Representation.Line }).layout.annotations!.map((label) => [label.text, label.y]);
-    expect(labels).toEqual([["0.28", 0.28], ["0.3", 0.3], ["0.5", 0.78]]);
+    expect(labels).toEqual([["0.28", 0.28], ["0.3", 0.3], ["0.5", 0.88]]);
   });
 });

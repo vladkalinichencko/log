@@ -102,7 +102,7 @@ export function RunOverview({ path }: { path: string }) {
       </div>
       <div className="run-hero">
         {heroTable ? (
-          <Chart table={heroTable} representation={Representation.Line} hero marks={marks} />
+          <Chart table={heroTable} representation={Representation.Line} marks={marks} />
         ) : (
           <Placeholder label={metrics.table ? "no metrics logged" : "loading"} />
         )}

@@ -7,7 +7,7 @@ import { chartSpec } from "../modules/chart/plotly";
 import { useStore } from "../store/store";
 import { Cell, CellType, Representation, Table, TableKind } from "../types/domain";
 
-const plotted: { layout?: { shapes: { x0: number; line: { dash: string } }[]; annotations: { text: string; hovertext?: string }[] } } = {};
+const plotted: { data?: { yaxis?: string; x: number[]; text?: string[] }[]; layout?: { shapes: { x0: number; x1: number }[]; annotations: { text: string; x: number }[] } } = {};
 
 vi.mock("react-plotly.js", () => ({
   default: (props: typeof plotted) => {
@@ -45,7 +45,7 @@ describe("training timeline", () => {
     expect(spec.layout.yaxis).toMatchObject({ categoryarray: ["autograd · 0", "main · 0", "main · 1"], ticktext: ["autograd", "main", ""] });
   });
 
-  it("the run page flags epochs and checkpoints on the hero and splits the execution strip into phases", async () => {
+  it("the run page shades epochs, puts checkpoints in their lane under the hero and splits the execution strip into phases", async () => {
     const run = { ...grid("demo.t", [], []), kind: TableKind.Folder, column_names: null, cells: [link("metrics", "demo.t.metrics"), link("checkpoints", "demo.t.checkpoints"), link("spans", "demo.t.spans")] };
     const meta = { ...grid("demo.t.meta", ["key", "value"], [["status", "running"]]), kind: TableKind.Column };
     const metrics = grid("demo.t.metrics", ["step", "epoch", "wall_time", "rank", "loss"], [["0", "0", "0", "0", "2"], ["1", "0", "1", "0", "1.5"], ["2", "1", "2", "0", "1"]]);
@@ -57,9 +57,10 @@ describe("training timeline", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     useStore.getState().tables_setViews([run, meta, metrics, checkpoints, spans].map((view) => ({ ...view, id: view.source_path! })));
     render(<MemoryRouter><MainView path="demo.t" /></MemoryRouter>);
-    await waitFor(() => expect(plotted.layout?.shapes).toHaveLength(2));
-    expect(plotted.layout!.shapes.map((shape) => [shape.x0, shape.line.dash])).toEqual([[2, "solid"], [1, "dot"]]);
-    expect(plotted.layout!.annotations.slice(0, 2).map((label) => [label.text, label.hovertext])).toEqual([["epoch 1", undefined], ["◆", "checkpoint s1"]]);
+    await waitFor(() => expect(plotted.layout?.shapes).toHaveLength(1));
+    expect(plotted.layout!.shapes.map((band) => [band.x0, band.x1])).toEqual([[2, 2]]);
+    expect(plotted.layout!.annotations[0]).toMatchObject({ text: "epoch 1", x: 2 });
+    expect(plotted.data!.filter((trace) => trace.yaxis === "y2").map((lane) => [lane.x, lane.text])).toEqual([[[1], ["checkpoint s1"]]]);
     expect([...document.querySelectorAll(".execution-track span")].map((phase) => phase.textContent)).toEqual(["forward 25%", "backward 75%"]);
   });
 

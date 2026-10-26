@@ -9,7 +9,6 @@ export interface ChartMark {
 export interface ChartProps {
   table: Table;
   representation: Representation;
-  hero?: boolean;
   marks?: ChartMark[];
 }
 

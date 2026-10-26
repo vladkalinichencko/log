@@ -863,12 +863,50 @@ input.picking {
   height: 100%;
 }
 
-.chart-summary {
+.chart-head {
+  display: flex;
   flex: none;
-  overflow: hidden;
+  align-items: center;
+  gap: var(--space);
+  min-width: 0;
   padding: var(--space) var(--space-2) 0;
-  color: var(--gray-600);
   font-size: var(--text-meta);
+}
+
+.chart-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-0-5);
+  height: var(--space-3);
+  padding: 0 var(--space);
+  border: 1px solid var(--gray-200);
+  background: var(--gray-0);
+  font-size: var(--text-meta);
+  transition: opacity var(--motion-fast) var(--motion-curve);
+}
+
+.chart-chip::before {
+  content: "";
+  width: var(--space);
+  height: var(--space);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chart-chip span {
+  color: var(--gray-900);
+}
+
+.chart-chip[data-state="dimmed"] {
+  opacity: 0.4;
+}
+
+.chart-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gray-600);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -902,19 +940,19 @@ input.picking {
   }
 }
 
-.chart[data-hero] .rangeslider-mask-min,
-.chart[data-hero] .rangeslider-mask-max {
+.chart .rangeslider-mask-min,
+.chart .rangeslider-mask-max {
   fill: var(--gray-100) !important;
   fill-opacity: 0.8 !important;
 }
 
-.chart[data-hero] .rangeslider-handle-min,
-.chart[data-hero] .rangeslider-handle-max {
+.chart .rangeslider-handle-min,
+.chart .rangeslider-handle-max {
   fill: var(--gray-0) !important;
   stroke: var(--gray-600) !important;
 }
 
-.chart[data-hero] .annotation[data-index] {
+.chart .scatterlayer .trace:has(path.point) {
   cursor: pointer;
 }
 

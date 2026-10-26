@@ -7,7 +7,7 @@ import { useStore } from "../store/store";
 import { Cell, CellType, LiveEvent, Representation, Table, TableKind } from "../types/domain";
 
 const live: { send?: (event: LiveEvent) => void } = {};
-const plotted: { layout?: { shapes: object[]; annotations: object[] } } = {};
+const plotted: { data?: { yaxis?: string; x: number[]; text?: string[] }[]; layout?: object } = {};
 
 vi.mock("../api/websocket", () => ({
   connectWebSocket: (onMessage: (event: LiveEvent) => void) => {
@@ -18,7 +18,7 @@ vi.mock("../api/websocket", () => ({
 
 vi.mock("react-plotly.js", () => ({
   default: (props: typeof plotted) => {
-    plotted.layout = props.layout;
+    Object.assign(plotted, props);
     return null;
   },
 }));
@@ -59,7 +59,7 @@ describe("alerts", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("the run page flags every alert step on the hero chart", async () => {
+  it("the run page puts every alert step in the alerts lane under the hero chart", async () => {
     const run = table("demo.flags", TableKind.Folder, null, [
       [{ type: CellType.TableRef, value: "meta", ref: "demo.flags.meta" }],
       [{ type: CellType.TableRef, value: "metrics", ref: "demo.flags.metrics" }],
@@ -75,7 +75,7 @@ describe("alerts", () => {
     useStore.getState().tables_setViews([run, meta, metrics, alerts].map((view) => ({ ...view, id: view.source_path! })));
     render(<MemoryRouter><MainView path="demo.flags" /></MemoryRouter>);
     await vi.waitFor(() => expect(plotted.layout).toBeDefined());
-    expect(plotted.layout!.shapes).toEqual([expect.objectContaining({ x0: 2, x1: 2 })]);
-    expect(plotted.layout!.annotations[0]).toMatchObject({ x: 2, text: "⚑", hovertext: "loss is +6.0 standard deviations" });
+    const lanes = plotted.data!.filter((trace) => trace.yaxis === "y2");
+    expect(lanes.map((lane) => [lane.x, lane.text])).toEqual([[[2], ["loss is +6.0 standard deviations"]]]);
   });
 });

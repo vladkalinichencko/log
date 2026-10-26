@@ -6,7 +6,7 @@ import { MainView } from "../components/MainView";
 import { useStore } from "../store/store";
 import { Cell, CellType, Representation, Table, TableKind } from "../types/domain";
 
-const plotted: { data?: { name?: string; x: number[] }[]; layout?: { shapes: { x0: number }[]; annotations: { hovertext?: string }[] } } = {};
+const plotted: { data?: { name?: string; yaxis?: string; x: number[]; text?: string[] }[]; layout?: object } = {};
 
 vi.mock("react-plotly.js", () => ({
   default: (props: typeof plotted) => {
@@ -81,7 +81,6 @@ describe("overlay and splice", () => {
     fireEvent.click(await screen.findByText("resumed from demo.a"));
     await waitFor(() => expect(series()).toEqual([["demo.b", [2, 3]], ["demo.a", [0, 1]]]));
     expect(evaluated).toEqual(["splice(demo.a, demo.b)"]);
-    expect(plotted.layout!.shapes.map((shape) => shape.x0)).toEqual([2]);
-    expect(plotted.layout!.annotations[0].hovertext).toBe("resumed from demo.a");
+    expect(plotted.data!.filter((trace) => trace.yaxis === "y2").map((lane) => [lane.x, lane.text])).toEqual([[[2], ["resumed from demo.a"]]]);
   });
 });

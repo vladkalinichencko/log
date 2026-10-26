@@ -96,7 +96,7 @@ function RunOverlay({ runs }: { runs: string[] }) {
         <LoadError message={overlay.error} retry={overlay.retry} />
       ) : (
         <div className="run-hero">
-          {overlay.table ? <Chart table={overlay.table} representation={Representation.Line} hero /> : <Placeholder label="loading" />}
+          {overlay.table ? <Chart table={overlay.table} representation={Representation.Line} /> : <Placeholder label="loading" />}
         </div>
       )}
     </section>

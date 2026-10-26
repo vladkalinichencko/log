@@ -72,7 +72,9 @@ describe("InlineView", () => {
     expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(321);
     fireEvent.mouseMove(window, { clientX: 145, clientY: 145 });
     expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(365);
+    expect((handle.closest(".tile") as HTMLElement).style.transition).not.toContain("width");
     fireEvent.mouseUp(window, { clientX: 145, clientY: 145 });
+    expect((handle.closest(".tile") as HTMLElement).style.transition).toContain("width var(--motion-slow)");
     expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(365);
 
     expect(document.querySelector(".tile-grid > .tile input, .tile-grid > .tile .column-actions")).toBeNull();

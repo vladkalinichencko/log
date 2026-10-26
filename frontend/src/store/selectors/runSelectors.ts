@@ -161,6 +161,10 @@ export function execution_strip_selector(metrics: Table, columns: number): Execu
   return { lanes, median: median(all.map((cell) => cell.seconds)), slowest };
 }
 
+export function slowness(seconds: number, median: number, slowest: number): number {
+  return slowest > median ? Math.min(1, Math.max(0, (seconds - median) / (slowest - median))) : 0;
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = sorted.length / 2;

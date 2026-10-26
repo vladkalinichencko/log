@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
 import { TableView } from "../components/TableView";
-import { execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
+import { execution_strip_selector, run_stats_selector, slowness } from "../store/selectors/runSelectors";
 import { chartSpec } from "../modules/chart/plotly";
 import { useStore } from "../store/store";
 import { Cell, CellType, Representation, Table, TableKind } from "../types/domain";
@@ -154,5 +154,12 @@ describe("run overview", () => {
     render(<MemoryRouter><TableView table={scalars} /></MemoryRouter>);
     expect([...document.querySelectorAll("tbody td[data-column]")].map((td) => td.textContent)).toEqual(["1", "5", "4800", "ok"]);
     expect(document.querySelector("td[data-status]")).toBeNull();
+  });
+});
+
+describe("execution strip shading", () => {
+  it("an even run stays calm and only steps slower than the median turn the accent", () => {
+    expect([1, 1, 1].map((seconds) => slowness(seconds, 1, 1))).toEqual([0, 0, 0]);
+    expect([0.5, 1, 2, 3].map((seconds) => slowness(seconds, 1, 3))).toEqual([0, 0, 0.5, 1]);
   });
 });

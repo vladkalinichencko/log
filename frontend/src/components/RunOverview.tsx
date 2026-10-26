@@ -14,6 +14,7 @@ import {
   phase_track_selector,
   resumed_from_selector,
   run_stats_selector,
+  slowness,
   splice_table_selector,
 } from "../store/selectors/runSelectors";
 import { path_segments, with_param } from "../store/selectors/pathSelectors";
@@ -145,7 +146,7 @@ export function RunOverview({ path }: { path: string }) {
                   <i
                     key={cell.steps}
                     title={`steps ${cell.steps}: ${duration(cell.seconds)}`}
-                    style={{ background: `color-mix(in srgb, var(--accent) ${Math.round((cell.seconds / strip.slowest.seconds) * 100)}%, var(--gray-100))` }}
+                    style={{ background: `color-mix(in srgb, var(--accent) ${Math.round(slowness(cell.seconds, strip.median, strip.slowest.seconds) * 100)}%, var(--gray-100))` }}
                   />
                 ))}
               </div>

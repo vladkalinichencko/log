@@ -72,6 +72,16 @@ Color is redundant with text, shape, or position. Red cannot mean both “select
 
 **3D.** Three-dimensional views require real depth: tensor volumes, surfaces, loss landscapes, point clouds, system geometry, or trajectories. They need labeled axes, reset-camera, 2D projection/slice fallback, and reduced-motion behavior.
 
+## Proposals (not built — owner decides)
+
+Ideas from the 2026-10-26 polish pass. Each is one module or one selector in the existing shape; none is built until accepted.
+
+- **X-axis unit switch** on every chart: step / samples seen / wall time (the catalog's "align on step, sample, wall time"). The lanes and bands follow the same axis, which is also what lets phase spans (seconds) join the hero as a lane.
+- **Trend column in the run list**: the project's hero metric as a sparkline per run, pulled up from each run's `metrics` (progressive disclosure, like status and duration).
+- **Deltas in the status strip**: each stat shows its change over the visible window with direction color (the lab's `small.good / small.bad`).
+- **Command palette** (Ctrl+K): the "Go to table…" search plus actions (compare selected, overlay a metric, switch an alert off) in one list.
+- **Comparison tray previews**: each run in the bottom tray carries a tiny line of the hero metric, so the selection is checked before Compare.
+
 ## Reference audit
 
 Every media file is accounted for below; related files are grouped because they specify the same family.

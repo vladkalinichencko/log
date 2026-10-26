@@ -9,8 +9,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapters.file_watcher import FileWatcher
 from .adapters.sqlite_index import SqliteIndex
+from .adapters.web_push import WebPushTransport
 from .adapters.websocket_transport import WebSocketTransport
-from .api import projects, runs, series, tables, views, workspaces, ws
+from .api import projects, push, runs, series, tables, views, workspaces, ws
 from .api.errors import ERROR_SOURCES, ApiError, api_error_response
 from .config import get_runs_root
 
@@ -21,11 +22,15 @@ async def lifespan(app: FastAPI):
     index = SqliteIndex(runs_root)
     index.rebuild()
     transport = WebSocketTransport()
+    push = WebPushTransport(runs_root)
     app.state.index = index
     app.state.transport = transport
-    watcher = asyncio.create_task(FileWatcher(runs_root, index, transport).run())
+    app.state.push = push
+    watcher = FileWatcher(runs_root, index, [transport, push])
+    tasks = [asyncio.create_task(watcher.run()), asyncio.create_task(watcher.watch_heartbeats())]
     yield
-    watcher.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -34,6 +39,7 @@ for source in ERROR_SOURCES:
     app.add_exception_handler(source, api_error_response)
 
 app.include_router(projects.router)
+app.include_router(push.router)
 app.include_router(runs.router)
 app.include_router(tables.router)
 app.include_router(series.router)
@@ -55,7 +61,8 @@ def serve_design_system() -> FileResponse:
 def serve_frontend(page_path: str) -> FileResponse:
     if page_path.startswith("api/"):
         raise ApiError(404, "HTTP_404", f"no API route /{page_path}")
-    return FileResponse(FRONTEND_DIST / "index.html")
+    file = (FRONTEND_DIST / page_path).resolve()
+    return FileResponse(file if file.is_file() and FRONTEND_DIST in file.parents else FRONTEND_DIST / "index.html")
 
 
 if __name__ == "__main__":

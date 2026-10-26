@@ -16,3 +16,7 @@ def get_storage(runs_root: Path = Depends(get_runs_root)) -> LocalFileStorage:
 
 def get_index(request: Request):
     return request.app.state.index
+
+
+def get_push(request: Request):
+    return request.app.state.push

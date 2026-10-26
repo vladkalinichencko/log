@@ -12,6 +12,7 @@ dependencies = [
     "pydantic",
     "watchfiles",
     "matplotlib",
+    "pywebpush",
 ]
 
 [project.optional-dependencies]

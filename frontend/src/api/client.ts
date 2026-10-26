@@ -40,6 +40,14 @@ export const fetchProjectSettings = (project: string) => request<ProjectSettings
 export const saveProjectSettings = (project: string, settings: ProjectSettings) =>
   request<ProjectSettings>(`/api/projects/${project}/settings`, send("PUT", settings));
 
+export const fetchPushKey = () => request<{ key: string }>("/api/push/key").then((body) => body.key);
+
+export const savePushSubscription = (subscription: PushSubscriptionJSON) =>
+  request<{ subscribed: true }>("/api/push/subscriptions", send("PUT", subscription));
+
+export const deletePushSubscription = (endpoint: string) =>
+  request<{ subscribed: false }>("/api/push/subscriptions", send("DELETE", { endpoint }));
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const text = await response.text();
@@ -57,7 +65,7 @@ function parseJson(text: string) {
   }
 }
 
-const send = (method: "POST" | "PUT", body: unknown): RequestInit => ({
+const send = (method: "POST" | "PUT" | "DELETE", body: unknown): RequestInit => ({
   method,
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),

@@ -8,6 +8,9 @@ ADAPTERS = {
     "watchfiles": "backend/adapters/file_watcher.py",
     "matplotlib": "log/export.py",
     "sqlite3": "backend/adapters/sqlite_index.py",
+    "pywebpush": "backend/adapters/web_push.py",
+    "py_vapid": "backend/adapters/web_push.py",
+    "cryptography": "backend/adapters/web_push.py",
 }
 
 

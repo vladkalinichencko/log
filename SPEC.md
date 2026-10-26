@@ -99,7 +99,7 @@ Dependencies are named, **not pinned to exact versions**. The repo commits a loc
 
 For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected. Nothing with a paid tier is used, not even its free part.
 
-Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`). Swapping one is a new adapter plus one changed export line.
+Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`), pywebpush with py-vapid and cryptography (`backend/adapters/web_push.py`). Browser platform APIs (service worker, Push API) are used directly but still sit behind a module (`modules/notify`) so a caller never touches them. Swapping one is a new adapter plus one changed export line.
 
 ### 4.1 Python package + backend
 
@@ -115,6 +115,7 @@ Every HTTP response over 500 bytes is gzip-compressed by FastAPI's built-in `GZi
 | websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
+| pywebpush (+ py-vapid, cryptography, http-ece) | Sends Web Push: signs the VAPID JWT (RFC 8292) and encrypts the payload for each browser subscription (RFC 8291, `aes128gcm`). MPL-2.0/MIT, no paid tier; the browser vendor's push service (FCM, Mozilla autopush, Apple) is free and needs no account. Imported only by `backend/adapters/web_push.py`. Without it we hand-write ECDH + HKDF + AES-GCM payload encryption and ES256 JWT signing. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
 | PyYAML `[v2]` | Parses `.yaml`/`.yml` config files at the `log.run` boundary. JSON remains stdlib; without PyYAML we would own a YAML parser. |
 
@@ -214,7 +215,8 @@ log/
         local_file_storage.py     # LocalFileStorage implements StoragePort
         sqlite_index.py           # SqliteIndex implements IndexPort
         websocket_transport.py    # WebSocketTransport implements TransportPort
-        file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
+        web_push.py               # WebPushTransport implements TransportPort for alert events: VAPID keys + subscriptions in <runs_root>/push.json, pywebpush send, drops subscriptions the push service answers 404/410
+        file_watcher.py           # FileWatcher (watchfiles) -> events to every transport; views/ and workspaces/ are not run changes; watch_heartbeats(): every 60 s, one alert event when a running run starts being silent
         json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
         (domain) project_settings.py  # read_project_settings(project_dir) with defaults; ALERT_RULES — the one reader of project.json's schema, shared with the toolkit
       domain/
@@ -225,6 +227,7 @@ log/
       api/
         __init__.py
         errors.py                 # ApiError(status, code, message) + the one handler -> { error: { code, message } }
+        push.py                   # GET /api/push/key, PUT/DELETE /api/push/subscriptions (Depends(get_push))
         runs.py                   # /api/runs endpoints
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
@@ -250,7 +253,10 @@ log/
     vite.config.ts                # vite + vitest config (test.environment = jsdom)
     tsconfig.json
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
-    index.html                    # the app entry
+    index.html                    # the app entry; links manifest.webmanifest
+    public/                       # copied as-is to the root of dist/ (the backend serves any file that exists in dist/)
+      sw.js                       # the service worker: push → system notification unless a tab of the app is open; notification click → open the run
+      manifest.webmanifest        # name + display: standalone, so iPhone can add the app to the Home Screen and receive push
     design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
     scripts/
       check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens, and on any page element painted over an open modal
@@ -283,6 +289,7 @@ log/
         menuFsm.ts                # menu_fsm derived from baseFsm
         playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
+        systemNotifyFsm.ts        # systemNotify_fsm: checking → off ⇄ turning_on → on ⇄ turning_off; blocked, unsupported
         dragFsm.ts                # drag_fsm (idle/dragging): every pointer drag — tile resize, column/row resize, range selection, fill
       components/
         App.tsx                   # router outlet + nav bar
@@ -317,6 +324,9 @@ log/
           series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
           plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
           plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
+        notify/
+          index.ts                # SystemNotifications = on|off|blocked|unsupported; export { system_notifications_state, enable_system_notifications, disable_system_notifications } from the active adapter
+          webpush.ts              # the browser adapter: registers /sw.js, subscribes with the server's VAPID key, hands the subscription to the server
         arrange/
           index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
           dndkit.tsx              # the dnd-kit + motion adapter: mouse drag after 8px, touch drag after a 250 ms still press (a quick swipe stays a page/tile scroll), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
@@ -574,6 +584,8 @@ Field-level rules:
 ```json
 { "params": { "lr": 0.0001, "batch_size": 32 }, "step_unit": "samples_seen" }
 ```
+`<runs_root>/push.json` (written only by the backend, created on first use): `{"vapid_private_key": "<PEM>", "subscriptions": [{"endpoint", "keys": {"p256dh", "auth"}}]}`. One VAPID key pair per runs root; one subscription per browser endpoint.
+
 `<runs_root>/<project>/project.json` (written only by the backend, read by the run screen and the toolkit): `{"hero": "loss", "alerts": {"non_finite": true, "spike": false, "stall": true, "heartbeat": true}}`. Path segments never contain `.`, so the watcher treats any `<project>/<name>.json` as a project file, never as a run.
 
 `meta.json` example:
@@ -1064,6 +1076,9 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
 | GET | `/api/runs` | query `project?`, `status?`, `tag?` | `RunSummary[]` (meta + config, no series) | — |
+| GET | `/api/push/key` | — | `{ key: str }`: the VAPID public key, base64url of the 65-byte P-256 point (created on first call) | — |
+| PUT | `/api/push/subscriptions` | `{ endpoint, keys: { p256dh, auth } }` (a browser `PushSubscription.toJSON()`) | `{ subscribed: true }`; the same endpoint is stored once | 422 |
+| DELETE | `/api/push/subscriptions` | `{ endpoint }` | `{ subscribed: false }` | 422 |
 | GET | `/api/projects/{project}/settings` | — | `{ hero: str \| null, alerts: {non_finite, spike, stall, heartbeat: bool} }` (defaults: hero null = `loss` if logged else the first scalar; every alert on) | 404 `PROJECT_NOT_FOUND` |
 | PUT | `/api/projects/{project}/settings` | the same shape (missing alert keys default to on) | the stored settings | 404 `PROJECT_NOT_FOUND`, 422 |
 | GET | `/api/runs/{project}/{run}` | — | full run as a folder `Table` | 404 `RUN_NOT_FOUND` |
@@ -1087,7 +1102,8 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
 - On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta"|"alert" }`.
-- For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message" }` (no `value`: it may be NaN, which is not JSON). Lines present when the backend started are not pushed again. The app shows each as a notice `<project>.<run>: <path> <message> at step <step>` with an Open action that goes to the run. `heartbeat` has no file and therefore no event yet (queue item 14).
+- For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message", "text" }` (no `value`: it may be NaN, which is not JSON; `text` = `<project>.<run>: <path> <message> at step <step>`, formatted once on the server for the page and for Web Push). Lines present when the backend started are not pushed again. Every 60 s the server also reads each running run's `alerts` table and sends one `heartbeat` alert event when it starts reporting silence (again only after the run has logged in between).
+- Alert events go to every transport: the WebSocket (the open page shows a notice with an Open action) and Web Push (each subscribed browser; `/sw.js` shows a system notification only when no tab of the app is open — includes tabs it does not control — and a click opens `/<project>.<run>`). Subscribing lives in Settings (`systemNotify_fsm`). iPhone needs the app added to the Home Screen first (`manifest.webmanifest`, `display: standalone`).
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
 - Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
 - A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.

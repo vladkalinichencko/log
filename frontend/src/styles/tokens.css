@@ -314,6 +314,7 @@ input[type="range"],
 input[type="checkbox"] {
   height: auto;
   border: none;
+  margin: 0;
   padding: 0;
   background: none;
   accent-color: var(--gray-900);

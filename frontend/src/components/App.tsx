@@ -99,8 +99,7 @@ function useLiveUpdates() {
           loadPaths();
         }
         if (message.type === "alert") {
-          const run = message.run.replace("/", ".");
-          notify(`${run}: ${message.path} ${message.message} at step ${message.step}`, { label: "Open", perform: () => navigate(`/${run}`) });
+          notify(message.text, { label: "Open", perform: () => navigate(`/${message.run.replace("/", ".")}`) });
         }
       });
       socket.onopen = () => {

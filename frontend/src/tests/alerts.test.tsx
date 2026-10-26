@@ -52,7 +52,7 @@ describe("alerts", () => {
         </Routes>
       </MemoryRouter>
     );
-    act(() => live.send!({ type: "alert", run: "demo/high_lr", step: 120, rule: "non_finite", path: "loss", message: "became nan" }));
+    act(() => live.send!({ type: "alert", run: "demo/high_lr", step: 120, rule: "non_finite", path: "loss", message: "became nan", text: "demo.high_lr: loss became nan at step 120" }));
     expect(screen.getByRole("alert").textContent).toContain("demo.high_lr: loss became nan at step 120");
     fireEvent.click(screen.getByText("Open"));
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("high_lr");

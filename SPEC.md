@@ -182,7 +182,8 @@ log/
     log/                          # the `import log` package (toolkit + writer)
       __init__.py                 # re-exports public API (Section 9.1)
       run.py                      # log.run decorator factory, RunContext
-      logger.py                   # log.logger(), Logger class, log.log shortcut
+      logger.py                   # log.logger(), Logger class, log.log shortcut, log.alert, log.on_alert
+      alerts.py                   # built-in alert rules (non_finite, spike, stall) + Alerts: per-path history, edge-triggered firing
       watch.py                    # log.watch(model), hook registration, WatchHandle
       track.py                    # log.track(loader), TrackedLoader
       distribute.py               # log.distribute(model)
@@ -349,6 +350,7 @@ runs/
       meta.json                  # run metadata (Section 6.3)
       epoch_<N>/                 # N zero-padded to 4 digits: epoch_0000
         metrics.jsonl            # one row per scalar log call (Section 6.3)
+        alerts.jsonl             # one row per alert onset (Section 6.3); absent until the first alert
         tensors/
           index.jsonl            # one row per tensor write: path, step, file, shape, dtype
           <path>__step<S>.npy    # one tensor; <path> = dot-path with dots kept; S zero-padded 9 digits
@@ -582,6 +584,10 @@ When the run ends (finished or crashed) the toolkit adds `"end_wall_time": <time
 ```json
 { "step": 1000, "samples_seen": 32000, "wall_time": 1748534512.5, "rank": 0, "scalars": { "loss": 2.31, "lr": 0.00009 } }
 ```
+`alerts.jsonl` row example (one row when a rule starts firing for a path; it fires again only after it has cleared; no severity — owner: alerts have no priorities):
+```json
+{ "step": 1000, "wall_time": 1748534512.5, "rank": 0, "rule": "spike", "path": "loss", "value": 9.7, "message": "is +6.2 standard deviations from its last 100 values" }
+```
 
 ---
 
@@ -619,6 +625,15 @@ classDiagram
     class MetaJob {
         +dict fields
     }
+    class AlertJob {
+        +dict row
+        +int epoch
+    }
+    class Alerts {
+        +dict checks
+        +list actions
+        +observe(path, value, stamp)
+    }
     class Logger {
         +RunContext ctx
         +log(path, value, step)
@@ -635,6 +650,8 @@ classDiagram
     WriteJob <|-- TensorJob
     WriteJob <|-- CheckpointJob
     WriteJob <|-- MetaJob
+    WriteJob <|-- AlertJob
+    RunContext "1" --> "1" Alerts
     WriterThread "1" --> "*" WriteJob : consumes
     RunContext "1" --> "1" WriterThread
     Logger --> RunContext
@@ -644,6 +661,7 @@ Classes (justified by held state):
 - `RunContext` — holds the live run's counters + writer + config; one process-global instance set by `log.run`. Read by `log.log`, `log.tick`, `log.track`, `log.checkpoint`, `log.resume_state`.
 - `WriterThread` — owns the background queue + thread; the only writer of files on the training side.
 - `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` / `MetaJob` — dataclasses carrying one unit of work to the writer. `MetaJob` exists so that `meta.json` has one writer while the run is live: `resume_state` enqueues its `resume_diff` instead of writing the file beside the thread that records `writer_errors`.
+- `Alerts` — holds the run's alert state: each path's last 100 values, the gaps between logged steps, which `(rule, path)` pairs are firing, the custom checks and the actions; `observe` returns the rows that start firing. `AlertJob` carries one such row to `epoch_N/alerts.jsonl`.
 - `Logger` — thin object bound to `RunContext`; exists so `log.logger()` can return a handle, but `log.log` is the module-level shortcut.
 - `WatchHandle` — holds the `weakref` + registered hook handles so `.remove()` can deregister.
 - `TrackedLoader` — wraps a `DataLoader`, holds the epoch counter.
@@ -663,6 +681,8 @@ Per-function I/O and purpose (training side):
 | `checkpoint(model, optimizer, scheduler, every, keep_top_k, metric, mode, tag)` | training state | `bool` | Decide cadence, build payload, enqueue write + rotation. |
 | `resume_state(model, optimizer, scheduler, checkpoint)` | training state | `int` | Restore states + RNG; return the step to resume from. |
 | `warmup_cosine/linear/constant(optimizer, ...)` | optimizer + schedule args | `LambdaLR` | Build the LR multiplier schedule. |
+| `alert(path, check)` | path, `history -> message \| None` | `None` | Add a custom alert rule on one path (Section 9.3a). |
+| `on_alert(action)` | `row -> None` | `None` | Run an action in the training thread on every alert row. |
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
@@ -862,6 +882,8 @@ The first three ship with v1 (the version that first handles real-scale data); t
 log.run            (decorator factory)
 log.logger         (function -> Logger)
 log.log            (function: shortcut to active logger)
+log.alert          (function: add a custom alert rule on one path)
+log.on_alert       (function: run an action on every alert)
 log.watch          (function)
 log.track          (function -> TrackedLoader)
 log.distribute     (function)
@@ -908,6 +930,23 @@ log.log(path, value, step=None) -> None
 - Never blocks: enqueues a `WriteJob`, returns immediately.
 - `log.log` is the module-level shortcut for `log.logger().log(...)`.
 - Errors: `NoActiveRunError`, `InvalidPathError`, `UnsupportedValueTypeError`.
+
+### 9.3a `log.alert` / `log.on_alert`
+
+```
+log.alert(path: str, check: Callable[[list[float]], str | None]) -> None
+log.on_alert(action: Callable[[dict], None]) -> None
+```
+- Every numeric (non-bool) scalar passes through the alert rules in the training thread, inside `log.log`, right after its write is enqueued. A rule is one shape: `check(history) -> message | None`, where `history` is that path's last 100 values, newest last.
+- Built-in rules, each skipped when switched off in `project.json` (read once at run start):
+  - `non_finite` — the newest value is NaN or ±inf;
+  - `spike` — the newest value is more than 4 standard deviations from the mean of the previous (finite) values, once at least 20 exist;
+  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
+  - `heartbeat` is computed by the backend (Section 6.2), not here.
+- `log.alert(path, check)` adds a custom rule on one path; the row's `rule` is `check.__name__`.
+- Edge-triggered: a rule writes one `alerts.jsonl` row (Section 6.3) when it starts firing for a path and stays silent until its check returns `None` again.
+- `log.on_alert(action)` calls `action(row)` for every row, built-in or custom, in the training thread; this is how an alert does more than notify (for example, raise to stop training or save a checkpoint). Default: no action.
+- Errors: `NoActiveRunError`.
 
 ### 9.4 `log.watch`
 

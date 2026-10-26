@@ -2,7 +2,7 @@
 from . import export
 from .checkpoint import checkpoint
 from .distribute import distribute
-from .logger import log, logger
+from .logger import alert, log, logger, on_alert
 from .resume import resume_state
 from .run import run
 from .schedules import warmup_constant, warmup_cosine, warmup_linear
@@ -14,6 +14,8 @@ __all__ = [
     "run",
     "logger",
     "log",
+    "alert",
+    "on_alert",
     "watch",
     "track",
     "distribute",

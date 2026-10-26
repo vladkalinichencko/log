@@ -55,6 +55,12 @@ class MetaJob(WriteJob):
     fields: dict
 
 
+@dataclass
+class AlertJob(WriteJob):
+    row: dict
+    epoch: int
+
+
 class WriterThread:
 
     def __init__(self, run_dir: Path, meta_path: Path):
@@ -113,6 +119,9 @@ class WriterThread:
 
         elif isinstance(job, MetaJob):
             update_json(self.meta_path, job.fields)
+
+        elif isinstance(job, AlertJob):
+            append_jsonl(self.run_dir / f"epoch_{job.epoch:04d}" / "alerts.jsonl", job.row)
 
     def _flush_scalars(self) -> None:
         for epoch, step in sorted(set((k[0], k[1]) for k in self.current_step_scalars)):

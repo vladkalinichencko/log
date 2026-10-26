@@ -317,11 +317,12 @@ log/
         (charts live in modules/chart — see below)
         Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
         useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
+        useLoadedTable.ts         # useLoadedTable(id, load): the same load_fsm fetch for a derived table (run comparison, overlay, splice), stored under id, refreshed on liveTick
         DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
       modules/                    # one folder per capability (CLAUDE.md 8a/8c): index.ts is the interface every caller imports; each other file is the one adapter allowed to import its library
         chart/
-          index.ts                # ChartProps { table, representation, overview? }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
-          series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
+          index.ts                # ChartProps { table, representation, hero?, marks? }; ChartMark { x, label }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
+          series.ts               # library-neutral: chart_theme() from tokens (palette in maximum-contrast order: accent, then series 1/5/6/3/2/4), downsampleSeries, line_series_selector, end_label_selector, separate_labels (labels ending on one step stay ≥5% of the value range apart), window_summary_selector, mark_window (a clicked flag selects ±5% of the run around it)
           plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
           plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
         notify/
@@ -592,6 +593,8 @@ Field-level rules:
 ```json
 { "git_hash": "a1b2c3d", "requirements_hash": "sha256:9f86d0...", "start_wall_time": 1748534400.123, "samples_seen": 0, "world_size": 1, "status": "running", "resume_diff": null, "writer_errors": [] }
 ```
+A resumed run: `"resume_diff": {"resumed_from_step": 40, "resumed_from_run": "demo.pretrain"}` (`resumed_from_run` only when the checkpoint came from another run). The `meta` table shows dict and list values as JSON.
+
 When the run ends (finished or crashed) the toolkit adds `"end_wall_time": <time.time()>` in the same write that sets the final `status`.
 `metrics.jsonl` row example:
 ```json
@@ -954,7 +957,7 @@ log.on_alert(action: Callable[[dict], None]) -> None
 - Built-in rules, each skipped when switched off in `project.json` (read once at run start):
   - `non_finite` — the newest value is NaN or ±inf;
   - `spike` — the newest value is more than 4 standard deviations from the mean of the previous (finite) values, once at least 20 exist;
-  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
+  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps and more than 1 s, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
   - `heartbeat` is computed by the backend (Section 6.2), not here.
 - `log.alert(path, check)` adds a custom rule on one path; the row's `rule` is `check.__name__`.
 - Edge-triggered: a rule writes one `alerts.jsonl` row (Section 6.3) when it starts firing for a path and stays silent until its check returns `None` again.
@@ -1114,7 +1117,9 @@ WebSocket `/ws`:
 
 ```
 expr        := source ( "|" op )*
-source      := "table(" pathexpr ")"
+source      := "table(" pathexpr | expr ")"
+             | "overlay(" col "," run ("," run)* ")"   ; run := project.run
+             | "splice(" run "," run ")"
 pathexpr    := segment ( "." segment )*          ; e.g.  projA.run3.epoch_0003.encoder.attn
 segment     := IDENT | GLOB                        ; GLOB allows '*' and '?'; segments may not be empty
 op          := "select(" collist ")"
@@ -1161,6 +1166,9 @@ registration, not a fork. `[v2]`
 The parser rejects a name absent from the registry with `TABLE_EXPRESSION_ERROR`.
 
 Semantics:
+- `overlay(loss, p.a, p.b)` puts one metric of several runs side by side: columns `step, p.a, p.b`, one row per step any of them logged (rank 0), empty where a run did not log it; a run without the column is an error naming the run. The run comparison draws it (§11.7).
+- `splice(p.a, p.b)` continues a run with the run resumed from it: `p.a`'s rows before `p.b`'s first step, then all of `p.b`'s rows, every metric column of both, plus `segment` = the run each row came from. The run page of a resumed run offers it (§11.7).
+- Sources are one table like the stages (`SOURCE_PARSERS` / `SOURCE_EVAL`); any of them can be followed by `| stage`s.
 - `table(pathexpr)` produces a `Table` whose columns are `step, samples_seen, wall_time, rank` plus one value column per matched leaf path; a `GLOB` matching multiple paths yields one column per match. Because `.` is now the only separator, a module path like `encoder.layer1` and a hierarchy level are addressed the same way; segments may not contain `.`.
 - `join(other, on=step)` = side-by-side comparison joined on the named column (inner join). `concat(other)` = row-wise concatenation and adds a computed boolean column `continuity` (true where consecutive `step` values are non-decreasing across the seam).
 - `agg(mean, by=step)` collapses rows grouped by `by`.
@@ -1457,7 +1465,11 @@ Every screen accounts for desktop, iPad, and mobile from the start (the layout a
 
 ### 11.7 Run comparison and execution workflow
 
-`[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model.
+`[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model. Above it, **Overlay** draws one metric of every compared run in one hero chart through `overlay(<metric>, <runs>)` (the formula is shown beside the heading; the `metric ▾` picker stores `?overlay=` in the URL; default = the project's hero metric).
+
+`[v1]` **Splice.** `log.resume_state` records `resume_diff = {resumed_from_step, resumed_from_run}` when the checkpoint belongs to another run. That run's page shows a `resumed from <run>` toggle in the hero bar (`?splice=1`); on, the hero draws `splice(<run>, <this run>)` as two colored segments with a flag at the resume step.
+
+`[v1]` **Hero chart** (`ChartProps.hero`: the run page and the overlay): the range slider underneath; one reserved summary line above the plot, `steps a–b · <metric> first → last (±%) · min · max`, over the whole run or the selected window (a single line only); a single line fills to its minimum with a vertical gradient of its color (0 → 28% at the top); the newest point is a dot, and a point that lands after the first draw sends one ring outward from it (`--motion-pulse`, 1200 ms, 0 under reduced motion); alert flags are clickable and select ±5% of the run around their step; hover boxes use the paper/ink tokens.
 
 `[v3]` Clone creates a draft table from a run definition, including an editable input-model/checkpoint reference. Execute now or enqueue sends that draft to a named queue and creates a new immutable run; `log-agent execute --id <draft-id>` is the CLI form. Workers consume named queues, so assigning workers to queues is the resource-budget mechanism. Resetting a completed or failed run is rejected because history is immutable; "retry as draft" is the explicit replacement.
 

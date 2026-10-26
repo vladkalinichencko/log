@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { evalTable } from "../api/client";
 import { Representation } from "../types/domain";
 import {
   alert_marks_selector,
@@ -7,9 +8,13 @@ import {
   hero_metric_selector,
   hero_table_selector,
   metric_names,
+  resumed_from_selector,
   run_stats_selector,
+  splice_table_selector,
 } from "../store/selectors/runSelectors";
-import { path_segments } from "../store/selectors/pathSelectors";
+import { path_segments, with_param } from "../store/selectors/pathSelectors";
+import { Button } from "./Button";
+import { useLoadedTable } from "./useLoadedTable";
 import { useProjectSettings } from "./useProjectSettings";
 import { Menu } from "./Menu";
 import { MenuButton } from "./MenuButton";
@@ -29,6 +34,7 @@ const blank_strip = (ranks: number) => ({
 });
 
 export function RunOverview({ path }: { path: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const metrics = useTable(`${path}.metrics`);
   const meta = useTable(`${path}.meta`);
   const alerts = useTable(`${path}.alerts`);
@@ -40,6 +46,14 @@ export function RunOverview({ path }: { path: string }) {
   const timing = metrics.table && execution_strip_selector(metrics.table, EXECUTION_COLUMNS);
   const strip = timing || blank_strip(ranks);
   const hero = metrics.table && hero_metric_selector(metrics.table, settings?.hero);
+  const resumed = meta.table ? resumed_from_selector(meta.table) : null;
+  const spliceExpression = resumed && searchParams.get("splice") === "1" ? `splice(${resumed.run}, ${path})` : null;
+  const splice = useLoadedTable(spliceExpression, () => evalTable(spliceExpression!));
+  const heroTable = metrics.table && hero && (spliceExpression && splice.table ? splice_table_selector(splice.table, hero, path) : hero_table_selector(metrics.table, hero));
+  const marks = [
+    ...(alerts.table ? alert_marks_selector(alerts.table) : []),
+    ...(spliceExpression && resumed ? [{ x: resumed.step, label: `resumed from ${resumed.run}` }] : []),
+  ];
 
   return (
     <section className="run-overview">
@@ -61,16 +75,20 @@ export function RunOverview({ path }: { path: string }) {
               )}
             </MenuButton>
           )}
+          {resumed && (
+            <Button
+              label={`resumed from ${resumed.run}`}
+              ghost
+              active={spliceExpression !== null}
+              title={`This run continues ${resumed.run} from step ${resumed.step}; draw both as one line`}
+              onClick={() => setSearchParams(with_param(searchParams, "splice", spliceExpression ? null : "1"))}
+            />
+          )}
         </div>
       </div>
       <div className="run-hero">
-        {metrics.table && hero ? (
-          <Chart
-            table={hero_table_selector(metrics.table, hero)}
-            representation={Representation.Line}
-            overview
-            marks={alerts.table && alert_marks_selector(alerts.table)}
-          />
+        {heroTable ? (
+          <Chart table={heroTable} representation={Representation.Line} hero marks={marks} />
         ) : (
           <Placeholder label={metrics.table ? "no metrics logged" : "loading"} />
         )}

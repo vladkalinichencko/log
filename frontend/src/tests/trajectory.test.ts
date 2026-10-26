@@ -42,7 +42,7 @@ describe("applicable for points and trajectories", () => {
 describe("chartSpec trajectory", () => {
   it("draws one muted trail per point and a head marker at the last step", () => {
     const t = trajectoryTable("t", "tile", [49, 99], frames, 1);
-    const spec = chartSpec(t, Representation.Trajectory);
+    const spec = chartSpec({ table: t, representation: Representation.Trajectory });
     const [trail, head] = spec.data as any[];
     expect(trail.x).toEqual([0, 1, null, 10, 11, null]);
     expect(head.x).toEqual([1, 11]);

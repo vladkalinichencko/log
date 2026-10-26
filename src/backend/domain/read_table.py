@@ -239,7 +239,7 @@ def _keyvalue_table(name: str, source_path: str, pairs) -> Table:
         name=name,
         kind=TableKind.column,
         column_names=["key", "value"],
-        cells=[[Cell(CellType.string, str(key)), Cell(CellType.string, str(value))] for key, value in pairs],
+        cells=[[Cell(CellType.string, str(key)), Cell(CellType.string, json.dumps(value) if isinstance(value, (dict, list)) else str(value))] for key, value in pairs],
         source_path=source_path,
     )
 

@@ -1,14 +1,26 @@
 import { Table } from "../../types/domain";
-import { SERIES } from "../../store/slices/settingsSlice";
 import { end_value, is_bookkeeping } from "../../store/selectors/runSelectors";
 
 export type ChartWindow = [number, number] | null;
+
+const MARK_REACH = 0.05;
+const LABEL_GAP = 0.05;
+const CATEGORICAL_ORDER = ["--series-1", "--series-5", "--series-6", "--series-3", "--series-2", "--series-4"];
 
 export interface LineSeries {
   name: string;
   xs: number[];
   ys: number[];
   color: string;
+}
+
+export interface WindowSummary {
+  from: number;
+  to: number;
+  first: number;
+  last: number;
+  min: number;
+  max: number;
 }
 
 export interface EndLabel {
@@ -28,9 +40,10 @@ export const chart_theme = () => ({
   paper: token("--gray-0"),
   accent: token("--accent"),
   warning: token("--warning"),
+  pulse: parseFloat(token("--motion-pulse")) || 0,
   font: token("--font"),
   text: parseFloat(token("--text-meta")),
-  palette: [token("--accent"), ...SERIES.map(token).filter((color) => color !== token("--accent")), token("--gray-400")],
+  palette: [token("--accent"), ...CATEGORICAL_ORDER.map(token).filter((color) => color !== token("--accent")), token("--gray-400")],
 });
 
 export const column = (table: Table, index: number) => table.cells.map((row) => Number(row[index].value));
@@ -76,4 +89,27 @@ export function end_label_selector({ xs, ys, color }: LineSeries, window: ChartW
   return edge >= 0
     ? { edge: true, x: window![1], y: ys[edge], text: `${end_value(ys[last])} →`, color }
     : { edge: false, x: xs[last], y: ys[last], text: end_value(ys[last]), color };
+}
+
+export function window_summary_selector({ xs, ys }: LineSeries, window: ChartWindow): WindowSummary | null {
+  const inside = xs.flatMap((at, i) => (!window || (at >= window[0] && at <= window[1]) ? [i] : []));
+  if (inside.length === 0) return null;
+  const values = inside.map((i) => ys[i]);
+  return { from: xs[inside[0]], to: xs[inside[inside.length - 1]], first: values[0], last: values[values.length - 1], min: Math.min(...values), max: Math.max(...values) };
+}
+
+export function mark_window(at: number, xs: number[]): [number, number] {
+  const reach = (xs[xs.length - 1] - xs[0]) * MARK_REACH || 1;
+  return [at - reach, at + reach];
+}
+
+export function separate_labels(labels: EndLabel[], series: LineSeries[]): EndLabel[] {
+  const values = series.flatMap(({ ys }) => ys);
+  const gap = (Math.max(...values) - Math.min(...values)) * LABEL_GAP;
+  const placed: EndLabel[] = [];
+  for (const label of [...labels].sort((a, b) => a.y - b.y)) {
+    const below = placed.filter((other) => other.edge === label.edge && other.x === label.x).pop();
+    placed.push(below && label.y - below.y < gap ? { ...label, y: below.y + gap } : label);
+  }
+  return placed;
 }

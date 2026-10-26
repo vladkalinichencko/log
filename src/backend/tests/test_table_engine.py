@@ -111,3 +111,47 @@ def test_functions_endpoint_mirrors_registry():
     assert listed.keys() == FUNCTIONS.keys()
     assert listed["mean"] == {"name": "mean", "kind": "aggregation", "windowed": False}
     assert listed["rolling_mean"] == {"name": "rolling_mean", "kind": "transform", "windowed": True}
+
+
+def _metrics(root, run, rows):
+    epoch = root / "p" / run / "epoch_0000"
+    epoch.mkdir(parents=True)
+    (root / "p" / run / "meta.json").write_text(json.dumps({"status": "finished", "samples_seen": 0}))
+    (epoch / "metrics.jsonl").write_text("\n".join(json.dumps({"samples_seen": 0, "wall_time": 1.0, "rank": 0, **row}) for row in rows))
+
+
+def _route(expression, root, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(root))
+    response = TestClient(app).post("/api/tables/eval", json={"expression": expression})
+    body = response.json()
+    if response.status_code != 200:
+        return body["error"]["message"]
+    return body["column_names"], [[cell["value"] for cell in row] for row in body["cells"]]
+
+
+def test_overlay_puts_one_metric_of_many_runs_side_by_side_on_every_step_any_of_them_logged(tmp_path, monkeypatch):
+    _metrics(tmp_path, "a", [{"step": 0, "scalars": {"loss": 2.0}}, {"step": 2, "scalars": {"loss": 1.0, "acc": 0.5}}])
+    _metrics(tmp_path, "b", [{"step": 1, "scalars": {"loss": 3.0}}, {"step": 2, "scalars": {"loss": 1.5}}])
+    assert _route("overlay(loss, p.a, p.b)", tmp_path, monkeypatch) == (
+        ["step", "p.a", "p.b"],
+        [["0.0", "2.0", ""], ["1.0", "", "3.0"], ["2.0", "1.0", "1.5"]],
+    )
+    assert _route("overlay(acc, p.a)", tmp_path, monkeypatch)[1] == [["2.0", "0.5"]]
+    assert _route("overlay(acc, p.a, p.b)", tmp_path, monkeypatch) == "p.b has no column 'acc'"
+    assert _route("overlay(loss, p.a) | filter(step > 0)", tmp_path, monkeypatch)[1] == [["2.0", "1.0"]]
+
+
+def test_splice_continues_a_run_with_the_run_resumed_from_it_and_names_each_segment(tmp_path, monkeypatch):
+    _metrics(tmp_path, "a", [{"step": step, "scalars": {"loss": 10.0 - step}} for step in range(4)])
+    _metrics(tmp_path, "b", [{"step": step, "scalars": {"loss": 20.0 - step, "lr": 0.1}} for step in (2, 3, 4)])
+    names, rows = _route("splice(p.a, p.b)", tmp_path, monkeypatch)
+    assert names == ["step", "epoch", "wall_time", "rank", "loss", "lr", "segment"]
+    assert [(row[0], row[4], row[5], row[6]) for row in rows] == [
+        ("0.0", "10.0", "", "p.a"), ("1.0", "9.0", "", "p.a"),
+        ("2.0", "18.0", "0.1", "p.b"), ("3.0", "17.0", "0.1", "p.b"), ("4.0", "16.0", "0.1", "p.b"),
+    ]
+    assert _route("splice(p.a)", tmp_path, monkeypatch).startswith("splice takes two runs")

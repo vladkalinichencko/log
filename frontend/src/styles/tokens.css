@@ -42,6 +42,7 @@
   --menu-height: 320px;
   --motion-fast: 120ms;
   --motion-slow: 240ms;
+  --motion-pulse: 1200ms;
   --motion-curve: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -49,6 +50,7 @@
   :root {
     --motion-fast: 0ms;
     --motion-slow: 0ms;
+    --motion-pulse: 0ms;
   }
 }
 
@@ -854,16 +856,66 @@ input.picking {
   overflow: hidden;
 }
 
-.run-hero .rangeslider-mask-min,
-.run-hero .rangeslider-mask-max {
+.chart {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-summary {
+  flex: none;
+  overflow: hidden;
+  padding: var(--space) var(--space-2) 0;
+  color: var(--gray-600);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chart-plot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.chart-pulse {
+  position: absolute;
+  width: var(--space-2);
+  height: var(--space-2);
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: chart-pulse var(--motion-pulse) var(--motion-curve);
+}
+
+@keyframes chart-pulse {
+  from {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0.9;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(3);
+    opacity: 0;
+  }
+}
+
+.chart[data-hero] .rangeslider-mask-min,
+.chart[data-hero] .rangeslider-mask-max {
   fill: var(--gray-100) !important;
   fill-opacity: 0.8 !important;
 }
 
-.run-hero .rangeslider-handle-min,
-.run-hero .rangeslider-handle-max {
+.chart[data-hero] .rangeslider-handle-min,
+.chart[data-hero] .rangeslider-handle-max {
   fill: var(--gray-0) !important;
   stroke: var(--gray-600) !important;
+}
+
+.chart[data-hero] .annotation[data-index] {
+  cursor: pointer;
 }
 
 .execution-strip {

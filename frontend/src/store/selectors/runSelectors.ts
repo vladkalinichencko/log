@@ -1,4 +1,4 @@
-import { Table } from "../../types/domain";
+import { CellType, Table } from "../../types/domain";
 import type { ChartMark } from "../../modules/chart";
 
 export const end_value = (value: number) => String(Number(value.toPrecision(4)));
@@ -26,6 +26,26 @@ export function alert_marks_selector(alerts: Table): ChartMark[] {
   return alerts.cells
     .filter((row) => row[at("step")].value !== "")
     .map((row) => ({ x: Number(row[at("step")].value), label: `${row[at("path")].value} ${row[at("message")].value}` }));
+}
+
+export function resumed_from_selector(meta: Table): { run: string; step: number } | null {
+  const raw = meta.cells.find(([key]) => key.value === "resume_diff")?.[1].value ?? "None";
+  const diff = raw === "None" ? null : JSON.parse(raw);
+  return diff?.resumed_from_run ? { run: diff.resumed_from_run, step: diff.resumed_from_step } : null;
+}
+
+export function splice_table_selector(spliced: Table, metric: string, current: string): Table {
+  const names = spliced.column_names ?? [];
+  const [step, value, segment] = ["step", metric, "segment"].map((name) => names.indexOf(name));
+  const earlier = spliced.cells.find((row) => row[segment].value !== current)?.[segment].value ?? "";
+  return {
+    ...spliced,
+    column_names: ["step", current, earlier],
+    cells: spliced.cells.map((row) => {
+      const empty = { ...row[value], type: CellType.Empty, value: "" };
+      return row[segment].value === current ? [row[step], row[value], empty] : [row[step], empty, row[value]];
+    }),
+  };
 }
 
 export function duration(seconds: number): string {

@@ -24,7 +24,7 @@ describe("representations", () => {
       ],
       ["step", "samples_seen", "wall_time", "rank", "loss"]
     );
-    const trace = chartSpec(series, Representation.Line).data[0] as any;
+    const trace = chartSpec({ table: series, representation: Representation.Line }).data[0] as any;
     expect(trace.type).toBe("scatter");
     expect(trace.x).toEqual([0, 1]);
     expect(trace.y).toEqual([2, 1]);
@@ -42,7 +42,7 @@ describe("representations", () => {
       ],
       ["step", "epoch", "loss", "acc"]
     );
-    const spec = chartSpec(metrics, Representation.Line);
+    const spec = chartSpec({ table: metrics, representation: Representation.Line });
     const [loss, acc] = spec.data as any[];
     expect(spec.data).toHaveLength(2);
     expect(loss.x).toEqual([0, 1, 2]);
@@ -56,7 +56,7 @@ describe("representations", () => {
       [num("0"), num("1")],
       [num("2"), num("3")],
     ]);
-    const trace = chartSpec(grid, Representation.Heatmap).data[0] as any;
+    const trace = chartSpec({ table: grid, representation: Representation.Heatmap }).data[0] as any;
     expect(trace.type).toBe("heatmap");
     expect(trace.z).toEqual([[0, 1], [2, 3]]);
   });
@@ -75,7 +75,7 @@ describe("representations", () => {
       [[num("0"), num("1")], [num("1"), num("5")], [num("2"), num("9")]],
       ["step", "loss"]
     );
-    const trace = chartSpec(series, Representation.Histogram).data[0] as any;
+    const trace = chartSpec({ table: series, representation: Representation.Histogram }).data[0] as any;
     expect(trace.type).toBe("histogram");
     expect(trace.x).toEqual([1, 5, 9]);
   });
@@ -101,5 +101,21 @@ describe("representations", () => {
     expect(screen.getByText("histogram ▾")).toBeTruthy();
     fireEvent.click(screen.getByTitle("table"));
     expect(useStore.getState().tiles.get("t2")?.mode).toBe("table");
+  });
+});
+
+describe("end labels", () => {
+  it("two lines ending on the same step keep their labels apart, lines ending elsewhere stay put", () => {
+    const overlay: Table = {
+      name: "result",
+      kind: TableKind.Grid,
+      column_names: ["step", "a", "b", "c"],
+      row_names: null,
+      cells: [["0", "10", "0", "5"], ["59", "0.5", "0.28", ""], ["30", "", "", "0.3"]].map((row) => row.map((value) => ({ type: value === "" ? CellType.Empty : CellType.Number, value, ref: null }))),
+      representation: Representation.Line,
+      source_path: null,
+    };
+    const labels = chartSpec({ table: overlay, representation: Representation.Line }).layout.annotations!.map((label) => [label.text, label.y]);
+    expect(labels).toEqual([["0.28", 0.28], ["0.3", 0.3], ["0.5", 0.78]]);
   });
 });

@@ -172,7 +172,12 @@ def test_resume_zero_then_explicit(tmp_path):
     second()
     assert captured["step"] == 5
     meta = json.loads((tmp_path / "p" / "r2" / "meta.json").read_text())
-    assert meta["resume_diff"] is not None
+    assert meta["resume_diff"] == {"resumed_from_step": 5, "resumed_from_run": "p.r1"}
+    from backend.adapters.local_file_storage import LocalFileStorage
+    from backend.domain.read_table import read_table
+
+    shown = {row[0].value: row[1].value for row in read_table("p.r2.meta", LocalFileStorage(tmp_path)).cells}
+    assert json.loads(shown["resume_diff"]) == meta["resume_diff"] and json.loads(shown["tags"]) == []
 
 
 def test_export_figure_writes_png(tmp_path, monkeypatch):
@@ -328,3 +333,15 @@ def test_a_step_far_slower_than_usual_raises_stall_and_switched_off_rules_stay_s
 
     main()
     assert [(row["rule"], row["path"], row["step"], row["value"]) for row in _alerts(tmp_path)] == [("stall", "step", 25, 76.0)]
+
+
+def test_a_hiccup_in_a_fast_loop_is_not_a_stall(tmp_path, monkeypatch):
+    _log_clock(monkeypatch, iter([step * 0.00001 for step in range(25)] + [0.0005]))
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(26):
+            log.log("loss", 1.0, step=step)
+
+    main()
+    assert not (tmp_path / "p" / "r" / "epoch_0000" / "alerts.jsonl").exists()

@@ -8,7 +8,7 @@ export interface ChartMark {
 export interface ChartProps {
   table: Table;
   representation: Representation;
-  overview?: boolean;
+  hero?: boolean;
   marks?: ChartMark[];
 }
 

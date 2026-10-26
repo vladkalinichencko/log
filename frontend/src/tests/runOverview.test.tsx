@@ -100,7 +100,7 @@ describe("run overview", () => {
   it("a zoomed line keeps the whole run for the overview, every point inside the window, and the latest value pinned to the right edge", () => {
     const long = table("demo.long.metrics", TableKind.Grid, ["step", "loss"],
       Array.from({ length: 10_000 }, (_, step) => [number(String(step)), number(String(Math.sin(step)))]));
-    const spec = chartSpec(long, Representation.Line, [5000, 5099]);
+    const spec = chartSpec({ table: long, representation: Representation.Line }, [5000, 5099]);
     const [line] = spec.data as { x: number[] }[];
     expect(line.x[0]).toBe(0);
     expect(line.x[line.x.length - 1]).toBe(9999);
@@ -110,7 +110,7 @@ describe("run overview", () => {
       y: Math.sin(5099),
       text: `${String(Number(Math.sin(9999).toPrecision(4)))} →`,
     });
-    expect(chartSpec(long, Representation.Line, null).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
+    expect(chartSpec({ table: long, representation: Representation.Line }, null).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
     expect(new Set(line.x.filter((step) => step >= 5000 && step <= 5099)).size).toBe(100);
   });
 

@@ -1,47 +1,33 @@
-import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { fetchRunComparison } from "../api/client";
-import { loadFsm } from "../fsm/loadFsm";
+import { evalTable, fetchRunComparison } from "../api/client";
 import { selection_run_refs, table_selection_selector, table_selector } from "../store/selectors/tableSelectors";
-import { with_param } from "../store/selectors/pathSelectors";
+import { path_segments, with_param } from "../store/selectors/pathSelectors";
+import { hero_metric_selector, metric_names } from "../store/selectors/runSelectors";
+import { formula_name } from "../store/selectors/searchSelectors";
 import { useStore } from "../store/store";
+import { Representation } from "../types/domain";
+import { Chart } from "../modules/chart";
 import { Button } from "./Button";
 import { LoadError } from "./LoadError";
+import { Menu } from "./Menu";
+import { MenuButton } from "./MenuButton";
+import { Placeholder } from "./Placeholder";
 import { TableView } from "./TableView";
+import { useLoadedTable } from "./useLoadedTable";
+import { useProjectSettings } from "./useProjectSettings";
+import { useTable } from "./useTable";
 
 export function RunComparison({ path }: { path: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const source = useStore((state) => table_selector(state, path));
   const selection = useStore((state) => table_selection_selector(state, path));
-  const loadTable = useStore((state) => state.tables_loadTable);
   const clearSelection = useStore((state) => state.focus_clear);
-  const requested = useRef(0);
-  const [loadState, setLoadState] = useState(loadFsm.initial);
-  const [error, setError] = useState("");
-  const [attempt, setAttempt] = useState(0);
   const selectedRuns = source && selection ? selection_run_refs(source, selection) : [];
   const comparedRuns = (searchParams.get("compare") ?? "").split(",").filter(Boolean);
-  const comparisonId = comparedRuns.length >= 2 ? `compare:${comparedRuns.join("|")}` : "";
-  const comparison = useStore((state) => table_selector(state, comparisonId));
+  const compared = comparedRuns.length >= 2;
+  const comparison = useLoadedTable(compared ? `compare:${comparedRuns.join("|")}` : null, () => fetchRunComparison(comparedRuns));
 
-  useEffect(() => {
-    if (!comparisonId || comparison) return;
-    const request = ++requested.current;
-    setLoadState((state) => loadFsm.next(state, "fetch"));
-    fetchRunComparison(comparedRuns)
-      .then((table) => {
-        if (requested.current !== request) return;
-        loadTable(comparisonId, { ...table, source_path: comparisonId });
-        setLoadState((state) => loadFsm.next(state, "success"));
-      })
-      .catch((failure: Error) => {
-        if (requested.current !== request) return;
-        setError(failure.message);
-        setLoadState((state) => loadFsm.next(state, "failure"));
-      });
-  }, [comparisonId, comparison, attempt]);
-
-  if (selectedRuns.length === 0 && comparedRuns.length < 2) return null;
+  if (selectedRuns.length === 0 && !compared) return null;
 
   const setComparedRuns = (runs: string[]) =>
     setSearchParams(with_param(searchParams, "compare", runs.join(",") || null));
@@ -63,16 +49,57 @@ export function RunComparison({ path }: { path: string }) {
           }}
         />
       </div>
-      {comparison && (
+      {compared && <RunOverlay runs={comparedRuns} />}
+      {comparison.table && (
         <section className="comparison-panel">
           <div className="section-heading">
             <h2>Run comparison</h2>
-            <span className="subtitle">{comparison.cells.length}</span>
+            <span className="subtitle">{comparison.table.cells.length}</span>
           </div>
-          <TableView table={comparison} />
+          <TableView table={comparison.table} />
         </section>
       )}
-      {loadState === "error" && <LoadError message={error} retry={() => setAttempt((count) => count + 1)} />}
+      {comparison.loadState === "error" && <LoadError message={comparison.error} retry={comparison.retry} />}
     </>
+  );
+}
+
+function RunOverlay({ runs }: { runs: string[] }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const first = useTable(`${runs[0]}.metrics`);
+  const { settings } = useProjectSettings(path_segments(runs[0])[0]);
+  const metric = first.table && hero_metric_selector(first.table, searchParams.get("overlay") ?? settings?.hero);
+  const expression = metric ? `overlay(${formula_name(metric)}, ${runs.join(", ")})` : null;
+  const overlay = useLoadedTable(expression, () => evalTable(expression!));
+
+  return (
+    <section className="comparison-panel">
+      <div className="section-heading">
+        <h2>Overlay</h2>
+        {first.table && metric && (
+          <MenuButton label={`${metric} ▾`} ghost title="Metric drawn for every compared run">
+            {(close) => (
+              <Menu
+                items={metric_names(first.table!).map((name) => ({
+                  label: name,
+                  onPick: () => {
+                    setSearchParams(with_param(searchParams, "overlay", name));
+                    close();
+                  },
+                }))}
+              />
+            )}
+          </MenuButton>
+        )}
+        <span className="subtitle">{expression ?? " "}</span>
+      </div>
+      {overlay.loadState === "error" ? (
+        <LoadError message={overlay.error} retry={overlay.retry} />
+      ) : (
+        <div className="run-hero">
+          {overlay.table ? <Chart table={overlay.table} representation={Representation.Line} /> : <Placeholder label="loading" />}
+        </div>
+      )}
+    </section>
   );
 }

@@ -20,6 +20,7 @@ Short statements of how the product thinks. Every screen decision should be trac
 - **Progressive disclosure pulls attributes up.** Every level is a view over the files below it. A higher level shows a chosen few attributes of the level below, in the form that helps a decision at that level — the run list shows each run's status as a dot and its start and duration, which are cells of that run's `meta` and `metrics`, not a copy.
 - **One entity in code, many views in the UI.** The code handles one type (`Table`); the UI picks the view per place: an editable grid in the editor, a read-only preview in a tile, a chart, a status strip, a list. Not every view is a grid, and not every view is editable.
 - **Content changes never move the layout.** See CLAUDE.md rule 8b: reserve space or overlay, wrap or ellipsize, never clip grown content.
+- **One chart, every size.** There is one way to show a series over time. The run page's main chart is not a special widget: every line chart — tile, modal, overlay, hero — is the same component with the same layers, and only the room it is given decides how much shows (the overview strip and large end values appear from 320px of plot height). What is learned on the hero propagates everywhere by construction.
 
 ## Exact visual rules
 
@@ -51,6 +52,8 @@ Color is redundant with text, shape, or position. Red cannot mean both “select
 
 ## Component contracts
 
+**Chart (every line chart).** Layers, top to bottom: a head line (legend chips when there are several series — pointing at a chip spotlights its series and fades the rest to 20%; the summary `steps a–b · name first → last (±%) · min · max` of the single or spotlighted series, over the window); the plot (a single series fills to its minimum with a vertical gradient of its own color; the newest point is a dot that pulses once when a new point lands; end values in the series color, bold and larger when roomy; epochs as alternating quiet bands labelled at the top); event lanes on the shared time axis (`alerts` ▼ in `--warning`, `checkpoints` ◆ in gray; clicking one selects ±5% of the run around it); one cursor line through plot and lanes with a single readout of every series at that step; the overview strip when roomy. Non-finite values never reach the summary or the gradient baseline.
+
 **Run timeline.** The run starts with a large time chart: visible series key, main plot, direct labels/current values at the right edge, epoch/step axis, and compact overview/range control. Zoom preserves latest-value context.
 
 **Status strip.** Tiles form one contiguous strip. Each has a quiet label, large value, directional delta/context, and optionally one sparkline. Color marks meaning, not decoration.
@@ -68,6 +71,16 @@ Color is redundant with text, shape, or position. Red cannot mean both “select
 **Modal.** Fullscreen is a route-backed analytical workspace, not a centered dialog. Title/search sit left, representation/close actions right, and the table/chart fills the rest.
 
 **3D.** Three-dimensional views require real depth: tensor volumes, surfaces, loss landscapes, point clouds, system geometry, or trajectories. They need labeled axes, reset-camera, 2D projection/slice fallback, and reduced-motion behavior.
+
+## Proposals (not built — owner decides)
+
+Ideas from the 2026-10-26 polish pass. Each is one module or one selector in the existing shape; none is built until accepted.
+
+- **X-axis unit switch** on every chart: step / samples seen / wall time (the catalog's "align on step, sample, wall time"). The lanes and bands follow the same axis, which is also what lets phase spans (seconds) join the hero as a lane.
+- **Trend column in the run list**: the project's hero metric as a sparkline per run, pulled up from each run's `metrics` (progressive disclosure, like status and duration).
+- **Deltas in the status strip**: each stat shows its change over the visible window with direction color (the lab's `small.good / small.bad`).
+- **Command palette** (Ctrl+K): the "Go to table…" search plus actions (compare selected, overlay a metric, switch an alert off) in one list.
+- **Comparison tray previews**: each run in the bottom tray carries a tiny line of the hero metric, so the selection is checked before Compare.
 
 ## Reference audit
 

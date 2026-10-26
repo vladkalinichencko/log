@@ -7,7 +7,7 @@ import torch
 from .alerts import Action, Check
 from .errors import InvalidPathError, UnsupportedValueTypeError
 from .run import get_active_run, RunContext
-from .writer.queue_writer import AlertJob, ScalarJob, TensorJob
+from .writer.queue_writer import RowJob, ScalarJob, TensorJob
 
 
 class Logger:
@@ -38,7 +38,7 @@ class Logger:
             self.ctx.writer.enqueue(ScalarJob(path=path, value=value, **stamp))
             if not isinstance(value, bool):
                 for row in self.ctx.alerts.observe(path, float(value), stamp):
-                    self.ctx.writer.enqueue(AlertJob(row=row, epoch=stamp["epoch"]))
+                    self.ctx.writer.enqueue(RowJob(file="alerts.jsonl", row=row, epoch=stamp["epoch"]))
                     for action in self.ctx.alerts.actions:
                         action(row)
         else:

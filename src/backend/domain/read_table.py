@@ -7,6 +7,10 @@ from .project_settings import PROJECT_SETTINGS_FILE, project_settings
 
 DERIVED_STATE_DIRS = {"views", "workspaces"}
 HEARTBEAT_SECONDS = 300
+ALERT_COLUMNS = ["step", "rule", "path", "message", "value", "epoch", "wall_time", "rank"]
+SPAN_COLUMNS = ["step", "rank", "name", "parent", "depth", "start", "duration"]
+OPS_COLUMNS = ["step", "name", "calls", "total", "self"]
+TRACE_COLUMNS = ["lane", "depth", "name", "start", "duration"]
 
 
 def read_table(path: str, storage: StoragePort) -> Table:
@@ -35,6 +39,12 @@ def read_table(path: str, storage: StoragePort) -> Table:
         return _run_metrics_table(base, run_dir, storage)
     if inside == ["alerts"]:
         return _run_alerts_table(project, base, run_dir, storage)
+    if inside == ["spans"]:
+        return _run_spans_table(base, run_dir, storage)
+    if inside == ["ops"]:
+        return _rows_table("ops", f"{base}.ops", OPS_COLUMNS, sorted(_epoch_rows(run_dir, storage, "ops.jsonl"), key=lambda row: (-row["step"], -row["self"])))
+    if inside == ["trace"]:
+        return _run_trace_table(base, run_dir, storage)
 
     epoch, *leaf = inside
     if not leaf:
@@ -99,19 +109,16 @@ def _run_table(run: str, base: str, run_dir: str, storage: StoragePort) -> Table
     entries += [(epoch, f"{base}.{epoch}") for epoch in run_epochs]
     if storage.exists(f"{run_dir}/checkpoints"):
         entries.append(("checkpoints", f"{base}.checkpoints"))
+    for name, file in (("spans", "spans.jsonl"), ("ops", "ops.jsonl"), ("trace", "traces")):
+        if any(storage.exists(f"{run_dir}/{epoch}/{file}") for epoch in run_epochs):
+            entries.append((name, f"{base}.{name}"))
     entries.append(("alerts", f"{base}.alerts"))
     return _folder_table(run, base, entries)
 
 
 def _checkpoints_table(base: str, run_dir: str, storage: StoragePort) -> Table:
-    rows = read_jsonl(storage, f"{run_dir}/checkpoints/index.jsonl")
-    return Table(
-        name="checkpoints",
-        kind=TableKind.folder,
-        column_names=["tag"],
-        cells=[[Cell(CellType.string, row["tag"])] for row in rows],
-        source_path=f"{base}.checkpoints",
-    )
+    rows = sorted(read_jsonl(storage, f"{run_dir}/checkpoints/index.jsonl"), key=lambda row: row["step"])
+    return _rows_table("checkpoints", f"{base}.checkpoints", ["tag", "step", "metric"], rows)
 
 
 def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
@@ -136,28 +143,65 @@ def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
 
 
 def _run_alerts_table(project: str, base: str, run_dir: str, storage: StoragePort) -> Table:
-    rows = [
-        (int(epoch.removeprefix("epoch_")), row)
-        for epoch in epochs(storage, run_dir)
-        for row in read_jsonl(storage, f"{run_dir}/{epoch}/alerts.jsonl")
-    ]
+    rows = _epoch_rows(run_dir, storage, "alerts.jsonl")
     saved = f"{project}/{PROJECT_SETTINGS_FILE}"
     if project_settings(read_json(storage, saved) if storage.exists(saved) else {})["alerts"]["heartbeat"]:
         rows += _heartbeat_rows(run_dir, storage)
+    return _rows_table("alerts", f"{base}.alerts", ALERT_COLUMNS, rows)
+
+
+def _run_spans_table(base: str, run_dir: str, storage: StoragePort) -> Table:
+    started = read_json(storage, f"{run_dir}/meta.json").get("start_wall_time", 0)
+    rows = _epoch_rows(run_dir, storage, "spans.jsonl")
+    parents = {row["name"]: row["parent"] for row in rows}
+
+    def depth(name: str, inside: tuple = ()) -> int:
+        return 0 if not parents.get(name) or name in inside else 1 + depth(parents[name], (*inside, name))
+
+    spans = [{**row, "depth": depth(row["name"]), "start": row["start"] - started, "duration": row["end"] - row["start"]} for row in rows]
+    return _rows_table("spans", f"{base}.spans", SPAN_COLUMNS, sorted(spans, key=lambda row: row["start"]), Representation.flame)
+
+
+def _run_trace_table(base: str, run_dir: str, storage: StoragePort) -> Table:
+    traces = [f"{run_dir}/{epoch}/traces/{name}" for epoch in epochs(storage, run_dir) if storage.exists(f"{run_dir}/{epoch}/traces") for name in storage.list_dir(f"{run_dir}/{epoch}/traces") if name.endswith(".json")]
+    events = read_json(storage, max(traces, key=lambda path: path.rsplit("/", 1)[1]))["traceEvents"]
+    lanes = {(event["pid"], event["tid"]): event["args"]["name"] for event in events if event.get("ph") == "M" and event["name"] == "thread_name"}
+    timed = sorted((event for event in events if event.get("ph") == "X" and "dur" in event), key=lambda event: (event["ts"], -event["dur"]))
+    origin = timed[0]["ts"] if timed else 0
+    open_ends: dict = {}
+    rows = []
+    for event in timed:
+        lane = (event["pid"], event["tid"])
+        stack = [end for end in open_ends.get(lane, []) if end > event["ts"]]
+        rows.append({"lane": lanes.get(lane, f"thread {event['tid']}"), "depth": len(stack), "name": event["name"], "start": (event["ts"] - origin) / 1e6, "duration": event["dur"] / 1e6})
+        open_ends[lane] = [*stack, event["ts"] + event["dur"]]
+    return _rows_table("trace", f"{base}.trace", TRACE_COLUMNS, rows, Representation.flame)
+
+
+def _epoch_rows(run_dir: str, storage: StoragePort, file: str) -> list[dict]:
+    return [
+        {**row, "epoch": int(epoch.removeprefix("epoch_"))}
+        for epoch in epochs(storage, run_dir)
+        for row in read_jsonl(storage, f"{run_dir}/{epoch}/{file}")
+    ]
+
+
+def _rows_table(name: str, source_path: str, columns: list[str], rows: list[dict], representation: Representation = Representation.grid) -> Table:
     return Table(
-        name="alerts",
+        name=name,
         kind=TableKind.grid,
-        column_names=["step", "rule", "path", "message", "value", "epoch", "wall_time", "rank"],
-        cells=[
-            [_scalar_cell(row["step"]), Cell(CellType.string, row["rule"]), Cell(CellType.string, row["path"]), Cell(CellType.string, row["message"])]
-            + [_scalar_cell(row["value"]), _scalar_cell(epoch), _scalar_cell(row["wall_time"]), _scalar_cell(row["rank"])]
-            for epoch, row in rows
-        ],
-        source_path=f"{base}.alerts",
+        column_names=columns,
+        cells=[[_value_cell(row.get(column)) for column in columns] for row in rows],
+        source_path=source_path,
+        representation=representation,
     )
 
 
-def _heartbeat_rows(run_dir: str, storage: StoragePort) -> list[tuple[int, dict]]:
+def _value_cell(value) -> Cell:
+    return Cell(CellType.string, value) if isinstance(value, str) else _scalar_cell(value)
+
+
+def _heartbeat_rows(run_dir: str, storage: StoragePort) -> list[dict]:
     meta = read_json(storage, f"{run_dir}/meta.json")
     if meta["status"] != "running":
         return []
@@ -167,8 +211,7 @@ def _heartbeat_rows(run_dir: str, storage: StoragePort) -> list[tuple[int, dict]
     silence = time.time() - last["wall_time"]
     if silence <= HEARTBEAT_SECONDS:
         return []
-    row = {**last, "rule": "heartbeat", "path": "run", "value": round(silence), "message": f"has logged nothing for {silence / 60:.0f} min"}
-    return [(int(run_epochs[-1].removeprefix("epoch_")), row)]
+    return [{**last, "epoch": int(run_epochs[-1].removeprefix("epoch_")), "rule": "heartbeat", "path": "run", "value": round(silence), "message": f"has logged nothing for {silence / 60:.0f} min"}]
 
 
 def _scalar_cell(value) -> Cell:
@@ -239,7 +282,7 @@ def _keyvalue_table(name: str, source_path: str, pairs) -> Table:
         name=name,
         kind=TableKind.column,
         column_names=["key", "value"],
-        cells=[[Cell(CellType.string, str(key)), Cell(CellType.string, str(value))] for key, value in pairs],
+        cells=[[Cell(CellType.string, str(key)), Cell(CellType.string, json.dumps(value) if isinstance(value, (dict, list)) else str(value))] for key, value in pairs],
         source_path=source_path,
     )
 

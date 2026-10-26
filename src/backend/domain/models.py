@@ -28,6 +28,7 @@ class Representation(str, Enum):
     histogram = "histogram"
     scatter = "scatter"
     trajectory = "trajectory"
+    flame = "flame"
 
 
 @dataclass

@@ -23,6 +23,7 @@ export enum Representation {
   Histogram = "histogram",
   Scatter = "scatter",
   Trajectory = "trajectory",
+  Flame = "flame",
 }
 
 export interface Cell {
@@ -81,4 +82,4 @@ export interface Frame {
 
 export type LiveEvent =
   | { type: "run_added" | "run_updated" | "run_removed"; run: string }
-  | { type: "alert"; run: string; step: number; rule: string; path: string; message: string };
+  | { type: "alert"; run: string; step: number | null; rule: string; path: string; message: string; text: string };

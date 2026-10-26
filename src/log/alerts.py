@@ -7,6 +7,7 @@ WINDOW = 100
 WARMUP = 20
 SPIKE_SIGMAS = 4
 STALL_FACTOR = 10
+STALL_MIN_SECONDS = 1.0
 
 Check = Callable[[list[float]], str | None]
 Action = Callable[[dict], None]
@@ -29,7 +30,8 @@ def stall(gaps: list[float]) -> str | None:
     if len(gaps) <= WARMUP:
         return None
     usual = statistics.median(gaps[:-1])
-    return f"took {gaps[-1]:.1f} s, {gaps[-1] / usual:.0f}× the usual {usual:.2f} s" if usual and gaps[-1] > STALL_FACTOR * usual else None
+    stalled = gaps[-1] > max(STALL_FACTOR * usual, STALL_MIN_SECONDS)
+    return f"took {gaps[-1]:.1f} s, {gaps[-1] / usual:.0f}× the usual {usual:.2f} s" if usual and stalled else None
 
 
 METRIC_RULES = {"non_finite": non_finite, "spike": spike}

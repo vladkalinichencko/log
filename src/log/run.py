@@ -37,6 +37,8 @@ class RunContext:
         self.epoch = 0
         self.current_step = 0
         self.watch_handles: list = []
+        self.phases: list[str] = []
+        self.profiled_blocks = 0
 
 
 class Config:

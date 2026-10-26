@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MainView } from "../components/MainView";
 import { TableView } from "../components/TableView";
-import { execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
+import { execution_strip_selector, run_stats_selector, slowness } from "../store/selectors/runSelectors";
 import { chartSpec } from "../modules/chart/plotly";
 import { useStore } from "../store/store";
 import { Cell, CellType, Representation, Table, TableKind } from "../types/domain";
@@ -100,7 +100,7 @@ describe("run overview", () => {
   it("a zoomed line keeps the whole run for the overview, every point inside the window, and the latest value pinned to the right edge", () => {
     const long = table("demo.long.metrics", TableKind.Grid, ["step", "loss"],
       Array.from({ length: 10_000 }, (_, step) => [number(String(step)), number(String(Math.sin(step)))]));
-    const spec = chartSpec(long, Representation.Line, [5000, 5099]);
+    const spec = chartSpec({ table: long, representation: Representation.Line }, { window: [5000, 5099], roomy: false, focus: null });
     const [line] = spec.data as { x: number[] }[];
     expect(line.x[0]).toBe(0);
     expect(line.x[line.x.length - 1]).toBe(9999);
@@ -110,7 +110,7 @@ describe("run overview", () => {
       y: Math.sin(5099),
       text: `${String(Number(Math.sin(9999).toPrecision(4)))} →`,
     });
-    expect(chartSpec(long, Representation.Line, null).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
+    expect(chartSpec({ table: long, representation: Representation.Line }).layout.annotations![0]).toMatchObject({ x: 9999, text: String(Number(Math.sin(9999).toPrecision(4))) });
     expect(new Set(line.x.filter((step) => step >= 5000 && step <= 5099)).size).toBe(100);
   });
 
@@ -154,5 +154,12 @@ describe("run overview", () => {
     render(<MemoryRouter><TableView table={scalars} /></MemoryRouter>);
     expect([...document.querySelectorAll("tbody td[data-column]")].map((td) => td.textContent)).toEqual(["1", "5", "4800", "ok"]);
     expect(document.querySelector("td[data-status]")).toBeNull();
+  });
+});
+
+describe("execution strip shading", () => {
+  it("an even run stays calm and only steps slower than the median turn the accent", () => {
+    expect([1, 1, 1].map((seconds) => slowness(seconds, 1, 1))).toEqual([0, 0, 0]);
+    expect([0.5, 1, 2, 3].map((seconds) => slowness(seconds, 1, 3))).toEqual([0, 0, 0.5, 1]);
   });
 });

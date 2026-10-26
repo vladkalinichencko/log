@@ -70,7 +70,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 *Observability:*
 - Backend: read-only file storage, SQLite derived index, file watcher, WebSocket push, table engine (the `.`-path merge language), statistics.
-- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram / scatter / trajectory` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
+- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram / scatter / trajectory / flame` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
 - Every UI edit creates derived columns / derived state in `views/<id>.json`; source files immutable.
 - Publication export via `log.export.figure`.
 - The three structural performance seams (Section 8, *Performance constraints*; ADR-016) ship here, since v1 is the first tier that handles real-scale data: memory-mapped `.npy` reads in `read_table`, server-side series downsampling, hand-rolled row windowing. (Hover prefetch is a later v1+ optimization, not part of this tier.)
@@ -99,7 +99,7 @@ Dependencies are named, **not pinned to exact versions**. The repo commits a loc
 
 For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected. Nothing with a paid tier is used, not even its free part.
 
-Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`). Swapping one is a new adapter plus one changed export line.
+Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/figure_matplotlib.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`), pywebpush with py-vapid and cryptography (`backend/adapters/web_push.py`). Browser platform APIs (service worker, Push API) are used directly but still sit behind a module (`modules/notify`) so a caller never touches them. Swapping one is a new adapter plus one changed export line.
 
 ### 4.1 Python package + backend
 
@@ -115,6 +115,7 @@ Every HTTP response over 500 bytes is gzip-compressed by FastAPI's built-in `GZi
 | websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
+| pywebpush (+ py-vapid, cryptography, http-ece) | Sends Web Push: signs the VAPID JWT (RFC 8292) and encrypts the payload for each browser subscription (RFC 8291, `aes128gcm`). MPL-2.0/MIT, no paid tier; the browser vendor's push service (FCM, Mozilla autopush, Apple) is free and needs no account. Imported only by `backend/adapters/web_push.py`. Without it we hand-write ECDH + HKDF + AES-GCM payload encryption and ES256 JWT signing. |
 | matplotlib | Renders a `Table` to a publication-quality figure file (`.png`/`.pdf`/`.svg`) in `log.export.figure`. The de-facto scientific-paper plotting library; hand-rolling vector figure output is infeasible. |
 | PyYAML `[v2]` | Parses `.yaml`/`.yml` config files at the `log.run` boundary. JSON remains stdlib; without PyYAML we would own a YAML parser. |
 
@@ -170,6 +171,7 @@ Neither owns the data model or imposes styles; both are off by default.
 - TypeScript: `camelCase.ts` for logic, `PascalCase.tsx` for React components.
 - Per-feature function names (so modularity is checkable by eye): `<feature>_reducer`, `<feature>_state`, `<feature>_selector`, `<element>_fsm`. The same kind of function is shaped the same way every time.
 - Test files: `test_*.py` (Python), `*.test.ts` / `*.test.tsx` (frontend).
+- **One module shape** (CLAUDE.md 8a/8c). Frontend: `modules/<capability>/index.ts` declares the interface (types) and has exactly one `export { … } from "./<adapter>"` line; the adapter is one file beside it; callers import only `modules/<capability>`. Backend: `ports/<capability>_port.py` is a `Protocol`, `adapters/<name>.py` implements it, and routes receive it through `Depends(get_<capability>)`. Toolkit: one adapter file per drawing library behind `STYLES` + `draw`. Trying another library = writing a second adapter and changing one line; `modules.test.ts`, `dependencies.test.ts` and `test_dependencies.py` hold the shape.
 
 ### 5.2 Repository layout
 
@@ -184,6 +186,7 @@ log/
       run.py                      # log.run decorator factory, RunContext
       logger.py                   # log.logger(), Logger class, log.log shortcut, log.alert, log.on_alert
       alerts.py                   # built-in alert rules (non_finite, spike, stall) + Alerts: per-path history, edge-triggered firing
+      profile.py                  # log.phase(name) spans and log.profile(every) torch.profiler blocks
       watch.py                    # log.watch(model), hook registration, WatchHandle
       track.py                    # log.track(loader), TrackedLoader
       distribute.py               # log.distribute(model)
@@ -191,7 +194,8 @@ log/
       resume.py                   # log.resume_state(...)
       schedules.py                # log.warmup_cosine/linear/constant
       tick.py                     # log.tick(...)
-      export.py                   # log.export.figure(...)
+      export.py                   # log.export.figure(...): picks the table and series, hands them to the renderer adapter
+      figure_matplotlib.py        # the matplotlib renderer adapter: STYLES (matplotlib, nature) + draw(lines, x_label, path, style); a static Plotly renderer would be a second adapter
       writer/
         __init__.py
         queue_writer.py           # background WriterThread + WriteJob dataclasses
@@ -209,12 +213,14 @@ log/
         storage_port.py           # StoragePort protocol (read/watch)
         index_port.py             # IndexPort protocol (query runs)
         transport_port.py         # TransportPort protocol (push events)
+        table_engine_port.py      # TableEnginePort protocol (evaluate(expression, storage), functions()); the formula engine module satisfies it; DuckDB would be a second adapter; routes get it through Depends(get_engine)
       adapters/
         __init__.py
         local_file_storage.py     # LocalFileStorage implements StoragePort
         sqlite_index.py           # SqliteIndex implements IndexPort
         websocket_transport.py    # WebSocketTransport implements TransportPort
-        file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
+        web_push.py               # WebPushTransport implements TransportPort for alert events: VAPID keys + subscriptions in <runs_root>/push.json, pywebpush send, drops subscriptions the push service answers 404/410
+        file_watcher.py           # FileWatcher (watchfiles) -> events to every transport; views/ and workspaces/ are not run changes; watch_heartbeats(): every 60 s, one alert event when a running run starts being silent
         json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
         (domain) project_settings.py  # read_project_settings(project_dir) with defaults; ALERT_RULES — the one reader of project.json's schema, shared with the toolkit
       domain/
@@ -225,6 +231,7 @@ log/
       api/
         __init__.py
         errors.py                 # ApiError(status, code, message) + the one handler -> { error: { code, message } }
+        push.py                   # GET /api/push/key, PUT/DELETE /api/push/subscriptions (Depends(get_push))
         runs.py                   # /api/runs endpoints
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
@@ -250,7 +257,10 @@ log/
     vite.config.ts                # vite + vitest config (test.environment = jsdom)
     tsconfig.json
     tsconfig.node.json            # tsconfig for vite.config.ts itself (Vite scaffold)
-    index.html                    # the app entry
+    index.html                    # the app entry; links manifest.webmanifest
+    public/                       # copied as-is to the root of dist/ (the backend serves any file that exists in dist/)
+      sw.js                       # the service worker: push → system notification unless a tab of the app is open; notification click → open the run
+      manifest.webmanifest        # name + display: standalone, so iPhone can add the app to the Home Screen and receive push
     design-system.html            # the design-system catalog entry (served at /design-system): every production component in every state, on the same tokens
     scripts/
       check-layout.mjs            # opens every screen at 1400px and 390px against a running backend and fails on any spacing, text size, radius, control height, double inset or overflow outside the tokens, and on any page element painted over an open modal
@@ -270,11 +280,10 @@ log/
           tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
           pathSelectors.ts        # path_segments, is_run_ref, tensor_source, with_param
-          searchSelectors.ts      # search_selector (matching `.`-paths)
+          searchSelectors.ts      # search_selector (matching `.`-paths), formula_selector, formula_name (quotes a column name that is not a plain word)
           runSelectors.ts         # run_stats_selector (status strip from meta + metrics), end_value (how a current value is printed)
       api/
-        client.ts                 # one request() + one typed line per route; relative URLs (Vite proxies /api and /ws in dev)
-        websocket.ts              # connectWebSocket(onMessage) on the page's own host
+        client.ts                 # one typed line per route over modules/transport's request(); relative URLs (Vite proxies /api and /ws in dev)
       fsm/
         baseFsm.ts                # makeFsm(states, transitions): the one FSM factory
         buttonFsm.ts              # button_fsm derived from baseFsm
@@ -283,6 +292,7 @@ log/
         menuFsm.ts                # menu_fsm derived from baseFsm
         playerFsm.ts              # player_fsm derived from baseFsm
         connectionFsm.ts          # connection_fsm derived from baseFsm
+        systemNotifyFsm.ts        # systemNotify_fsm: checking → off ⇄ turning_on → on ⇄ turning_off; blocked, unsupported
         dragFsm.ts                # drag_fsm (idle/dragging): every pointer drag — tile resize, column/row resize, range selection, fill
       components/
         App.tsx                   # router outlet + nav bar
@@ -310,13 +320,23 @@ log/
         (charts live in modules/chart — see below)
         Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
         useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
+        useLoadedTable.ts         # useLoadedTable(id, load): the same load_fsm fetch for a derived table (run comparison, overlay, splice), stored under id, refreshed on liveTick
         DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
       modules/                    # one folder per capability (CLAUDE.md 8a/8c): index.ts is the interface every caller imports; each other file is the one adapter allowed to import its library
         chart/
-          index.ts                # ChartProps { table, representation, overview? }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
-          series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
+          index.ts                # ChartProps { table, representation, marks? }; ChartMark { x, label, kind: alert|checkpoint|epoch }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
+          series.ts               # library-neutral: chart_theme() from tokens (palette in maximum-contrast order: accent, then series 1/5/6/3/2/4), downsampleSeries, line_series_selector, end_label_selector, separate_labels (labels ending on one step stay ≥5% of the value range apart), window_summary_selector, mark_window (a clicked flag selects ±5% of the run around it)
           plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
           plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
+        notify/
+          index.ts                # SystemNotifications = on|off|blocked|unsupported; export { system_notifications_state, enable_system_notifications, disable_system_notifications } from the active adapter
+          webpush.ts              # the browser adapter: registers /sw.js, subscribes with the server's VAPID key, hands the subscription to the server
+        transport/
+          index.ts                # Request (url, init → parsed body or Error with the server's message), ConnectLive (onEvent → socket); export { request, connectLive } from the active adapter
+          json.ts                 # the JSON adapter: fetch + JSON with the { error } shape, WebSocket on the page's own host; Arrow IPC would be a second adapter
+        formula-editor/
+          index.ts                # FormulaEditorProps { value, placeholder, suggestions, error, picking, onChange, onSubmit, onPick }; export { FormulaEditor } from the active adapter
+          input.tsx               # the plain-input adapter: one <input>, Enter submits, the suggestion Menu under it; CodeMirror would be a second adapter
         arrange/
           index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
           dndkit.tsx              # the dnd-kit + motion adapter: mouse drag after 8px, touch drag after a 250 ms still press (a quick swipe stays a page/tile scroll), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
@@ -330,6 +350,7 @@ log/
         inlineView.test.tsx       # parent stays a table; child controls live inside its row
         representations.test.tsx  # chartSpec mapping + applicable + switcher
         dependencies.test.ts      # fails when a capability library is imported outside its adapter or an import is unregistered (CLAUDE.md 8c)
+        modules.test.ts           # fails when a module lacks index.ts, has other than one adapter export line, or is imported past its index
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close
@@ -351,6 +372,9 @@ runs/
       epoch_<N>/                 # N zero-padded to 4 digits: epoch_0000
         metrics.jsonl            # one row per scalar log call (Section 6.3)
         alerts.jsonl             # one row per alert onset (Section 6.3); absent until the first alert
+        spans.jsonl              # one row per log.phase block: step, rank, name, parent, start, end (wall seconds)
+        ops.jsonl                # one row per operator of each profiled block: step, name, calls, total, self (CPU seconds)
+        traces/step_<S>.json     # the Chrome trace of one profiled block (torch.profiler export)
         tensors/
           index.jsonl            # one row per tensor write: path, step, file, shape, dtype
           <path>__step<S>.npy    # one tensor; <path> = dot-path with dots kept; S zero-padded 9 digits
@@ -443,6 +467,10 @@ Field rules:
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns `run, status, started, duration, samples_seen`, pulled up from each run's `meta.json` (progressive disclosure: the run list shows a few attributes of each run's files): `started` = `start_wall_time`; `duration` = `end_wall_time − start_wall_time`, or now − start while `running`, empty when an older run never recorded its end. The UI shows `started` as relative time (`2 h ago`, exact time on hover), `duration` as `1h 20m` / `3.008 s` (one `duration` formatter for every duration), and a status dot (finished = `--positive`, crashed = `--critical`, running = `--series-5`); sort and filter use the raw numbers. |
 | `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints`, `alerts` (always last, so it is the last tile of the run page) |
+| `<project>.<run>.checkpoints` | `kind=grid`; `tag, step, metric` from `checkpoints/index.jsonl`, by step. The hero chart flags each checkpoint with a gray ◆. |
+| `<project>.<run>.spans` | `kind=grid`, representation `flame`; `step, rank, name, parent, depth, start, duration` over every `spans.jsonl`; `start` in seconds since the run started, `depth` = how many enclosing phases (guarded against a phase nested in itself). The execution strip reads it (§11.7). Listed in the run folder only when some epoch has the file. |
+| `<project>.<run>.ops` | `kind=grid`; `step, name, calls, total, self` from every `ops.jsonl`, the latest profiled block first and by self time. Listed only when present. |
+| `<project>.<run>.trace` | `kind=grid`, representation `flame`; the latest profiled block's Chrome trace flattened to `lane` (thread name), `depth` (open events at its start, per lane), `name`, `start` (seconds from the first event), `duration`. Listed only when present. |
 | `<project>.<run>.alerts` | `kind=grid`; `column_names=["step","rule","path","message","value","epoch","wall_time","rank"]` (what fired first, bookkeeping after — progressive disclosure, so a narrow tile shows the meaning); one row per `alerts.jsonl` row across all epochs, plus one `heartbeat` row computed at read time when the project's `heartbeat` toggle is on, `meta.status` is `running` and the last logged row (or `start_wall_time`) is more than 300 s old (`path: "run"`, `value` = seconds of silence, `step` = the last logged step). The hero chart draws each row with a step as a flag: a dotted `--warning` line with ⚑ above the plot, the message on hover (`ChartProps.marks`). |
 | `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; a line that continues past the visible window shows its last value pinned at the plot's right edge as `value →` (the slider reports `xaxis.range`, a drag zoom `xaxis.range[0]/[1]`; both set the window); (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
@@ -574,12 +602,16 @@ Field-level rules:
 ```json
 { "params": { "lr": 0.0001, "batch_size": 32 }, "step_unit": "samples_seen" }
 ```
+`<runs_root>/push.json` (written only by the backend, created on first use): `{"vapid_private_key": "<PEM>", "subscriptions": [{"endpoint", "keys": {"p256dh", "auth"}}]}`. One VAPID key pair per runs root; one subscription per browser endpoint.
+
 `<runs_root>/<project>/project.json` (written only by the backend, read by the run screen and the toolkit): `{"hero": "loss", "alerts": {"non_finite": true, "spike": false, "stall": true, "heartbeat": true}}`. Path segments never contain `.`, so the watcher treats any `<project>/<name>.json` as a project file, never as a run.
 
 `meta.json` example:
 ```json
 { "git_hash": "a1b2c3d", "requirements_hash": "sha256:9f86d0...", "start_wall_time": 1748534400.123, "samples_seen": 0, "world_size": 1, "status": "running", "resume_diff": null, "writer_errors": [] }
 ```
+A resumed run: `"resume_diff": {"resumed_from_step": 40, "resumed_from_run": "demo.pretrain"}` (`resumed_from_run` only when the checkpoint came from another run). The `meta` table shows dict and list values as JSON.
+
 When the run ends (finished or crashed) the toolkit adds `"end_wall_time": <time.time()>` in the same write that sets the final `status`.
 `metrics.jsonl` row example:
 ```json
@@ -684,6 +716,8 @@ Per-function I/O and purpose (training side):
 | `warmup_cosine/linear/constant(optimizer, ...)` | optimizer + schedule args | `LambdaLR` | Build the LR multiplier schedule. |
 | `alert(path, check)` | path, `history -> message \| None` | `None` | Add a custom alert rule on one path (Section 9.3a). |
 | `on_alert(action)` | `row -> None` | `None` | Run an action in the training thread on every alert row. |
+| `phase(name)` | phase name | context manager | Time a named block; nested phases record their parent; one `spans.jsonl` row per block. |
+| `profile(every)` | cadence | context manager | Run torch.profiler (CPU, plus CUDA when present) on blocks 0, N, 2N…; the writer exports the trace and the operator table. |
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
@@ -885,6 +919,8 @@ log.logger         (function -> Logger)
 log.log            (function: shortcut to active logger)
 log.alert          (function: add a custom alert rule on one path)
 log.on_alert       (function: run an action on every alert)
+log.phase          (context manager: time one named part of a step)
+log.profile        (context manager: torch.profiler on every N-th wrapped block)
 log.watch          (function)
 log.track          (function -> TrackedLoader)
 log.distribute     (function)
@@ -942,11 +978,21 @@ log.on_alert(action: Callable[[dict], None]) -> None
 - Built-in rules, each skipped when switched off in `project.json` (read once at run start):
   - `non_finite` — the newest value is NaN or ±inf;
   - `spike` — the newest value is more than 4 standard deviations from the mean of the previous (finite) values, once at least 20 exist;
-  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
+  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps and more than 1 s, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
   - `heartbeat` is computed by the backend (Section 6.2), not here.
 - `log.alert(path, check)` adds a custom rule on one path; the row's `rule` is `check.__name__`.
 - Edge-triggered: a rule writes one `alerts.jsonl` row (Section 6.3) when it starts firing for a path and stays silent until its check returns `None` again.
 - `log.on_alert(action)` calls `action(row)` for every row, built-in or custom, in the training thread; this is how an alert does more than notify (for example, raise to stop training or save a checkpoint). Default: no action.
+- Errors: `NoActiveRunError`.
+
+### 9.3b `log.phase` / `log.profile`
+
+```
+with log.phase(name: str): ...
+with log.profile(every: int = 1000): ...
+```
+- `phase` records `{step, rank, name, parent, start, end}` (wall seconds, `step` = the last logged step, like `checkpoint`) to `epoch_N/spans.jsonl` through the writer. Typical use: `with log.phase("step"):` around the iteration and `data` / `forward` / `backward` / `optimizer` inside it.
+- `profile` counts the blocks it wraps and profiles the 1st, the (N+1)-th, … — never the same block twice, whatever the step logging does. The writer (the one file writer) exports `epoch_N/traces/step_<S>.json` and appends the operator averages to `epoch_N/ops.jsonl`.
 - Errors: `NoActiveRunError`.
 
 ### 9.4 `log.watch`
@@ -1064,6 +1110,9 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
 | GET | `/api/runs` | query `project?`, `status?`, `tag?` | `RunSummary[]` (meta + config, no series) | — |
+| GET | `/api/push/key` | — | `{ key: str }`: the VAPID public key, base64url of the 65-byte P-256 point (created on first call) | — |
+| PUT | `/api/push/subscriptions` | `{ endpoint, keys: { p256dh, auth } }` (a browser `PushSubscription.toJSON()`) | `{ subscribed: true }`; the same endpoint is stored once | 422 |
+| DELETE | `/api/push/subscriptions` | `{ endpoint }` | `{ subscribed: false }` | 422 |
 | GET | `/api/projects/{project}/settings` | — | `{ hero: str \| null, alerts: {non_finite, spike, stall, heartbeat: bool} }` (defaults: hero null = `loss` if logged else the first scalar; every alert on) | 404 `PROJECT_NOT_FOUND` |
 | PUT | `/api/projects/{project}/settings` | the same shape (missing alert keys default to on) | the stored settings | 404 `PROJECT_NOT_FOUND`, 422 |
 | GET | `/api/runs/{project}/{run}` | — | full run as a folder `Table` | 404 `RUN_NOT_FOUND` |
@@ -1087,7 +1136,8 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
 - On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta"|"alert" }`.
-- For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message" }` (no `value`: it may be NaN, which is not JSON). Lines present when the backend started are not pushed again. The app shows each as a notice `<project>.<run>: <path> <message> at step <step>` with an Open action that goes to the run. `heartbeat` has no file and therefore no event yet (queue item 14).
+- For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message", "text" }` (no `value`: it may be NaN, which is not JSON; `text` = `<project>.<run>: <path> <message> at step <step>`, formatted once on the server for the page and for Web Push). Lines present when the backend started are not pushed again. Every 60 s the server also reads each running run's `alerts` table and sends one `heartbeat` alert event when it starts reporting silence (again only after the run has logged in between).
+- Alert events go to every transport: the WebSocket (the open page shows a notice with an Open action) and Web Push (each subscribed browser; `/sw.js` shows a system notification unless a tab of the app is visible — counting tabs it does not control — and a click opens `/<project>.<run>`). A background tab therefore gets both: the system notification now, and the in-page notice waiting when the user comes back; a visible tab gets only the notice. Subscribing lives in Settings (`systemNotify_fsm`). iPhone needs the app added to the Home Screen first (`manifest.webmanifest`, `display: standalone`).
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
 - Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
 - A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.
@@ -1098,9 +1148,12 @@ WebSocket `/ws`:
 
 ```
 expr        := source ( "|" op )*
-source      := "table(" pathexpr ")"
+source      := "table(" pathexpr | expr ")"
+             | "overlay(" col "," run ("," run)* ")"   ; run := project.run
+             | "splice(" run "," run ")"
 pathexpr    := segment ( "." segment )*          ; e.g.  projA.run3.epoch_0003.encoder.attn
 segment     := IDENT | GLOB                        ; GLOB allows '*' and '?'; segments may not be empty
+name        := IDENT | '"' any text but '"' '"'     ; a quoted name reaches columns like train/loss
 op          := "select(" collist ")"
              | "filter(" col CMP value ")"
              | "sort(" col DIR ")"
@@ -1145,6 +1198,9 @@ registration, not a fork. `[v2]`
 The parser rejects a name absent from the registry with `TABLE_EXPRESSION_ERROR`.
 
 Semantics:
+- `overlay(loss, p.a, p.b)` puts one metric of several runs side by side: columns `step, p.a, p.b`, one row per step any of them logged (rank 0), empty where a run did not log it; a run without the column is an error naming the run. The run comparison draws it (§11.7).
+- `splice(p.a, p.b)` continues a run with the run resumed from it: `p.a`'s rows before `p.b`'s first step, then all of `p.b`'s rows, every metric column of both, plus `segment` = the run each row came from. The run page of a resumed run offers it (§11.7).
+- Sources are one table like the stages (`SOURCE_PARSERS` / `SOURCE_EVAL`); any of them can be followed by `| stage`s.
 - `table(pathexpr)` produces a `Table` whose columns are `step, samples_seen, wall_time, rank` plus one value column per matched leaf path; a `GLOB` matching multiple paths yields one column per match. Because `.` is now the only separator, a module path like `encoder.layer1` and a hierarchy level are addressed the same way; segments may not contain `.`.
 - `join(other, on=step)` = side-by-side comparison joined on the named column (inner join). `concat(other)` = row-wise concatenation and adds a computed boolean column `continuity` (true where consecutive `step` values are non-decreasing across the seam).
 - `agg(mean, by=step)` collapses rows grouped by `by`.
@@ -1441,7 +1497,13 @@ Every screen accounts for desktop, iPad, and mobile from the start (the layout a
 
 ### 11.7 Run comparison and execution workflow
 
-`[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model.
+`[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model. Above it, **Overlay** draws one metric of every compared run in one hero chart through `overlay(<metric>, <runs>)` (the formula is shown beside the heading; the `metric ▾` picker stores `?overlay=` in the URL; default = the project's hero metric).
+
+`[v1]` **Splice.** `log.resume_state` records `resume_diff = {resumed_from_step, resumed_from_run}` when the checkpoint belongs to another run. That run's page shows a `resumed from <run>` toggle in the hero bar (`?splice=1`); on, the hero draws `splice(<run>, <this run>)` as two colored segments with a flag at the resume step.
+
+`[v1]` **One chart at every size** (DESIGN-SYSTEM.md "Chart"): every line chart — run page, overlay, tiles, modal — is one `Chart` with the same layers; the plot's measured height (≥ 320 px = roomy) decides whether the overview slider and the large bold end values show. Head line: legend chips for several series (hover/focus spotlights one, others at 20% opacity, their end labels too) and the summary `steps a–b · <series> first → last (±%) · min · max` of the single or spotlighted series over the window, finite values only. Plot: a single series fills to its finite minimum with a vertical gradient of its color (0 → 28%); every series' newest point is a dot, and a point that lands after the first draw sends one ring outward (`--motion-pulse`, 1200 ms, 0 under reduced motion); epochs (`ChartMark.kind = "epoch"`, from the metrics table's `epoch` changes) are alternating `--gray-50` bands labelled `epoch N` at the top. Lanes: `alerts` (▼ `--warning`) and `checkpoints` (◆ gray: checkpoints and the resume point) are rows of a second y-axis under the plot sharing its x-axis, the x ticks below them; clicking a lane marker selects ±5% of the run around it. Hover: `x unified` — one cursor line through plot and lanes and one readout of every series at that step, paper/ink tokens.
+
+`[v1]` **Training timeline.** When the run logged phases, the execution strip gains a track above the rank lanes: one segment per phase at the shallowest level with more than one name (`step` → its children), width = the phase's median duration over all steps as a share of the step, labelled `forward 31%`, colored in the categorical order with a 2px underline and an 18% tint. `spans` and `trace` tiles draw as `flame`: one horizontal bar per event from its start, rows = lane · depth (the lane named on its first row), 24 rows reserved so a shallow trace keeps compact rows, names inside bars only where they fit horizontally.
 
 `[v3]` Clone creates a draft table from a run definition, including an editable input-model/checkpoint reference. Execute now or enqueue sends that draft to a named queue and creates a new immutable run; `log-agent execute --id <draft-id>` is the CLI form. Workers consume named queues, so assigning workers to queues is the resource-budget mechanism. Resetting a completed or failed run is rejected because history is immutable; "retry as draft" is the explicit replacement.
 

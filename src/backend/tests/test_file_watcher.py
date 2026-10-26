@@ -18,7 +18,7 @@ def test_watcher_reports_a_new_run_then_its_updates_then_its_removal(tmp_path):
     index = SqliteIndex(tmp_path)
     index.rebuild()
     transport = RecordingTransport()
-    watcher = FileWatcher(tmp_path, index, transport)
+    watcher = FileWatcher(tmp_path, index, [transport])
     run = tmp_path / "p" / "r"
     run.mkdir(parents=True)
     (run / "meta.json").write_text(json.dumps({"status": "running", "samples_seen": 0}))
@@ -79,7 +79,7 @@ def test_watcher_pushes_each_new_alert_row_once_and_not_the_rows_it_found_at_sta
     alerts.write_text(json.dumps(old) + "\n")
     index.rebuild()
     transport = RecordingTransport()
-    watcher = FileWatcher(tmp_path, index, transport)
+    watcher = FileWatcher(tmp_path, index, [transport])
     new = {**old, "step": 2, "rule": "non_finite", "value": float("nan"), "message": "became nan"}
 
     alerts.write_text(alerts.read_text() + json.dumps(new) + "\n" + '{"step": 3, "wall')
@@ -87,6 +87,6 @@ def test_watcher_pushes_each_new_alert_row_once_and_not_the_rows_it_found_at_sta
     asyncio.run(watcher.handle([str(alerts)]))
 
     assert [event for event in transport.events if event["type"] == "alert"] == [
-        {"type": "alert", "run": "p/r", "step": 2, "rule": "non_finite", "path": "loss", "message": "became nan"},
+        {"type": "alert", "run": "p/r", "step": 2, "rule": "non_finite", "path": "loss", "message": "became nan", "text": "p.r: loss became nan at step 2"},
     ]
     assert transport.events[0] == {"type": "run_updated", "run": "p/r", "kind": "alert"}

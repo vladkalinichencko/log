@@ -50,5 +50,7 @@ def resume_state(
     ctx.samples_seen = payload.get("samples_seen", 0)
     ctx.epoch = payload.get("epoch", 0)
     ctx.current_step = payload["step"]
-    ctx.writer.enqueue(MetaJob({"resume_diff": {"resumed_from_step": payload["step"]}}))
+    source_run = ckpt_path.resolve().parent.parent
+    resumed_from = {} if source_run == ctx.run_dir.resolve() else {"resumed_from_run": f"{source_run.parent.name}.{source_run.name}"}
+    ctx.writer.enqueue(MetaJob({"resume_diff": {"resumed_from_step": payload["step"], **resumed_from}}))
     return payload["step"]

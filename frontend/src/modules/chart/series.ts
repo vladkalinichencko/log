@@ -1,8 +1,10 @@
 import { Table } from "../../types/domain";
-import { SERIES } from "../../store/slices/settingsSlice";
+import { CATEGORICAL_ORDER } from "../../store/slices/settingsSlice";
 import { end_value, is_bookkeeping } from "../../store/selectors/runSelectors";
 
 export type ChartWindow = [number, number] | null;
+
+const MARK_REACH = 0.05;
 
 export interface LineSeries {
   name: string;
@@ -11,7 +13,17 @@ export interface LineSeries {
   color: string;
 }
 
+export interface WindowSummary {
+  from: number;
+  to: number;
+  first: number;
+  last: number;
+  min: number;
+  max: number;
+}
+
 export interface EndLabel {
+  name: string;
   edge: boolean;
   x: number;
   y: number;
@@ -28,9 +40,13 @@ export const chart_theme = () => ({
   paper: token("--gray-0"),
   accent: token("--accent"),
   warning: token("--warning"),
+  quiet: token("--gray-600"),
+  band: token("--gray-50"),
+  pulse: parseFloat(token("--motion-pulse")) || 0,
   font: token("--font"),
   text: parseFloat(token("--text-meta")),
-  palette: [token("--accent"), ...SERIES.map(token).filter((color) => color !== token("--accent")), token("--gray-400")],
+  label: parseFloat(token("--text-tile")),
+  palette: [token("--accent"), ...CATEGORICAL_ORDER.map(token).filter((color) => color !== token("--accent")), token("--gray-400")],
 });
 
 export const column = (table: Table, index: number) => table.cells.map((row) => Number(row[index].value));
@@ -69,11 +85,47 @@ export function line_series_selector(table: Table, window: ChartWindow, palette:
   });
 }
 
-export function end_label_selector({ xs, ys, color }: LineSeries, window: ChartWindow): EndLabel | null {
+export function end_label_selector({ name, xs, ys, color }: LineSeries, window: ChartWindow): EndLabel | null {
   const last = xs.length - 1;
   if (last < 0) return null;
   const edge = window && xs[last] > window[1] ? xs.filter((at) => at <= window[1]).length - 1 : -1;
   return edge >= 0
-    ? { edge: true, x: window![1], y: ys[edge], text: `${end_value(ys[last])} →`, color }
-    : { edge: false, x: xs[last], y: ys[last], text: end_value(ys[last]), color };
+    ? { name, edge: true, x: window![1], y: ys[edge], text: `${end_value(ys[last])} →`, color }
+    : { name, edge: false, x: xs[last], y: ys[last], text: end_value(ys[last]), color };
 }
+
+export function window_summary_selector({ xs, ys }: LineSeries, window: ChartWindow): WindowSummary | null {
+  const inside = xs.flatMap((at, i) => (Number.isFinite(ys[i]) && (!window || (at >= window[0] && at <= window[1])) ? [i] : []));
+  if (inside.length === 0) return null;
+  const values = inside.map((i) => ys[i]);
+  return { from: xs[inside[0]], to: xs[inside[inside.length - 1]], first: values[0], last: values[values.length - 1], min: Math.min(...values), max: Math.max(...values) };
+}
+
+export function mark_window(at: number, xs: number[]): [number, number] {
+  const reach = (xs[xs.length - 1] - xs[0]) * MARK_REACH || 1;
+  return [at - reach, at + reach];
+}
+
+export function separate_labels(labels: EndLabel[], series: LineSeries[], share: number): EndLabel[] {
+  const values = series.flatMap(({ ys }) => ys).filter(Number.isFinite);
+  const gap = (Math.max(...values) - Math.min(...values)) * share;
+  const placed: EndLabel[] = [];
+  for (const label of [...labels].sort((a, b) => a.y - b.y)) {
+    const below = placed.filter((other) => other.edge === label.edge && other.x === label.x).pop();
+    placed.push(below && label.y - below.y < gap ? { ...label, y: below.y + gap } : label);
+  }
+  return placed;
+}
+
+export interface EpochBand {
+  from: number;
+  to: number;
+  label: string;
+  shaded: boolean;
+}
+
+export function epoch_bands(epochs: { x: number; label: string }[], end: number): EpochBand[] {
+  return epochs.map((epoch, i) => ({ from: epoch.x, to: epochs[i + 1]?.x ?? end, label: epoch.label, shaded: i % 2 === 0 }));
+}
+
+export const lowest = (ys: number[]) => Math.min(...ys.filter(Number.isFinite));

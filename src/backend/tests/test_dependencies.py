@@ -6,8 +6,11 @@ SOURCE = Path(__file__).resolve().parents[2]
 PLATFORM = {"torch", "numpy", "fastapi", "starlette", "pydantic", "uvicorn", "log", "backend"}
 ADAPTERS = {
     "watchfiles": "backend/adapters/file_watcher.py",
-    "matplotlib": "log/export.py",
+    "matplotlib": "log/figure_matplotlib.py",
     "sqlite3": "backend/adapters/sqlite_index.py",
+    "pywebpush": "backend/adapters/web_push.py",
+    "py_vapid": "backend/adapters/web_push.py",
+    "cryptography": "backend/adapters/web_push.py",
 }
 
 

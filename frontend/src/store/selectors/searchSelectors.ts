@@ -19,3 +19,5 @@ export function formula_selector(
     suggestions: names.filter((name) => name.startsWith(word) && name !== word).slice(0, 8),
   };
 }
+
+export const formula_name = (name: string) => (/^[\w.]+$/.test(name) ? name : `"${name}"`);

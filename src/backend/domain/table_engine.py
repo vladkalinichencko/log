@@ -1,3 +1,4 @@
+import inspect
 import operator
 import re
 from dataclasses import dataclass
@@ -63,7 +64,7 @@ class ExpressionError(ValueError):
     pass
 
 
-_TOKEN = re.compile(r"==|!=|>=|<=|[()|,=<>+\-*/]|[\w.]+")
+_TOKEN = re.compile(r'"[^"]*"|==|!=|>=|<=|[()|,=<>+\-*/]|[\w.]+')
 _WORD = re.compile(r"[\w.]+")
 
 
@@ -103,6 +104,8 @@ class Stream:
         return self.take()
 
     def word(self) -> str:
+        if self.peek().startswith('"'):
+            return self.take()[1:-1]
         if not _WORD.fullmatch(self.peek()):
             raise ExpressionError(f"expected a name, got {self.peek()!r}")
         return self.take()
@@ -129,11 +132,32 @@ def _pipeline(stream: Stream) -> tuple:
 
 
 def _source(stream: Stream) -> tuple:
-    stream.expect("table")
+    kind = stream.word()
+    if kind not in SOURCE_PARSERS:
+        raise ExpressionError(f"a formula starts with table(...), overlay(...) or splice(...), got {kind!r}")
     stream.expect("(")
-    arg = _pipeline(stream) if stream.peek() == "table" and stream.peek(1) == "(" else stream.word()
+    arg = SOURCE_PARSERS[kind](stream)
     stream.expect(")")
-    return ("table", arg)
+    return (kind, arg)
+
+
+def _parse_table(stream: Stream):
+    return _pipeline(stream) if stream.peek(1) == "(" else stream.word()
+
+
+def _parse_names(stream: Stream) -> list[str]:
+    names = [stream.word()]
+    while stream.peek() == ",":
+        stream.take()
+        names.append(stream.word())
+    return names
+
+
+SOURCE_PARSERS: dict[str, Callable[[Stream], object]] = {
+    "table": _parse_table,
+    "overlay": _parse_names,
+    "splice": _parse_names,
+}
 
 
 def _stage(stream: Stream) -> tuple:
@@ -147,11 +171,7 @@ def _stage(stream: Stream) -> tuple:
 
 
 def _parse_select(stream: Stream) -> list[str]:
-    cols = [stream.word()]
-    while stream.peek() == ",":
-        stream.take()
-        cols.append(stream.word())
-    return cols
+    return _parse_names(stream)
 
 
 def _parse_filter(stream: Stream) -> tuple:
@@ -252,6 +272,13 @@ def _atom(stream: Stream) -> tuple:
     return ("num", value) if isinstance(value, float) else ("col", word)
 
 
+def functions() -> list[dict]:
+    return [
+        {"name": name, "kind": fn.kind, "windowed": len(inspect.signature(fn.fn).parameters) > 1}
+        for name, fn in FUNCTIONS.items()
+    ]
+
+
 def evaluate(expression: str, storage: StoragePort) -> Table:
     names, rows = _eval_pipeline(parse(expression), storage)
     return _to_table(names, rows)
@@ -266,10 +293,50 @@ def _eval_pipeline(node: tuple, storage: StoragePort):
 
 
 def _eval_source(source: tuple, storage: StoragePort):
-    arg = source[1]
-    if isinstance(arg, tuple):
-        return _eval_pipeline(arg, storage)
-    return _read_columns(arg, storage)
+    kind, arg = source
+    return SOURCE_EVAL[kind](arg, storage)
+
+
+def _eval_table(arg, storage: StoragePort):
+    return _eval_pipeline(arg, storage) if isinstance(arg, tuple) else _read_columns(arg, storage)
+
+
+def _eval_overlay(arg: list[str], storage: StoragePort):
+    column, *runs = arg
+    if not runs:
+        raise ExpressionError("overlay needs a column and at least one run: overlay(loss, project.run_a, project.run_b)")
+    by_run = [_run_rows(run, storage) for run in runs]
+    for run, (names, _) in zip(runs, by_run):
+        if column not in names:
+            raise ExpressionError(f"{run} has no column {column!r}")
+    series = [{row[names.index("step")]: row[names.index(column)] for row in rows if row[names.index(column)] != ""} for names, rows in by_run]
+    steps = sorted(set().union(*series))
+    return ["step", *runs], [[step, *(values.get(step, "") for values in series)] for step in steps]
+
+
+def _eval_splice(arg: list[str], storage: StoragePort):
+    if len(arg) != 2:
+        raise ExpressionError("splice takes two runs, the earlier first: splice(project.run, project.resumed_run)")
+    (names_a, rows_a), (names_b, rows_b) = (_run_rows(run, storage) for run in arg)
+    names = list(dict.fromkeys(names_a + names_b))
+    resumed_at = min((row[names_b.index("step")] for row in rows_b), default=float("inf"))
+    before = [dict(zip(names_a, row)) | {"segment": arg[0]} for row in rows_a if row[names_a.index("step")] < resumed_at]
+    after = [dict(zip(names_b, row)) | {"segment": arg[1]} for row in rows_b]
+    return names + ["segment"], [[row.get(name, "") for name in names + ["segment"]] for row in before + after]
+
+
+def _run_rows(run: str, storage: StoragePort):
+    if len(run.split(".")) != 2:
+        raise ExpressionError(f"{run!r} is not a run; write project.run")
+    names, rows = _read_columns(f"{run}.metrics", storage)
+    return names, [row for row in rows if row[names.index("rank")] == 0]
+
+
+SOURCE_EVAL: dict[str, Callable[..., tuple]] = {
+    "table": _eval_table,
+    "overlay": _eval_overlay,
+    "splice": _eval_splice,
+}
 
 
 def _value(text: str):
@@ -447,6 +514,8 @@ def _to_table(names, rows) -> Table:
 
 
 def _cell_type(value) -> CellType:
+    if value == "":
+        return CellType.empty
     if isinstance(value, bool):
         return CellType.bool
     if isinstance(value, (int, float)):

@@ -79,12 +79,12 @@ export function ArrangeItem({ id, className, style, children }: ArrangeItemProps
       data-state={isDragging ? "dragging" : "idle"}
       tabIndex={0}
       aria-label={`${id}: Alt+arrow moves it`}
-      layout={!dragging}
+      layout={dragging ? false : "position"}
       transition={{ duration: milliseconds / 1000 }}
       onMouseDown={(event) => listeners?.onMouseDown?.(event)}
       onTouchStart={(event) => listeners?.onTouchStart?.(event)}
       onKeyDown={moveWithKeys}
-      style={{ ...style, transform: CSS.Translate.toString(transform), transition: transition ?? undefined }}
+      style={{ ...style, transform: CSS.Translate.toString(transform), transition: [style?.transition, transition].filter(Boolean).join(", ") || undefined }}
     >
       {children}
     </motion.div>

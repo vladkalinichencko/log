@@ -1,4 +1,4 @@
-import { Table } from "../../types/domain";
+import { CellType, Table } from "../../types/domain";
 import type { ChartMark } from "../../modules/chart";
 
 export const end_value = (value: number) => String(Number(value.toPrecision(4)));
@@ -25,7 +25,55 @@ export function alert_marks_selector(alerts: Table): ChartMark[] {
   const at = (name: string) => (alerts.column_names ?? []).indexOf(name);
   return alerts.cells
     .filter((row) => row[at("step")].value !== "")
-    .map((row) => ({ x: Number(row[at("step")].value), label: `${row[at("path")].value} ${row[at("message")].value}` }));
+    .map((row) => ({ x: Number(row[at("step")].value), label: `${row[at("path")].value} ${row[at("message")].value}`, kind: "alert" as const }));
+}
+
+export function epoch_marks_selector(metrics: Table): ChartMark[] {
+  const [step, epoch] = ["step", "epoch"].map((name) => (metrics.column_names ?? []).indexOf(name));
+  return metrics.cells
+    .filter((row, i) => i > 0 && row[epoch].value !== metrics.cells[i - 1][epoch].value)
+    .map((row) => ({ x: Number(row[step].value), label: `epoch ${row[epoch].value}`, kind: "epoch" as const }));
+}
+
+export function checkpoint_marks_selector(checkpoints: Table): ChartMark[] {
+  return checkpoints.cells.map(([tag, step]) => ({ x: Number(step.value), label: `checkpoint ${tag.value}`, kind: "checkpoint" as const }));
+}
+
+export interface PhaseShare {
+  name: string;
+  seconds: number;
+  share: number;
+}
+
+export function phase_track_selector(spans: Table): PhaseShare[] {
+  const at = (name: string) => (spans.column_names ?? []).indexOf(name);
+  const rows = spans.cells.map((row) => ({ name: row[at("name")].value, depth: Number(row[at("depth")].value), seconds: Number(row[at("duration")].value) }));
+  const depths = [...new Set(rows.map((row) => row.depth))].sort((a, b) => a - b);
+  const level = depths.find((depth) => new Set(rows.filter((row) => row.depth === depth).map((row) => row.name)).size > 1) ?? depths[0];
+  const names = [...new Set(rows.filter((row) => row.depth === level).map((row) => row.name))];
+  const medians = names.map((name) => median(rows.filter((row) => row.depth === level && row.name === name).map((row) => row.seconds)));
+  const total = medians.reduce((sum, seconds) => sum + seconds, 0) || 1;
+  return names.map((name, i) => ({ name, seconds: medians[i], share: medians[i] / total }));
+}
+
+export function resumed_from_selector(meta: Table): { run: string; step: number } | null {
+  const raw = meta.cells.find(([key]) => key.value === "resume_diff")?.[1].value ?? "None";
+  const diff = raw === "None" ? null : JSON.parse(raw);
+  return diff?.resumed_from_run ? { run: diff.resumed_from_run, step: diff.resumed_from_step } : null;
+}
+
+export function splice_table_selector(spliced: Table, metric: string, current: string): Table {
+  const names = spliced.column_names ?? [];
+  const [step, value, segment] = ["step", metric, "segment"].map((name) => names.indexOf(name));
+  const earlier = spliced.cells.find((row) => row[segment].value !== current)?.[segment].value ?? "";
+  return {
+    ...spliced,
+    column_names: ["step", current, earlier],
+    cells: spliced.cells.map((row) => {
+      const empty = { ...row[value], type: CellType.Empty, value: "" };
+      return row[segment].value === current ? [row[step], row[value], empty] : [row[step], empty, row[value]];
+    }),
+  };
 }
 
 export function duration(seconds: number): string {
@@ -109,9 +157,16 @@ export function execution_strip_selector(metrics: Table, columns: number): Execu
       }),
     };
   });
-  const sorted = all.map((cell) => cell.seconds).sort((a, b) => a - b);
-  const middle = sorted.length / 2;
-  const median = sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
   const slowest = all.reduce((worst, cell) => (cell.seconds > worst.seconds ? cell : worst));
-  return { lanes, median, slowest };
+  return { lanes, median: median(all.map((cell) => cell.seconds)), slowest };
+}
+
+export function slowness(seconds: number, median: number, slowest: number): number {
+  return slowest > median ? Math.min(1, Math.max(0, (seconds - median) / (slowest - median))) : 0;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = sorted.length / 2;
+  return sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
 }

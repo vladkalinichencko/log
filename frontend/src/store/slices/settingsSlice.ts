@@ -4,6 +4,8 @@ export type Theme = "light" | "dark";
 
 export const SERIES = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--series-6"];
 
+export const CATEGORICAL_ORDER = ["--series-1", "--series-5", "--series-6", "--series-3", "--series-2", "--series-4"];
+
 export interface SettingsState {
   theme: Theme;
   accent: string;

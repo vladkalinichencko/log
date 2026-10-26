@@ -1,19 +1,26 @@
+import { CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { evalTable } from "../api/client";
 import { Representation } from "../types/domain";
 import {
   alert_marks_selector,
+  checkpoint_marks_selector,
   duration,
+  epoch_marks_selector,
   execution_strip_selector,
   hero_metric_selector,
   hero_table_selector,
   metric_names,
+  phase_track_selector,
   resumed_from_selector,
   run_stats_selector,
   splice_table_selector,
 } from "../store/selectors/runSelectors";
 import { path_segments, with_param } from "../store/selectors/pathSelectors";
 import { Button } from "./Button";
+import { useStore } from "../store/store";
+import { table_selector } from "../store/selectors/tableSelectors";
+import { CATEGORICAL_ORDER } from "../store/slices/settingsSlice";
 import { useLoadedTable } from "./useLoadedTable";
 import { useProjectSettings } from "./useProjectSettings";
 import { Menu } from "./Menu";
@@ -38,7 +45,14 @@ export function RunOverview({ path }: { path: string }) {
   const metrics = useTable(`${path}.metrics`);
   const meta = useTable(`${path}.meta`);
   const alerts = useTable(`${path}.alerts`);
+  const folder = useStore((state) => table_selector(state, path));
+  const listed = (name: string) => (folder?.cells.some((row) => row[0]?.ref === `${path}.${name}`) ? `${path}.${name}` : null);
+  const checkpoints = useTable(listed("checkpoints"));
+  const spans = useTable(listed("spans"));
   const { settings, save } = useProjectSettings(path_segments(path)[0]);
+  const resumed = meta.table ? resumed_from_selector(meta.table) : null;
+  const spliceExpression = resumed && searchParams.get("splice") === "1" ? `splice(${resumed.run}, ${path})` : null;
+  const splice = useLoadedTable(spliceExpression, () => evalTable(spliceExpression!));
   const failed = [metrics, meta].find((load) => load.loadState === "error");
   if (failed) return <LoadError message={failed.error} retry={failed.retry} />;
   const stats = metrics.table && meta.table ? run_stats_selector(meta.table, metrics.table) : BLANK_STATS;
@@ -46,13 +60,13 @@ export function RunOverview({ path }: { path: string }) {
   const timing = metrics.table && execution_strip_selector(metrics.table, EXECUTION_COLUMNS);
   const strip = timing || blank_strip(ranks);
   const hero = metrics.table && hero_metric_selector(metrics.table, settings?.hero);
-  const resumed = meta.table ? resumed_from_selector(meta.table) : null;
-  const spliceExpression = resumed && searchParams.get("splice") === "1" ? `splice(${resumed.run}, ${path})` : null;
-  const splice = useLoadedTable(spliceExpression, () => evalTable(spliceExpression!));
   const heroTable = metrics.table && hero && (spliceExpression && splice.table ? splice_table_selector(splice.table, hero, path) : hero_table_selector(metrics.table, hero));
+  const phases = spans.table ? phase_track_selector(spans.table) : [];
   const marks = [
+    ...(metrics.table ? epoch_marks_selector(metrics.table) : []),
+    ...(checkpoints.table ? checkpoint_marks_selector(checkpoints.table) : []),
     ...(alerts.table ? alert_marks_selector(alerts.table) : []),
-    ...(spliceExpression && resumed ? [{ x: resumed.step, label: `resumed from ${resumed.run}` }] : []),
+    ...(spliceExpression && resumed ? [{ x: resumed.step, label: `resumed from ${resumed.run}`, kind: "checkpoint" as const }] : []),
   ];
 
   return (
@@ -109,6 +123,20 @@ export function RunOverview({ path }: { path: string }) {
               ? `time between logged steps · median ${duration(timing.median)} · slowest ${duration(timing.slowest.seconds)} at step ${timing.slowest.steps}`
               : metrics.table ? "fewer than two logged steps per rank" : BLANK}
           </span>
+          {listed("spans") && (
+            <div className="execution-track">
+              {phases.length === 0 && <span>{BLANK}</span>}
+              {phases.map((phase, index) => (
+                <span
+                  key={phase.name}
+                  style={{ flexGrow: phase.share, "--phase": `var(${CATEGORICAL_ORDER[index % CATEGORICAL_ORDER.length]})` } as CSSProperties}
+                  title={`${phase.name}: median ${duration(phase.seconds)} per step`}
+                >
+                  {phase.name} {Math.round(phase.share * 100)}%
+                </span>
+              ))}
+            </div>
+          )}
           {strip.lanes.map((lane, index) => (
             <div key={index} className="execution-lane">
               <span className="subtitle">{lane.rank ? `rank ${lane.rank}` : BLANK}</span>

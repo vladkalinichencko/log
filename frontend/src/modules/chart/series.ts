@@ -1,11 +1,12 @@
 import { Table } from "../../types/domain";
+import { CATEGORICAL_ORDER } from "../../store/slices/settingsSlice";
 import { end_value, is_bookkeeping } from "../../store/selectors/runSelectors";
 
 export type ChartWindow = [number, number] | null;
 
 const MARK_REACH = 0.05;
 const LABEL_GAP = 0.05;
-const CATEGORICAL_ORDER = ["--series-1", "--series-5", "--series-6", "--series-3", "--series-2", "--series-4"];
+
 
 export interface LineSeries {
   name: string;
@@ -40,6 +41,7 @@ export const chart_theme = () => ({
   paper: token("--gray-0"),
   accent: token("--accent"),
   warning: token("--warning"),
+  quiet: token("--gray-600"),
   pulse: parseFloat(token("--motion-pulse")) || 0,
   font: token("--font"),
   text: parseFloat(token("--text-meta")),

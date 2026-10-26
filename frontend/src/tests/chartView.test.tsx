@@ -57,7 +57,7 @@ describe("hero chart", () => {
   });
 
   it("the summary line describes the whole run, then the window a clicked flag selects", async () => {
-    render(<Chart table={metrics} representation={Representation.Line} hero marks={[{ x: 500, label: "loss spiked" }]} />);
+    render(<Chart table={metrics} representation={Representation.Line} hero marks={[{ x: 500, label: "loss spiked", kind: "alert" }]} />);
     await vi.waitFor(() => expect(plotted.props).toBeDefined());
     expect(document.querySelector(".chart-summary")!.textContent).toBe("steps 0–999 · loss 1 → 0.001 (−99.9%) · min 0.001 · max 1");
     act(() => (plotted.props as unknown as { onClickAnnotation: (event: object) => void }).onClickAnnotation({ annotation: { x: 500 } }));

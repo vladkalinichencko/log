@@ -17,12 +17,15 @@ const RENDERERS: Record<Representation, ComponentType<ViewProps>> = {
   [Representation.Histogram]: Chart,
   [Representation.Scatter]: Chart,
   [Representation.Trajectory]: Chart,
+  [Representation.Flame]: Chart,
   [Representation.Inline]: InlineView,
 };
 
 const isNumber = (cell: Cell) => cell.type === CellType.Number;
 
 export const TRAJECTORY_COLUMNS = ["step", "point", "x", "y"];
+
+export const FLAME_COLUMNS = ["name", "depth", "start", "duration"];
 
 export function applicable(table: Table): Representation[] {
   const reps = [Representation.Grid];
@@ -36,6 +39,7 @@ export function applicable(table: Table): Representation[] {
     table.column_names !== null &&
     table.column_names.join() === TRAJECTORY_COLUMNS.join();
 
+  if (FLAME_COLUMNS.every((name) => table.column_names?.includes(name))) reps.push(Representation.Flame);
   if (isTrajectory) {
     reps.push(Representation.Trajectory);
     return reps;

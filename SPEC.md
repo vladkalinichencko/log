@@ -70,7 +70,7 @@ Goal: every module and file in Section 5 exists; the system starts end to end (t
 
 *Observability:*
 - Backend: read-only file storage, SQLite derived index, file watcher, WebSocket push, table engine (the `.`-path merge language), statistics.
-- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram / scatter / trajectory` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
+- Frontend: run list, drill navigation (top nav bar = back/forward + breadcrumb), the full element inventory and operation set of Section 11. Representation is uniform across **every** table at every level (Section 11.1): the built-in catalog `grid / line / heatmap / histogram / scatter / trajectory / flame` (Section 11.2b) chosen via `applicable(table)`. The **dashboard** is a grid of freely-resizable tiles (Section 11.4); **editing** happens in the route-backed modal with the URL as state (Sections 11.2a/11.4). Workspace + view persistence, search. (`pie` / `box` and custom-Python representations and statistical `test`s are v2 — Sections 11.2b, 9.13.)
 - Every UI edit creates derived columns / derived state in `views/<id>.json`; source files immutable.
 - Publication export via `log.export.figure`.
 - The three structural performance seams (Section 8, *Performance constraints*; ADR-016) ship here, since v1 is the first tier that handles real-scale data: memory-mapped `.npy` reads in `read_table`, server-side series downsampling, hand-rolled row windowing. (Hover prefetch is a later v1+ optimization, not part of this tier.)
@@ -185,6 +185,7 @@ log/
       run.py                      # log.run decorator factory, RunContext
       logger.py                   # log.logger(), Logger class, log.log shortcut, log.alert, log.on_alert
       alerts.py                   # built-in alert rules (non_finite, spike, stall) + Alerts: per-path history, edge-triggered firing
+      profile.py                  # log.phase(name) spans and log.profile(every) torch.profiler blocks
       watch.py                    # log.watch(model), hook registration, WatchHandle
       track.py                    # log.track(loader), TrackedLoader
       distribute.py               # log.distribute(model)
@@ -362,6 +363,9 @@ runs/
       epoch_<N>/                 # N zero-padded to 4 digits: epoch_0000
         metrics.jsonl            # one row per scalar log call (Section 6.3)
         alerts.jsonl             # one row per alert onset (Section 6.3); absent until the first alert
+        spans.jsonl              # one row per log.phase block: step, rank, name, parent, start, end (wall seconds)
+        ops.jsonl                # one row per operator of each profiled block: step, name, calls, total, self (CPU seconds)
+        traces/step_<S>.json     # the Chrome trace of one profiled block (torch.profiler export)
         tensors/
           index.jsonl            # one row per tensor write: path, step, file, shape, dtype
           <path>__step<S>.npy    # one tensor; <path> = dot-path with dots kept; S zero-padded 9 digits
@@ -454,6 +458,10 @@ Field rules:
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns `run, status, started, duration, samples_seen`, pulled up from each run's `meta.json` (progressive disclosure: the run list shows a few attributes of each run's files): `started` = `start_wall_time`; `duration` = `end_wall_time − start_wall_time`, or now − start while `running`, empty when an older run never recorded its end. The UI shows `started` as relative time (`2 h ago`, exact time on hover), `duration` as `1h 20m` / `3.008 s` (one `duration` formatter for every duration), and a status dot (finished = `--positive`, crashed = `--critical`, running = `--series-5`); sort and filter use the raw numbers. |
 | `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints`, `alerts` (always last, so it is the last tile of the run page) |
+| `<project>.<run>.checkpoints` | `kind=grid`; `tag, step, metric` from `checkpoints/index.jsonl`, by step. The hero chart flags each checkpoint with a gray ◆. |
+| `<project>.<run>.spans` | `kind=grid`, representation `flame`; `step, rank, name, parent, depth, start, duration` over every `spans.jsonl`; `start` in seconds since the run started, `depth` = how many enclosing phases (guarded against a phase nested in itself). The execution strip reads it (§11.7). Listed in the run folder only when some epoch has the file. |
+| `<project>.<run>.ops` | `kind=grid`; `step, name, calls, total, self` from every `ops.jsonl`, the latest profiled block first and by self time. Listed only when present. |
+| `<project>.<run>.trace` | `kind=grid`, representation `flame`; the latest profiled block's Chrome trace flattened to `lane` (thread name), `depth` (open events at its start, per lane), `name`, `start` (seconds from the first event), `duration`. Listed only when present. |
 | `<project>.<run>.alerts` | `kind=grid`; `column_names=["step","rule","path","message","value","epoch","wall_time","rank"]` (what fired first, bookkeeping after — progressive disclosure, so a narrow tile shows the meaning); one row per `alerts.jsonl` row across all epochs, plus one `heartbeat` row computed at read time when the project's `heartbeat` toggle is on, `meta.status` is `running` and the last logged row (or `start_wall_time`) is more than 300 s old (`path: "run"`, `value` = seconds of silence, `step` = the last logged step). The hero chart draws each row with a step as a flag: a dotted `--warning` line with ⚑ above the plot, the message on hover (`ChartProps.marks`). |
 | `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; a line that continues past the visible window shows its last value pinned at the plot's right edge as `value →` (the slider reports `xaxis.range`, a drag zoom `xaxis.range[0]/[1]`; both set the window); (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
@@ -699,6 +707,8 @@ Per-function I/O and purpose (training side):
 | `warmup_cosine/linear/constant(optimizer, ...)` | optimizer + schedule args | `LambdaLR` | Build the LR multiplier schedule. |
 | `alert(path, check)` | path, `history -> message \| None` | `None` | Add a custom alert rule on one path (Section 9.3a). |
 | `on_alert(action)` | `row -> None` | `None` | Run an action in the training thread on every alert row. |
+| `phase(name)` | phase name | context manager | Time a named block; nested phases record their parent; one `spans.jsonl` row per block. |
+| `profile(every)` | cadence | context manager | Run torch.profiler (CPU, plus CUDA when present) on blocks 0, N, 2N…; the writer exports the trace and the operator table. |
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
@@ -900,6 +910,8 @@ log.logger         (function -> Logger)
 log.log            (function: shortcut to active logger)
 log.alert          (function: add a custom alert rule on one path)
 log.on_alert       (function: run an action on every alert)
+log.phase          (context manager: time one named part of a step)
+log.profile        (context manager: torch.profiler on every N-th wrapped block)
 log.watch          (function)
 log.track          (function -> TrackedLoader)
 log.distribute     (function)
@@ -962,6 +974,16 @@ log.on_alert(action: Callable[[dict], None]) -> None
 - `log.alert(path, check)` adds a custom rule on one path; the row's `rule` is `check.__name__`.
 - Edge-triggered: a rule writes one `alerts.jsonl` row (Section 6.3) when it starts firing for a path and stays silent until its check returns `None` again.
 - `log.on_alert(action)` calls `action(row)` for every row, built-in or custom, in the training thread; this is how an alert does more than notify (for example, raise to stop training or save a checkpoint). Default: no action.
+- Errors: `NoActiveRunError`.
+
+### 9.3b `log.phase` / `log.profile`
+
+```
+with log.phase(name: str): ...
+with log.profile(every: int = 1000): ...
+```
+- `phase` records `{step, rank, name, parent, start, end}` (wall seconds, `step` = the last logged step, like `checkpoint`) to `epoch_N/spans.jsonl` through the writer. Typical use: `with log.phase("step"):` around the iteration and `data` / `forward` / `backward` / `optimizer` inside it.
+- `profile` counts the blocks it wraps and profiles the 1st, the (N+1)-th, … — never the same block twice, whatever the step logging does. The writer (the one file writer) exports `epoch_N/traces/step_<S>.json` and appends the operator averages to `epoch_N/ops.jsonl`.
 - Errors: `NoActiveRunError`.
 
 ### 9.4 `log.watch`
@@ -1468,6 +1490,8 @@ Every screen accounts for desktop, iPad, and mobile from the start (the layout a
 `[v1]` Selecting run rows adds them to one bottom comparison buffer. Compare stores the run paths in the URL and builds one derived `Table`: config and meta keys align by name; scalar metrics align by `(epoch, metric, step, rank)`; tensor indexes align by `(epoch, path, step, rank)` and compare shape/dtype without loading `.npy`; checkpoint tags align by name. Missing values remain empty cells. The result uses the normal table filter/sort/layout controls and never creates a second comparison object model. Above it, **Overlay** draws one metric of every compared run in one hero chart through `overlay(<metric>, <runs>)` (the formula is shown beside the heading; the `metric ▾` picker stores `?overlay=` in the URL; default = the project's hero metric).
 
 `[v1]` **Splice.** `log.resume_state` records `resume_diff = {resumed_from_step, resumed_from_run}` when the checkpoint belongs to another run. That run's page shows a `resumed from <run>` toggle in the hero bar (`?splice=1`); on, the hero draws `splice(<run>, <this run>)` as two colored segments with a flag at the resume step.
+
+`[v1]` **Training timeline.** The hero's time axis carries every event of the run as a mark (`ChartMark.kind`): alerts (⚑ `--warning`, dotted, clickable), checkpoints and the resume point (◆ gray, dotted, clickable), epochs (a quiet solid line with `epoch N` at the bottom, from the metrics table's `epoch` changes). When the run logged phases, the execution strip gains a track above the rank lanes: one segment per phase at the shallowest level with more than one name (`step` → its children), width = the phase's median duration over all steps as a share of the step, labelled `forward 31%`, colored in the categorical order with a 2px underline and an 18% tint. `spans` and `trace` tiles draw as `flame`: one horizontal bar per event from its start, rows = lane · depth (the lane named on its first row), 24 rows reserved so a shallow trace keeps compact rows, names inside bars only where they fit horizontally.
 
 `[v1]` **Hero chart** (`ChartProps.hero`: the run page and the overlay): the range slider underneath; one reserved summary line above the plot, `steps a–b · <metric> first → last (±%) · min · max`, over the whole run or the selected window (a single line only); a single line fills to its minimum with a vertical gradient of its color (0 → 28% at the top); the newest point is a dot, and a point that lands after the first draw sends one ring outward from it (`--motion-pulse`, 1200 ms, 0 under reduced motion); alert flags are clickable and select ±5% of the run around their step; hover boxes use the paper/ink tokens.
 

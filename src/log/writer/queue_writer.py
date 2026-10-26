@@ -56,8 +56,16 @@ class MetaJob(WriteJob):
 
 
 @dataclass
-class AlertJob(WriteJob):
+class RowJob(WriteJob):
+    file: str
     row: dict
+    epoch: int
+
+
+@dataclass
+class TraceJob(WriteJob):
+    profiler: Any
+    step: int
     epoch: int
 
 
@@ -120,8 +128,11 @@ class WriterThread:
         elif isinstance(job, MetaJob):
             update_json(self.meta_path, job.fields)
 
-        elif isinstance(job, AlertJob):
-            append_jsonl(self.run_dir / f"epoch_{job.epoch:04d}" / "alerts.jsonl", job.row)
+        elif isinstance(job, RowJob):
+            append_jsonl(self.run_dir / f"epoch_{job.epoch:04d}" / job.file, job.row)
+
+        elif isinstance(job, TraceJob):
+            self._write_trace(job)
 
     def _flush_scalars(self) -> None:
         for epoch, step in sorted(set((k[0], k[1]) for k in self.current_step_scalars)):
@@ -149,6 +160,15 @@ class WriterThread:
             "shape": list(arr.shape),
             "dtype": str(arr.dtype),
         })
+
+    def _write_trace(self, job: TraceJob) -> None:
+        epoch_dir = self.run_dir / f"epoch_{job.epoch:04d}"
+        trace = epoch_dir / "traces" / f"step_{job.step:09d}.json"
+        trace.parent.mkdir(parents=True, exist_ok=True)
+        job.profiler.export_chrome_trace(str(trace.with_suffix(".json.tmp")))
+        os.replace(trace.with_suffix(".json.tmp"), trace)
+        for op in job.profiler.key_averages():
+            append_jsonl(epoch_dir / "ops.jsonl", {"step": job.step, "name": op.key, "calls": op.count, "total": op.cpu_time_total / 1e6, "self": op.self_cpu_time_total / 1e6})
 
     def _write_checkpoint(self, job: CheckpointJob) -> None:
         ckpt_dir = self.run_dir / "checkpoints"

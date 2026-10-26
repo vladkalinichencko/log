@@ -4,10 +4,16 @@ import { Representation } from "../../types/domain";
 import { Placeholder } from "../../components/Placeholder";
 import { chart_theme, ChartWindow, column, end_label_selector, line_series_selector, mark_window, separate_labels, window_summary_selector } from "./series";
 import { end_value } from "../../store/selectors/runSelectors";
-import type { ChartProps } from "./index";
+import type { ChartMark, ChartProps } from "./index";
 
 const NEWEST_DOT = 7;
 const GRADIENT_TOP = 0.28;
+
+const FLAME_ROWS = 24;
+
+const MARK_GLYPH = { alert: "⚑", checkpoint: "◆", epoch: "" };
+
+const mark_color = (mark: ChartMark, t: ReturnType<typeof chart_theme>) => (mark.kind === "alert" ? t.warning : mark.kind === "checkpoint" ? t.quiet : t.muted);
 
 const fade = (hex: string, alpha: number) => `rgba(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(", ")}, ${alpha})`;
 
@@ -65,20 +71,14 @@ export function chartSpec(
           yref: "paper" as const,
           y0: 0,
           y1: 1,
-          line: { color: t.warning, width: 1, dash: "dot" as const },
+          line: { color: mark_color(mark, t), width: 1, dash: mark.kind === "epoch" ? ("solid" as const) : ("dot" as const) },
         })),
         annotations: [
-          ...marks.map((mark) => ({
-            x: mark.x,
-            yref: "paper" as const,
-            y: 1,
-            yanchor: "bottom" as const,
-            text: "⚑",
-            hovertext: mark.label,
-            captureevents: true,
-            showarrow: false,
-            font: { color: t.warning, size: t.text },
-          })),
+          ...marks.map((mark) =>
+            mark.kind === "epoch"
+              ? { x: mark.x, yref: "paper" as const, y: 0, yanchor: "bottom" as const, xanchor: "left" as const, xshift: 4, text: mark.label, showarrow: false, font: { color: t.quiet, size: t.text } }
+              : { x: mark.x, yref: "paper" as const, y: 1, yanchor: "bottom" as const, text: MARK_GLYPH[mark.kind], hovertext: mark.label, captureevents: true, showarrow: false, font: { color: mark_color(mark, t), size: t.text } }
+          ),
           ...separate_labels(series.flatMap((line) => end_label_selector(line, window) ?? []), series).map((label) => ({
             ...(label.edge ? { xref: "paper" as const, x: 1 } : { x: label.x }),
             y: label.y,
@@ -90,6 +90,52 @@ export function chartSpec(
           })),
         ],
       },
+    };
+  }
+
+  if (representation === Representation.Flame) {
+    const cols = table.column_names ?? [];
+    const at = (name: string) => cols.indexOf(name);
+    const lane = at("lane") >= 0 ? at("lane") : at("rank");
+    const bars = table.cells.map((row) => ({
+      level: `${lane >= 0 ? row[lane].value : ""} · ${row[at("depth")].value}`,
+      name: row[at("name")].value,
+      start: Number(row[at("start")].value),
+      duration: Number(row[at("duration")].value),
+    }));
+    const levels = [...new Set(bars.map((bar) => bar.level))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const names = [...new Set(bars.map((bar) => bar.name))];
+    return {
+      data: [{
+        type: "bar",
+        orientation: "h",
+        base: bars.map((bar) => bar.start),
+        x: bars.map((bar) => bar.duration),
+        y: bars.map((bar) => bar.level),
+        text: bars.map((bar) => bar.name),
+        textposition: "inside",
+        insidetextanchor: "start",
+        textangle: 0,
+        marker: { color: bars.map((bar) => t.palette[names.indexOf(bar.name) % t.palette.length]) },
+        hovertemplate: "%{text} · %{x:.3s}s<extra></extra>",
+      } as Data],
+      layout: {
+        ...base,
+        barmode: "overlay",
+        bargap: 0.08,
+        uniformtext: { mode: "hide", minsize: t.text },
+        xaxis: { ...base.xaxis, ticksuffix: " s" },
+        yaxis: {
+          ...base.yaxis,
+          type: "category",
+          categoryorder: "array",
+          categoryarray: levels,
+          range: [Math.max(levels.length, FLAME_ROWS) - 0.5, -0.5],
+          automargin: true,
+          tickvals: levels,
+          ticktext: levels.map((level) => (level.endsWith(" · 0") ? level.slice(0, -4) : "")),
+        },
+      } as Partial<Layout>,
     };
   }
 

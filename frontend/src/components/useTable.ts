@@ -4,18 +4,19 @@ import { useStore } from "../store/store";
 import { table_selector } from "../store/selectors/tableSelectors";
 import { fetchTable } from "../api/client";
 
-export function useTable(path: string) {
+export function useTable(path: string | null) {
   const [loadState, setLoadState] = useState(loadFsm.initial);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const loadTable = useStore((state) => state.tables_loadTable);
   const loadView = useStore((state) => state.tables_loadView);
-  const table = useStore((state) => table_selector(state, path));
-  const savedView = useStore((state) => state.views.get(path));
+  const table = useStore((state) => (path === null ? undefined : table_selector(state, path)));
+  const savedView = useStore((state) => (path === null ? undefined : state.views.get(path)));
   const liveTick = useStore((state) => state.liveTick);
   const hydratedView = useRef<string | null>(null);
 
   useEffect(() => {
+    if (path === null) return;
     setLoadState(loadFsm.next(loadFsm.initial, "fetch"));
     if (savedView) {
       if (hydratedView.current !== path) {

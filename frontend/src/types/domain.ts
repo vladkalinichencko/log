@@ -23,6 +23,7 @@ export enum Representation {
   Histogram = "histogram",
   Scatter = "scatter",
   Trajectory = "trajectory",
+  Flame = "flame",
 }
 
 export interface Cell {

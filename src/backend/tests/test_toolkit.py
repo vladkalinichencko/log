@@ -345,3 +345,62 @@ def test_a_hiccup_in_a_fast_loop_is_not_a_stall(tmp_path, monkeypatch):
 
     main()
     assert not (tmp_path / "p" / "r" / "epoch_0000" / "alerts.jsonl").exists()
+
+
+def test_phases_and_profiled_steps_become_spans_ops_and_trace_tables(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    net = torch.nn.Sequential(torch.nn.Linear(8, 8), torch.nn.ReLU(), torch.nn.Linear(8, 1))
+    opt = torch.optim.SGD(net.parameters(), lr=0.1)
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(4):
+            log.log("loss", 1.0, step=step)
+            with log.profile(every=2), log.phase("step"):
+                with log.phase("forward"):
+                    loss = net(torch.randn(4, 8)).pow(2).mean()
+                with log.phase("backward"):
+                    loss.backward()
+                with log.phase("optimizer"):
+                    opt.step()
+            log.checkpoint(net, every=2, keep_top_k=5, metric=None, tag=f"s{step}")
+
+    main()
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    client = TestClient(app)
+
+    def table(path):
+        body = client.get("/api/table", params={"path": path}).json()
+        return body, [dict(zip(body["column_names"], (cell["value"] for cell in row))) for row in body["cells"]]
+
+    listed = [row[0]["value"] for row in client.get("/api/table", params={"path": "p.r"}).json()["cells"]]
+    assert listed[-4:] == ["spans", "ops", "trace", "alerts"]
+    spans_body, spans = table("p.r.spans")
+    assert spans_body["representation"] == "flame"
+    assert [(row["name"], row["parent"], row["depth"]) for row in spans[:4]] == [("step", "", "0"), ("forward", "step", "1"), ("backward", "step", "1"), ("optimizer", "step", "1")]
+    assert all(float(row["duration"]) >= 0 and 0 <= float(row["start"]) < 60 for row in spans)
+    _, ops = table("p.r.ops")
+    assert {row["step"] for row in ops} == {"0", "2"} and ops[0]["step"] == "2"
+    assert any(row["name"] == "aten::addmm" for row in ops)
+    trace_body, trace = table("p.r.trace")
+    assert trace_body["representation"] == "flame" and any(row["name"].startswith("aten::") for row in trace)
+    assert max(int(row["depth"]) for row in trace) >= 1 and float(trace[0]["start"]) == 0
+    _, checkpoints = table("p.r.checkpoints")
+    assert [(row["tag"], row["step"]) for row in checkpoints] == [("s0", "0"), ("s2", "2")]
+
+
+def test_profile_records_every_nth_wrapped_step_once(tmp_path):
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(5):
+            with log.profile(every=2):
+                torch.ones(2) + 1
+            log.log("loss", 1.0, step=step)
+
+    main()
+    ops = [json.loads(line) for line in (tmp_path / "p" / "r" / "epoch_0000" / "ops.jsonl").read_text().splitlines()]
+    assert sorted({row["step"] for row in ops}) == [0, 1, 3]
+    assert len([row for row in ops if row["step"] == 0 and row["name"] == "aten::add"]) == 1

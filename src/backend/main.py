@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .adapters.file_watcher import FileWatcher
 from .adapters.sqlite_index import SqliteIndex
 from .adapters.websocket_transport import WebSocketTransport
-from .api import runs, series, tables, views, workspaces, ws
+from .api import projects, runs, series, tables, views, workspaces, ws
 from .api.errors import ERROR_SOURCES, ApiError, api_error_response
 from .config import get_runs_root
 
@@ -33,6 +33,7 @@ app.add_middleware(GZipMiddleware)
 for source in ERROR_SOURCES:
     app.add_exception_handler(source, api_error_response)
 
+app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(tables.router)
 app.include_router(series.router)

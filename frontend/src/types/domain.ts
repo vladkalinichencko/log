@@ -69,6 +69,11 @@ export interface Workspace {
   tiles: WorkspaceTile[];
 }
 
+export interface ProjectSettings {
+  hero: string | null;
+  alerts: Record<string, boolean>;
+}
+
 export interface Frame {
   shape: number[];
   data: number[];

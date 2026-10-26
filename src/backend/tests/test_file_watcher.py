@@ -52,6 +52,11 @@ def test_saved_views_and_workspaces_are_not_run_changes(tmp_path):
     assert changed_runs(paths, tmp_path) == {}
 
 
+def test_project_level_files_are_not_runs(tmp_path):
+    paths = [str(tmp_path / "p" / "project.json"), str(tmp_path / "p" / "project.json.tmp")]
+    assert changed_runs(paths, tmp_path) == {}
+
+
 def test_paths_outside_runs_root_ignored(tmp_path):
     assert changed_runs(["/somewhere/else/x.json"], tmp_path) == {}
 

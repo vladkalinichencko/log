@@ -215,6 +215,7 @@ log/
         websocket_transport.py    # WebSocketTransport implements TransportPort
         file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
         json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
+        (domain) project_settings.py  # read_project_settings(project_dir) with defaults; ALERT_RULES — the one reader of project.json's schema, shared with the toolkit
       domain/
         __init__.py
         models.py                 # Table, Cell, CellType, TableKind, Representation + on-disk record DTOs
@@ -227,6 +228,7 @@ log/
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
         workspaces.py             # /api/workspaces endpoints
+        projects.py               # /api/projects/{project}/settings: the only writer of <project>/project.json
         views.py                  # /api/views endpoints
         ws.py                     # /ws websocket handler
       tests/
@@ -262,6 +264,7 @@ log/
           focusSlice.ts           # focus_state, focus_reducer (focused path)
           connectionSlice.ts      # connection_state, connection_reducer (websocket FSM)
           noticesSlice.ts         # notices_state: failures waiting for the user (message, retry)
+          projectsSlice.ts        # projects_state: settings per project (hero metric, alert toggles), loaded by useProjectSettings
         selectors/
           tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
@@ -568,6 +571,8 @@ Field-level rules:
 ```json
 { "params": { "lr": 0.0001, "batch_size": 32 }, "step_unit": "samples_seen" }
 ```
+`<runs_root>/<project>/project.json` (written only by the backend, read by the run screen and the toolkit): `{"hero": "loss", "alerts": {"non_finite": true, "spike": false, "stall": true, "heartbeat": true}}`. Path segments never contain `.`, so the watcher treats any `<project>/<name>.json` as a project file, never as a run.
+
 `meta.json` example:
 ```json
 { "git_hash": "a1b2c3d", "requirements_hash": "sha256:9f86d0...", "start_wall_time": 1748534400.123, "samples_seen": 0, "world_size": 1, "status": "running", "resume_diff": null, "writer_errors": [] }
@@ -1019,6 +1024,8 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
 | GET | `/api/runs` | query `project?`, `status?`, `tag?` | `RunSummary[]` (meta + config, no series) | — |
+| GET | `/api/projects/{project}/settings` | — | `{ hero: str \| null, alerts: {non_finite, spike, stall, heartbeat: bool} }` (defaults: hero null = `loss` if logged else the first scalar; every alert on) | 404 `PROJECT_NOT_FOUND` |
+| PUT | `/api/projects/{project}/settings` | the same shape (missing alert keys default to on) | the stored settings | 404 `PROJECT_NOT_FOUND`, 422 |
 | GET | `/api/runs/{project}/{run}` | — | full run as a folder `Table` | 404 `RUN_NOT_FOUND` |
 | DELETE | `/api/runs/{project}/{run}` | — | `{ "deleted": true }` | 404 `RUN_NOT_FOUND` |
 | POST | `/api/runs/rename` | `{ pattern: str, run_refs: str[] }` | `{ renamed: {old: new}[] }` | 400 `INVALID_PATTERN` |

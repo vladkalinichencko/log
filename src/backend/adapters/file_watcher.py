@@ -23,7 +23,7 @@ def changed_runs(paths: list[str], runs_root: Path) -> dict[tuple[str, str], str
             parts = Path(changed).relative_to(runs_root).parts
         except ValueError:
             continue
-        if len(parts) >= 2 and parts[0] not in DERIVED_STATE_DIRS:
+        if len(parts) >= 2 and parts[0] not in DERIVED_STATE_DIRS and "." not in parts[1]:
             runs[(parts[0], parts[1])] = _classify(parts[2:])
     return runs
 

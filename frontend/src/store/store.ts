@@ -6,8 +6,9 @@ import { createFocusSlice, FocusState } from "./slices/focusSlice";
 import { createConnectionSlice, ConnectionState } from "./slices/connectionSlice";
 import { createSettingsSlice, SettingsState } from "./slices/settingsSlice";
 import { createNoticesSlice, NoticesState } from "./slices/noticesSlice";
+import { createProjectsSlice, ProjectsState } from "./slices/projectsSlice";
 
-export type StoreData = TablesState & TilesState & SearchState & FocusState & ConnectionState & SettingsState & NoticesState;
+export type StoreData = TablesState & TilesState & SearchState & FocusState & ConnectionState & SettingsState & NoticesState & ProjectsState;
 
 export type SetStore = (change: Partial<StoreData> | ((state: StoreData) => Partial<StoreData>)) => void;
 
@@ -20,7 +21,8 @@ export type Store = StoreData &
   Actions<typeof createFocusSlice> &
   Actions<typeof createConnectionSlice> &
   Actions<typeof createSettingsSlice> &
-  Actions<typeof createNoticesSlice>;
+  Actions<typeof createNoticesSlice> &
+  Actions<typeof createProjectsSlice>;
 
 export const useStore = create<Store>()((set) => ({
   ...createTablesSlice(set),
@@ -30,4 +32,5 @@ export const useStore = create<Store>()((set) => ({
   ...createConnectionSlice(set),
   ...createSettingsSlice(set),
   ...createNoticesSlice(set),
+  ...createProjectsSlice(set),
 }));

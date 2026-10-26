@@ -78,3 +78,7 @@ export interface Frame {
   shape: number[];
   data: number[];
 }
+
+export type LiveEvent =
+  | { type: "run_added" | "run_updated" | "run_removed"; run: string }
+  | { type: "alert"; run: string; step: number; rule: string; path: string; message: string };

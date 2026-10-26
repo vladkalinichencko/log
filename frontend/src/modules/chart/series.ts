@@ -27,6 +27,7 @@ export const chart_theme = () => ({
   muted: token("--gray-400"),
   paper: token("--gray-0"),
   accent: token("--accent"),
+  warning: token("--warning"),
   font: token("--font"),
   text: parseFloat(token("--text-meta")),
   palette: [token("--accent"), ...SERIES.map(token).filter((color) => color !== token("--accent")), token("--gray-400")],

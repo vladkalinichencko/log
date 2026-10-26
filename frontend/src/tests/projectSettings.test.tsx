@@ -16,11 +16,12 @@ const saved: unknown[] = [];
 
 function stubSettingsApi() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (!url.includes("/settings")) return new Promise(() => {});
     if (init?.method === "PUT") saved.push(JSON.parse(String(init.body)));
     const body = init?.method === "PUT"
       ? { alerts: { non_finite: true, spike: true, stall: true, heartbeat: true }, ...JSON.parse(String(init.body)) }
       : { hero: null, alerts: { non_finite: true, spike: true, stall: true, heartbeat: true } };
-    return new Response(JSON.stringify(url.includes("/settings") ? body : {}), { status: 200 });
+    return new Response(JSON.stringify(body), { status: 200 });
   }));
 }
 

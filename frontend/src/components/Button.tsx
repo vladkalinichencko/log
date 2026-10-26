@@ -26,7 +26,7 @@ export function Button({ label, icon, swatch, ghost, active, disabled, title, on
       () => send("success"),
       (error: Error) => {
         send("failure");
-        notify(`${title ?? label}: ${error.message}`, () => perform(event));
+        notify(`${title ?? label}: ${error.message}`, { label: "Retry", perform: () => perform(event) });
       }
     );
   };

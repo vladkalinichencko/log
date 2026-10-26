@@ -3,7 +3,7 @@ import type { Data, Layout, PlotRelayoutEvent } from "plotly.js";
 import { Representation, Table } from "../../types/domain";
 import { Placeholder } from "../../components/Placeholder";
 import { chart_theme, ChartWindow, column, end_label_selector, line_series_selector } from "./series";
-import type { ChartProps } from "./index";
+import type { ChartMark, ChartProps } from "./index";
 
 const Plot = lazy(() => import("react-plotly.js"));
 
@@ -24,7 +24,8 @@ const baseLayout = (): Partial<Layout> => {
 export function chartSpec(
   table: Table,
   representation: Representation,
-  window: ChartWindow = null
+  window: ChartWindow = null,
+  marks: ChartMark[] = []
 ): { data: Data[]; layout: Partial<Layout> } {
   const last = ((table.column_names ?? []).length || 1) - 1;
   const t = chart_theme();
@@ -46,19 +47,40 @@ export function chartSpec(
         margin: { ...base.margin, r: 64 },
         showlegend: series.length > 1,
         xaxis: { ...base.xaxis, ...(window ? { range: window } : {}) },
-        annotations: series.flatMap((line) => {
-          const label = end_label_selector(line, window);
-          if (!label) return [];
-          return [{
-            ...(label.edge ? { xref: "paper" as const, x: 1 } : { x: label.x }),
-            y: label.y,
-            text: label.text,
-            xanchor: "left" as const,
-            xshift: 4,
+        shapes: marks.map((mark) => ({
+          type: "line" as const,
+          x0: mark.x,
+          x1: mark.x,
+          yref: "paper" as const,
+          y0: 0,
+          y1: 1,
+          line: { color: t.warning, width: 1, dash: "dot" as const },
+        })),
+        annotations: [
+          ...marks.map((mark) => ({
+            x: mark.x,
+            yref: "paper" as const,
+            y: 1,
+            yanchor: "bottom" as const,
+            text: "⚑",
+            hovertext: mark.label,
             showarrow: false,
-            font: { color: label.color, size: t.text },
-          }];
-        }),
+            font: { color: t.warning, size: t.text },
+          })),
+          ...series.flatMap((line) => {
+            const label = end_label_selector(line, window);
+            if (!label) return [];
+            return [{
+              ...(label.edge ? { xref: "paper" as const, x: 1 } : { x: label.x }),
+              y: label.y,
+              text: label.text,
+              xanchor: "left" as const,
+              xshift: 4,
+              showarrow: false,
+              font: { color: label.color, size: t.text },
+            }];
+          }),
+        ],
       },
     };
   }
@@ -116,7 +138,7 @@ export function chartSpec(
   };
 }
 
-export function Chart({ table, representation, overview }: ChartProps) {
+export function Chart({ table, representation, overview, marks }: ChartProps) {
   const [window, setWindow] = useState<ChartWindow>(null);
 
   const onRelayout = (event: Readonly<PlotRelayoutEvent>) => {
@@ -125,7 +147,7 @@ export function Chart({ table, representation, overview }: ChartProps) {
     else if (event["xaxis.autorange"]) setWindow(null);
   };
 
-  const spec = chartSpec(table, representation, window);
+  const spec = chartSpec(table, representation, window, marks);
   const xaxis = { ...spec.layout.xaxis, rangeslider: { visible: true, thickness: 0.12, bgcolor: "transparent" } };
 
   return (

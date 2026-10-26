@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Representation } from "../types/domain";
 import {
+  alert_marks_selector,
   duration,
   execution_strip_selector,
   hero_metric_selector,
@@ -30,6 +31,7 @@ const blank_strip = (ranks: number) => ({
 export function RunOverview({ path }: { path: string }) {
   const metrics = useTable(`${path}.metrics`);
   const meta = useTable(`${path}.meta`);
+  const alerts = useTable(`${path}.alerts`);
   const { settings, save } = useProjectSettings(path_segments(path)[0]);
   const failed = [metrics, meta].find((load) => load.loadState === "error");
   if (failed) return <LoadError message={failed.error} retry={failed.retry} />;
@@ -63,7 +65,12 @@ export function RunOverview({ path }: { path: string }) {
       </div>
       <div className="run-hero">
         {metrics.table && hero ? (
-          <Chart table={hero_table_selector(metrics.table, hero)} representation={Representation.Line} overview />
+          <Chart
+            table={hero_table_selector(metrics.table, hero)}
+            representation={Representation.Line}
+            overview
+            marks={alerts.table && alert_marks_selector(alerts.table)}
+          />
         ) : (
           <Placeholder label={metrics.table ? "no metrics logged" : "loading"} />
         )}

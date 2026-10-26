@@ -1,4 +1,5 @@
 import { Table } from "../../types/domain";
+import type { ChartMark } from "../../modules/chart";
 
 export const end_value = (value: number) => String(Number(value.toPrecision(4)));
 
@@ -18,6 +19,13 @@ export function hero_table_selector(metrics: Table, hero: string): Table {
   const names = metrics.column_names ?? [];
   const columns = [names.indexOf("step"), names.indexOf(hero)];
   return { ...metrics, column_names: ["step", hero], cells: metrics.cells.map((row) => columns.map((column) => row[column])) };
+}
+
+export function alert_marks_selector(alerts: Table): ChartMark[] {
+  const at = (name: string) => (alerts.column_names ?? []).indexOf(name);
+  return alerts.cells
+    .filter((row) => row[at("step")].value !== "")
+    .map((row) => ({ x: Number(row[at("step")].value), label: `${row[at("path")].value} ${row[at("message")].value}` }));
 }
 
 export function duration(seconds: number): string {

@@ -31,7 +31,7 @@ export function useTensor(path: string, table: Table | undefined) {
       .catch((error: Error) => {
         if (stale) return;
         setLoadState((state) => loadFsm.next(state, "failure"));
-        notify(`frames of ${path}: ${error.message}`, () => setAttempt((count) => count + 1));
+        notify(`frames of ${path}: ${error.message}`, { label: "Retry", perform: () => setAttempt((count) => count + 1) });
       });
     return () => {
       stale = true;

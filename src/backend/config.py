@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import Depends, Request
 
 from .adapters.local_file_storage import LocalFileStorage
+from .domain import table_engine
 
 
 def get_runs_root() -> Path:
@@ -20,3 +21,7 @@ def get_index(request: Request):
 
 def get_push(request: Request):
     return request.app.state.push
+
+
+def get_engine():
+    return table_engine

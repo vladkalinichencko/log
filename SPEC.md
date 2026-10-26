@@ -99,7 +99,7 @@ Dependencies are named, **not pinned to exact versions**. The repo commits a loc
 
 For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected. Nothing with a paid tier is used, not even its free part.
 
-Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`), pywebpush with py-vapid and cryptography (`backend/adapters/web_push.py`). Browser platform APIs (service worker, Push API) are used directly but still sit behind a module (`modules/notify`) so a caller never touches them. Swapping one is a new adapter plus one changed export line.
+Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/figure_matplotlib.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`), pywebpush with py-vapid and cryptography (`backend/adapters/web_push.py`). Browser platform APIs (service worker, Push API) are used directly but still sit behind a module (`modules/notify`) so a caller never touches them. Swapping one is a new adapter plus one changed export line.
 
 ### 4.1 Python package + backend
 
@@ -171,6 +171,7 @@ Neither owns the data model or imposes styles; both are off by default.
 - TypeScript: `camelCase.ts` for logic, `PascalCase.tsx` for React components.
 - Per-feature function names (so modularity is checkable by eye): `<feature>_reducer`, `<feature>_state`, `<feature>_selector`, `<element>_fsm`. The same kind of function is shaped the same way every time.
 - Test files: `test_*.py` (Python), `*.test.ts` / `*.test.tsx` (frontend).
+- **One module shape** (CLAUDE.md 8a/8c). Frontend: `modules/<capability>/index.ts` declares the interface (types) and has exactly one `export { … } from "./<adapter>"` line; the adapter is one file beside it; callers import only `modules/<capability>`. Backend: `ports/<capability>_port.py` is a `Protocol`, `adapters/<name>.py` implements it, and routes receive it through `Depends(get_<capability>)`. Toolkit: one adapter file per drawing library behind `STYLES` + `draw`. Trying another library = writing a second adapter and changing one line; `modules.test.ts`, `dependencies.test.ts` and `test_dependencies.py` hold the shape.
 
 ### 5.2 Repository layout
 
@@ -193,7 +194,8 @@ log/
       resume.py                   # log.resume_state(...)
       schedules.py                # log.warmup_cosine/linear/constant
       tick.py                     # log.tick(...)
-      export.py                   # log.export.figure(...)
+      export.py                   # log.export.figure(...): picks the table and series, hands them to the renderer adapter
+      figure_matplotlib.py        # the matplotlib renderer adapter: STYLES (matplotlib, nature) + draw(lines, x_label, path, style); a static Plotly renderer would be a second adapter
       writer/
         __init__.py
         queue_writer.py           # background WriterThread + WriteJob dataclasses
@@ -211,6 +213,7 @@ log/
         storage_port.py           # StoragePort protocol (read/watch)
         index_port.py             # IndexPort protocol (query runs)
         transport_port.py         # TransportPort protocol (push events)
+        table_engine_port.py      # TableEnginePort protocol (evaluate(expression, storage), functions()); the formula engine module satisfies it; DuckDB would be a second adapter; routes get it through Depends(get_engine)
       adapters/
         __init__.py
         local_file_storage.py     # LocalFileStorage implements StoragePort
@@ -280,8 +283,7 @@ log/
           searchSelectors.ts      # search_selector (matching `.`-paths)
           runSelectors.ts         # run_stats_selector (status strip from meta + metrics), end_value (how a current value is printed)
       api/
-        client.ts                 # one request() + one typed line per route; relative URLs (Vite proxies /api and /ws in dev)
-        websocket.ts              # connectWebSocket(onMessage) on the page's own host
+        client.ts                 # one typed line per route over modules/transport's request(); relative URLs (Vite proxies /api and /ws in dev)
       fsm/
         baseFsm.ts                # makeFsm(states, transitions): the one FSM factory
         buttonFsm.ts              # button_fsm derived from baseFsm
@@ -329,6 +331,12 @@ log/
         notify/
           index.ts                # SystemNotifications = on|off|blocked|unsupported; export { system_notifications_state, enable_system_notifications, disable_system_notifications } from the active adapter
           webpush.ts              # the browser adapter: registers /sw.js, subscribes with the server's VAPID key, hands the subscription to the server
+        transport/
+          index.ts                # Request (url, init → parsed body or Error with the server's message), ConnectLive (onEvent → socket); export { request, connectLive } from the active adapter
+          json.ts                 # the JSON adapter: fetch + JSON with the { error } shape, WebSocket on the page's own host; Arrow IPC would be a second adapter
+        formula-editor/
+          index.ts                # FormulaEditorProps { value, placeholder, suggestions, error, picking, onChange, onSubmit, onPick }; export { FormulaEditor } from the active adapter
+          input.tsx               # the plain-input adapter: one <input>, Enter submits, the suggestion Menu under it; CodeMirror would be a second adapter
         arrange/
           index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
           dndkit.tsx              # the dnd-kit + motion adapter: mouse drag after 8px, touch drag after a 250 ms still press (a quick swipe stays a page/tile scroll), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
@@ -342,6 +350,7 @@ log/
         inlineView.test.tsx       # parent stays a table; child controls live inside its row
         representations.test.tsx  # chartSpec mapping + applicable + switcher
         dependencies.test.ts      # fails when a capability library is imported outside its adapter or an import is unregistered (CLAUDE.md 8c)
+        modules.test.ts           # fails when a module lacks index.ts, has other than one adapter export line, or is imported past its index
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close

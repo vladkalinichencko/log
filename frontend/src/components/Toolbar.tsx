@@ -12,6 +12,7 @@ import { Table, CellType, TableFunction } from "../types/domain";
 import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
 import { formula_selector } from "../store/selectors/searchSelectors";
+import { FormulaEditor } from "../modules/formula-editor";
 import { is_run_ref } from "../store/selectors/pathSelectors";
 import { table_selection_selector } from "../store/selectors/tableSelectors";
 
@@ -148,26 +149,16 @@ export function Toolbar({ path, table, content }: ToolbarProps) {
       )}
       <Button icon="reset" ghost title="reset to source" disabled={!savedView} onClick={resetToSource} />
       {selection && (
-        <div className="anchor grow">
-          <input
-            className={expr.includes(COLUMN_PLACEHOLDER) ? "grow picking" : "grow"}
-            placeholder="formula: derive(z = zscore(loss, 100)) | select(step, z)"
-            value={expr}
-            onChange={(e) => setExpr(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && expr.trim() && !e.defaultPrevented) run(expr);
-            }}
-          />
-          {evalState === "error" && <span className="error">{evalError}</span>}
-          {suggestions.length > 0 && (
-            <Menu
-              items={suggestions.map((name) => ({
-                label: name,
-                onPick: () => setExpr(expr.slice(0, expr.length - word.length) + name),
-              }))}
-            />
-          )}
-        </div>
+        <FormulaEditor
+          value={expr}
+          placeholder="formula: derive(z = zscore(loss, 100)) | select(step, z)"
+          suggestions={suggestions}
+          error={evalState === "error" ? evalError : null}
+          picking={expr.includes(COLUMN_PLACEHOLDER)}
+          onChange={setExpr}
+          onSubmit={run}
+          onPick={(name) => setExpr(expr.slice(0, expr.length - word.length) + name)}
+        />
       )}
       <MenuButton icon="save" ghost title="export">
         {(close) => (

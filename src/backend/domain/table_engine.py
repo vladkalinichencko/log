@@ -1,3 +1,4 @@
+import inspect
 import operator
 import re
 from dataclasses import dataclass
@@ -267,6 +268,13 @@ def _atom(stream: Stream) -> tuple:
         return ("call", word, args)
     value = _value(word)
     return ("num", value) if isinstance(value, float) else ("col", word)
+
+
+def functions() -> list[dict]:
+    return [
+        {"name": name, "kind": fn.kind, "windowed": len(inspect.signature(fn.fn).parameters) > 1}
+        for name, fn in FUNCTIONS.items()
+    ]
 
 
 def evaluate(expression: str, storage: StoragePort) -> Table:

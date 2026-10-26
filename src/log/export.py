@@ -7,44 +7,15 @@ from backend.adapters.local_file_storage import LocalFileStorage
 from backend.domain.read_table import read_table
 
 from .errors import RendererUnavailableError, ViewNotFoundError
+from .figure_matplotlib import STYLES, draw
 from .writer.layout import default_runs_root
-
-MILLIMETRE = 1 / 25.4
-
-RENDERER_STYLES = {
-    "matplotlib": {},
-    "nature": {
-        "figure.figsize": (89 * MILLIMETRE, 60 * MILLIMETRE),
-        "savefig.dpi": 300,
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-        "font.size": 7,
-        "axes.labelsize": 7,
-        "xtick.labelsize": 6,
-        "ytick.labelsize": 6,
-        "axes.linewidth": 0.5,
-        "lines.linewidth": 1.0,
-        "xtick.major.width": 0.5,
-        "ytick.major.width": 0.5,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-    },
-}
 
 BOOKKEEPING = {"samples_seen", "wall_time", "rank", "epoch"}
 
 
 def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
-    if renderer not in RENDERER_STYLES:
-        raise RendererUnavailableError(f"renderer {renderer!r} is not one of {sorted(RENDERER_STYLES)}")
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except Exception as e:
-        raise RendererUnavailableError(f"renderer {renderer!r} unavailable: {e}") from e
-
+    if renderer not in STYLES:
+        raise RendererUnavailableError(f"renderer {renderer!r} is not one of {sorted(STYLES)}")
     table = _view_table(view_id, default_runs_root())
     names = table["column_names"] or []
     x_index = names.index("step") if "step" in names else 0
@@ -54,19 +25,11 @@ def figure(view_id: str, path: str, renderer: str = "matplotlib") -> str:
     ]
     if not series:
         raise ViewNotFoundError(f"view {view_id!r} has no numeric series to draw")
-
-    with plt.rc_context(RENDERER_STYLES[renderer]):
-        figure_, axes = plt.subplots()
-        for index in series:
-            rows = [row for row in table["cells"] if row[index]["value"] != ""]
-            axes.plot([float(row[x_index]["value"]) for row in rows], [float(row[index]["value"]) for row in rows], label=names[index])
-        axes.set_xlabel(names[x_index])
-        if len(series) > 1:
-            axes.legend()
-        else:
-            axes.set_ylabel(names[series[0]])
-        figure_.savefig(path, bbox_inches="tight")
-        plt.close(figure_)
+    lines = []
+    for index in series:
+        rows = [row for row in table["cells"] if row[index]["value"] != ""]
+        lines.append((names[index], [float(row[x_index]["value"]) for row in rows], [float(row[index]["value"]) for row in rows]))
+    draw(lines, names[x_index], path, renderer)
     return str(Path(path).resolve())
 
 

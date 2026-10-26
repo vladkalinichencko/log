@@ -1,14 +1,13 @@
-import inspect
-
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from ..config import get_storage
+from ..config import get_engine, get_storage
 from ..domain.compare_runs import compare_runs
 from ..domain.models import CellType, Table
 from ..domain.read_table import read_table
-from ..domain.table_engine import FUNCTIONS, ExpressionError, evaluate
+from ..domain.table_engine import ExpressionError
 from ..ports.storage_port import StoragePort
+from ..ports.table_engine_port import TableEnginePort
 from .errors import ApiError
 
 router = APIRouter()
@@ -23,11 +22,8 @@ class CompareRunsRequest(BaseModel):
 
 
 @router.get("/api/tables/functions")
-def list_functions() -> list[dict]:
-    return [
-        {"name": name, "kind": fn.kind, "windowed": len(inspect.signature(fn.fn).parameters) > 1}
-        for name, fn in FUNCTIONS.items()
-    ]
+def list_functions(engine: TableEnginePort = Depends(get_engine)) -> list[dict]:
+    return engine.functions()
 
 
 @router.get("/api/paths")
@@ -58,9 +54,9 @@ def get_table(path: str = Query(...), storage: StoragePort = Depends(get_storage
 
 
 @router.post("/api/tables/eval")
-def eval_table(req: EvalRequest, storage: StoragePort = Depends(get_storage)) -> Table:
+def eval_table(req: EvalRequest, storage: StoragePort = Depends(get_storage), engine: TableEnginePort = Depends(get_engine)) -> Table:
     try:
-        return evaluate(req.expression, storage)
+        return engine.evaluate(req.expression, storage)
     except ExpressionError as error:
         raise ApiError(400, "TABLE_EXPRESSION_ERROR", str(error))
 

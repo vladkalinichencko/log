@@ -9,8 +9,9 @@ import { Cell, CellType, LiveEvent, Representation, Table, TableKind } from "../
 const live: { send?: (event: LiveEvent) => void } = {};
 const plotted: { data?: { yaxis?: string; x: number[]; text?: string[] }[]; layout?: object } = {};
 
-vi.mock("../api/websocket", () => ({
-  connectWebSocket: (onMessage: (event: LiveEvent) => void) => {
+vi.mock("../modules/transport", async (actual) => ({
+  ...(await actual<typeof import("../modules/transport")>()),
+  connectLive: (onMessage: (event: LiveEvent) => void) => {
     live.send = onMessage;
     return { close: () => {} };
   },

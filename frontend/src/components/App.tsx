@@ -12,7 +12,7 @@ import { useStore } from "../store/store";
 import { path_segments, with_param } from "../store/selectors/pathSelectors";
 import { fetchWorkspaces, fetchViews, fetchFunctions, fetchPaths, saveWorkspace, saveView } from "../api/client";
 import { Notices, attempt } from "./Notices";
-import { connectWebSocket } from "../api/websocket";
+import { connectLive } from "../modules/transport";
 import { Table } from "../types/domain";
 
 export function App() {
@@ -92,7 +92,7 @@ function useLiveUpdates() {
     let retryTimer = 0;
     let unmounted = false;
     const connect = () => {
-      socket = connectWebSocket((message) => {
+      socket = connectLive((message) => {
         if (message.type === "run_updated") bump();
         if (message.type === "run_added" || message.type === "run_removed") {
           bump();

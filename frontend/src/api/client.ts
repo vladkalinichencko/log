@@ -1,4 +1,5 @@
 import { ProjectSettings, SavedView, Table, TableFunction, Workspace } from "../types/domain";
+import { request } from "../modules/transport";
 
 export const fetchTable = (path: string) => request<Table>(`/api/table?${query({ path })}`);
 
@@ -47,23 +48,6 @@ export const savePushSubscription = (subscription: PushSubscriptionJSON) =>
 
 export const deletePushSubscription = (endpoint: string) =>
   request<{ subscribed: false }>("/api/push/subscriptions", send("DELETE", { endpoint }));
-
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const text = await response.text();
-  const body = parseJson(text);
-  if (body === undefined) throw new Error(`${response.status} ${response.statusText}: ${url} did not answer JSON`);
-  if (!response.ok) throw new Error(body.error?.message ?? `${response.status} ${response.statusText}`);
-  return body;
-}
-
-function parseJson(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
 
 const send = (method: "POST" | "PUT" | "DELETE", body: unknown): RequestInit => ({
   method,

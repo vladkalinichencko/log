@@ -105,9 +105,11 @@ def test_derive_with_new_statistics(tmp_path):
 
 
 def test_functions_endpoint_mirrors_registry():
-    from backend.api.tables import list_functions
+    from fastapi.testclient import TestClient
 
-    listed = {f["name"]: f for f in list_functions()}
+    from backend.main import app
+
+    listed = {f["name"]: f for f in TestClient(app).get("/api/tables/functions").json()}
     assert listed.keys() == FUNCTIONS.keys()
     assert listed["mean"] == {"name": "mean", "kind": "aggregation", "windowed": False}
     assert listed["rolling_mean"] == {"name": "rolling_mean", "kind": "transform", "windowed": True}

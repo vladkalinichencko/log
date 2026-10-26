@@ -64,7 +64,7 @@ class ExpressionError(ValueError):
     pass
 
 
-_TOKEN = re.compile(r"==|!=|>=|<=|[()|,=<>+\-*/]|[\w.]+")
+_TOKEN = re.compile(r'"[^"]*"|==|!=|>=|<=|[()|,=<>+\-*/]|[\w.]+')
 _WORD = re.compile(r"[\w.]+")
 
 
@@ -104,6 +104,8 @@ class Stream:
         return self.take()
 
     def word(self) -> str:
+        if self.peek().startswith('"'):
+            return self.take()[1:-1]
         if not _WORD.fullmatch(self.peek()):
             raise ExpressionError(f"expected a name, got {self.peek()!r}")
         return self.take()

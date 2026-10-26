@@ -280,7 +280,7 @@ log/
           tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
           pathSelectors.ts        # path_segments, is_run_ref, tensor_source, with_param
-          searchSelectors.ts      # search_selector (matching `.`-paths)
+          searchSelectors.ts      # search_selector (matching `.`-paths), formula_selector, formula_name (quotes a column name that is not a plain word)
           runSelectors.ts         # run_stats_selector (status strip from meta + metrics), end_value (how a current value is printed)
       api/
         client.ts                 # one typed line per route over modules/transport's request(); relative URLs (Vite proxies /api and /ws in dev)
@@ -1137,7 +1137,7 @@ WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
 - On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta"|"alert" }`.
 - For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message", "text" }` (no `value`: it may be NaN, which is not JSON; `text` = `<project>.<run>: <path> <message> at step <step>`, formatted once on the server for the page and for Web Push). Lines present when the backend started are not pushed again. Every 60 s the server also reads each running run's `alerts` table and sends one `heartbeat` alert event when it starts reporting silence (again only after the run has logged in between).
-- Alert events go to every transport: the WebSocket (the open page shows a notice with an Open action) and Web Push (each subscribed browser; `/sw.js` shows a system notification only when no tab of the app is open — includes tabs it does not control — and a click opens `/<project>.<run>`). Subscribing lives in Settings (`systemNotify_fsm`). iPhone needs the app added to the Home Screen first (`manifest.webmanifest`, `display: standalone`).
+- Alert events go to every transport: the WebSocket (the open page shows a notice with an Open action) and Web Push (each subscribed browser; `/sw.js` shows a system notification unless a tab of the app is visible — counting tabs it does not control — and a click opens `/<project>.<run>`). A background tab therefore gets both: the system notification now, and the in-page notice waiting when the user comes back; a visible tab gets only the notice. Subscribing lives in Settings (`systemNotify_fsm`). iPhone needs the app added to the Home Screen first (`manifest.webmanifest`, `display: standalone`).
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
 - Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
 - A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.
@@ -1153,6 +1153,7 @@ source      := "table(" pathexpr | expr ")"
              | "splice(" run "," run ")"
 pathexpr    := segment ( "." segment )*          ; e.g.  projA.run3.epoch_0003.encoder.attn
 segment     := IDENT | GLOB                        ; GLOB allows '*' and '?'; segments may not be empty
+name        := IDENT | '"' any text but '"' '"'     ; a quoted name reaches columns like train/loss
 op          := "select(" collist ")"
              | "filter(" col CMP value ")"
              | "sort(" col DIR ")"

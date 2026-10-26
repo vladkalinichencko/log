@@ -50,7 +50,7 @@ const series = () => plotted.data!.filter((trace) => trace.name).map((trace) => 
 describe("overlay and splice", () => {
   it("comparing runs overlays one metric of every run in one chart, and the picker switches the metric", async () => {
     stubApi({
-      "demo.a.metrics": grid("demo.a.metrics", ["step", "epoch", "wall_time", "rank", "loss", "acc"], [["0", "0", "0", "0", "2", "0.1"]]),
+      "demo.a.metrics": grid("demo.a.metrics", ["step", "epoch", "wall_time", "rank", "loss", "acc", "train/loss"], [["0", "0", "0", "0", "2", "0.1", "3"]]),
       "overlay(loss, demo.a, demo.b)": grid("result", ["step", "demo.a", "demo.b"], [["0", "2", ""], ["1", "", "3"]]),
       "overlay(acc, demo.a, demo.b)": grid("result", ["step", "demo.a", "demo.b"], [["0", "0.1", "0.2"]]),
     });
@@ -61,6 +61,9 @@ describe("overlay and splice", () => {
     fireEvent.click(screen.getByText("loss ▾"));
     fireEvent.click(screen.getByRole("menuitem", { name: "acc" }));
     await waitFor(() => expect(evaluated).toContain("overlay(acc, demo.a, demo.b)"));
+    fireEvent.click(screen.getByText("acc ▾"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "train/loss" }));
+    await waitFor(() => expect(evaluated).toContain('overlay("train/loss", demo.a, demo.b)'));
   });
 
   it("a resumed run draws the run it continues before it as one line, flagged where it resumed", async () => {

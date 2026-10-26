@@ -113,3 +113,14 @@ describe("a series with a NaN", () => {
     expect(baseline.y).toEqual([1, 1, 1]);
   });
 });
+
+describe("a series with no finite value", () => {
+  it("draws no fill instead of an infinite baseline", async () => {
+    const diverged = { ...metrics, cells: [["0", "nan"], ["1", "inf"]].map((row) => row.map(number)) };
+    render(<Chart table={diverged} representation={Representation.Line} />);
+    await vi.waitFor(() => expect(plotted.props).toBeDefined());
+    const data = (plotted.props as unknown as { data: { y: number[]; fill?: string }[] }).data;
+    expect(data.flatMap((trace) => trace.y).some((y) => y === Infinity || y === -Infinity)).toBe(false);
+    expect(data.some((trace) => trace.fill)).toBe(false);
+  });
+});

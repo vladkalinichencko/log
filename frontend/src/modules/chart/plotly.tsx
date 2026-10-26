@@ -59,7 +59,7 @@ export function chartSpec(
 
   if (representation === Representation.Line) {
     const series = line_series_selector(table, window, t.palette);
-    const filled = series.length === 1 ? series[0] : null;
+    const filled = series.length === 1 && series[0].ys.some(Number.isFinite) ? series[0] : null;
     const events = marks.filter((mark) => mark.kind !== "epoch");
     const lanes = LANES.filter((lane) => events.some((mark) => mark.kind === lane.kind));
     const laneShare = lanes.length * LANE_SHARE;

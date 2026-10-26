@@ -157,3 +157,15 @@ def test_splice_continues_a_run_with_the_run_resumed_from_it_and_names_each_segm
         ("2.0", "18.0", "0.1", "p.b"), ("3.0", "17.0", "0.1", "p.b"), ("4.0", "16.0", "0.1", "p.b"),
     ]
     assert _route("splice(p.a)", tmp_path, monkeypatch).startswith("splice takes two runs")
+
+
+def test_a_quoted_name_reaches_metrics_logged_with_slashes(tmp_path, monkeypatch):
+    _metrics(tmp_path, "a", [{"step": 0, "scalars": {"train/loss": 2.0}}, {"step": 1, "scalars": {"train/loss": 1.0}}])
+    assert _route('overlay("train/loss", p.a)', tmp_path, monkeypatch) == (["step", "p.a"], [["0.0", "2.0"], ["1.0", "1.0"]])
+    assert _route('table(p.a.metrics) | select(step, "train/loss")', tmp_path, monkeypatch)[0] == ["step", "train/loss"]
+
+
+def test_a_statistic_on_a_slash_named_metric_evaluates_from_its_quoted_formula(tmp_path, monkeypatch):
+    _metrics(tmp_path, "a", [{"step": step, "scalars": {"train/loss": float(step)}} for step in range(3)])
+    names, rows = _route('table(p.a.metrics) | derive("zscore_train/loss" = zscore("train/loss", 2)) | select(step, "zscore_train/loss")', tmp_path, monkeypatch)
+    assert names == ["step", "zscore_train/loss"] and len(rows) == 3

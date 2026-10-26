@@ -3,6 +3,7 @@ import { evalTable, fetchRunComparison } from "../api/client";
 import { selection_run_refs, table_selection_selector, table_selector } from "../store/selectors/tableSelectors";
 import { path_segments, with_param } from "../store/selectors/pathSelectors";
 import { hero_metric_selector, metric_names } from "../store/selectors/runSelectors";
+import { formula_name } from "../store/selectors/searchSelectors";
 import { useStore } from "../store/store";
 import { Representation } from "../types/domain";
 import { Chart } from "../modules/chart";
@@ -68,7 +69,7 @@ function RunOverlay({ runs }: { runs: string[] }) {
   const first = useTable(`${runs[0]}.metrics`);
   const { settings } = useProjectSettings(path_segments(runs[0])[0]);
   const metric = first.table && hero_metric_selector(first.table, searchParams.get("overlay") ?? settings?.hero);
-  const expression = metric ? `overlay(${metric}, ${runs.join(", ")})` : null;
+  const expression = metric ? `overlay(${formula_name(metric)}, ${runs.join(", ")})` : null;
   const overlay = useLoadedTable(expression, () => evalTable(expression!));
 
   return (

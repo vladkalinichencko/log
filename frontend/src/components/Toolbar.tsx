@@ -11,7 +11,7 @@ import { saveChartImage } from "../modules/chart";
 import { Table, CellType, TableFunction } from "../types/domain";
 import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
-import { formula_selector } from "../store/selectors/searchSelectors";
+import { formula_name, formula_selector } from "../store/selectors/searchSelectors";
 import { FormulaEditor } from "../modules/formula-editor";
 import { is_run_ref } from "../store/selectors/pathSelectors";
 import { table_selection_selector } from "../store/selectors/tableSelectors";
@@ -19,8 +19,8 @@ import { table_selection_selector } from "../store/selectors/tableSelectors";
 export const COLUMN_PLACEHOLDER = "«col»";
 
 export function functionExpression(fn: TableFunction, column: string): string {
-  const args = fn.windowed ? `${column}, 20` : column;
-  return `derive(${fn.name}_${column} = ${fn.name}(${args}))`;
+  const args = fn.windowed ? `${formula_name(column)}, 20` : formula_name(column);
+  return `derive(${formula_name(`${fn.name}_${column}`)} = ${fn.name}(${args}))`;
 }
 
 interface ToolbarProps {

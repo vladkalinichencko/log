@@ -75,22 +75,14 @@ describe("InlineView", () => {
     fireEvent.mouseUp(window, { clientX: 145, clientY: 145 });
     expect((useStore.getState() as any).tiles.get("demo.baseline.config").w).toBe(365);
 
-    const tiles = document.querySelectorAll(".tile-grid > .tile");
-    fireEvent.dragStart(tiles[0]);
-    fireEvent.drop(tiles[1]);
-    expect((useStore.getState() as any).order.get("demo.baseline")).toEqual([
-      "demo.baseline.meta",
-      "demo.baseline.config",
-    ]);
-
     expect(document.querySelector(".tile-grid > .tile input, .tile-grid > .tile .column-actions")).toBeNull();
+    const order = () => (useStore.getState() as any).order.get("demo.baseline");
     fireEvent.keyDown(document.querySelector(".tile-grid > .tile button")!, { key: "ArrowRight", altKey: true });
-    expect((useStore.getState() as any).order.get("demo.baseline")[0]).toBe("demo.baseline.meta");
+    expect(order()).toBeUndefined();
     fireEvent.keyDown(document.querySelectorAll(".tile-grid > .tile")[0], { key: "ArrowRight", altKey: true });
-    expect((useStore.getState() as any).order.get("demo.baseline")).toEqual([
-      "demo.baseline.config",
-      "demo.baseline.meta",
-    ]);
+    expect(order()).toEqual(["demo.baseline.meta", "demo.baseline.config"]);
+    fireEvent.keyDown(document.querySelectorAll(".tile-grid > .tile")[1], { key: "ArrowLeft", altKey: true });
+    expect(order()).toEqual(["demo.baseline.config", "demo.baseline.meta"]);
   });
 
   it("renders a deep leaf directly", async () => {

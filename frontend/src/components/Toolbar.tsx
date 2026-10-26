@@ -7,6 +7,7 @@ import { Menu } from "./Menu";
 import { MenuButton } from "./MenuButton";
 import { RenamePanel } from "./RenamePanel";
 import { attempt } from "./Notices";
+import { saveChartImage } from "../modules/chart";
 import { Table, CellType, TableFunction } from "../types/domain";
 import { SERIES } from "../store/slices/settingsSlice";
 import { useStore } from "../store/store";
@@ -19,13 +20,6 @@ export const COLUMN_PLACEHOLDER = "«col»";
 export function functionExpression(fn: TableFunction, column: string): string {
   const args = fn.windowed ? `${column}, 20` : column;
   return `derive(${fn.name}_${column} = ${fn.name}(${args}))`;
-}
-
-async function exportPng(content: HTMLElement | null, filename: string) {
-  const plot = content?.querySelector<HTMLElement>(".js-plotly-plot");
-  if (!plot) throw new Error("this tile shows a table; switch it to a chart first");
-  const Plotly = (await import("plotly.js/dist/plotly")).default;
-  await Plotly.downloadImage(plot, { format: "png", width: 1600, height: 900, filename });
 }
 
 interface ToolbarProps {
@@ -184,7 +178,7 @@ export function Toolbar({ path, table, content }: ToolbarProps) {
                 items: [
                   { label: "csv", onPick: () => { exportCsv(table); close(); } },
                   { label: "json", onPick: () => { exportJson(table); close(); } },
-                  { label: "png", onPick: () => { attempt("png export", () => exportPng(content.current, table.name)); close(); } },
+                  { label: "png", onPick: () => { attempt("png export", () => saveChartImage(content.current, table.name)); close(); } },
                 ],
               },
               {

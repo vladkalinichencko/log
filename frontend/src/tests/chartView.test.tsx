@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render } from "@testing-library/react";
-import { ChartView } from "../components/ChartView";
+import { Chart } from "../modules/chart";
 import { CellType, Representation, Table, TableKind } from "../types/domain";
 
 const plotted: { props?: { layout: { annotations: object[] }; onRelayout: (event: object) => void } } = {};
@@ -24,12 +24,12 @@ const metrics: Table = {
   source_path: "p.r.metrics",
 };
 
-describe("ChartView", () => {
+describe("Chart", () => {
   it.each([
     ["the range slider", { "xaxis.range": [0, 200] }],
     ["a drag zoom", { "xaxis.range[0]": 0, "xaxis.range[1]": 200 }],
   ])("%s narrows the window, which pins the latest value to the right edge", async (_, event) => {
-    render(<ChartView table={metrics} representation={Representation.Line} overview />);
+    render(<Chart table={metrics} representation={Representation.Line} overview />);
     await vi.waitFor(() => expect(plotted.props).toBeDefined());
     act(() => plotted.props!.onRelayout(event));
     expect(plotted.props!.layout.annotations[0]).toMatchObject({ xref: "paper", text: "0.001 →" });

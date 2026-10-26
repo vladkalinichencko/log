@@ -1,4 +1,4 @@
-import { SavedView, Table, TableFunction, Workspace } from "../types/domain";
+import { ProjectSettings, SavedView, Table, TableFunction, Workspace } from "../types/domain";
 
 export const fetchTable = (path: string) => request<Table>(`/api/table?${query({ path })}`);
 
@@ -34,6 +34,11 @@ export const fetchWorkspaces = () => request<Workspace[]>("/api/workspaces");
 
 export const saveWorkspace = (workspace: Workspace) =>
   request<Workspace>(`/api/workspaces/${workspace.id}`, send("PUT", workspace));
+
+export const fetchProjectSettings = (project: string) => request<ProjectSettings>(`/api/projects/${project}/settings`);
+
+export const saveProjectSettings = (project: string, settings: ProjectSettings) =>
+  request<ProjectSettings>(`/api/projects/${project}/settings`, send("PUT", settings));
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);

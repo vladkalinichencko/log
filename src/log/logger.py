@@ -4,9 +4,10 @@ from typing import Union
 import numpy as np
 import torch
 
+from .alerts import Action, Check
 from .errors import InvalidPathError, UnsupportedValueTypeError
 from .run import get_active_run, RunContext
-from .writer.queue_writer import ScalarJob, TensorJob
+from .writer.queue_writer import AlertJob, ScalarJob, TensorJob
 
 
 class Logger:
@@ -35,6 +36,11 @@ class Logger:
         stamp = dict(step=step, samples_seen=self.ctx.samples_seen, wall_time=time.time(), rank=0, epoch=self.ctx.epoch)
         if isinstance(value, (int, float, bool)):
             self.ctx.writer.enqueue(ScalarJob(path=path, value=value, **stamp))
+            if not isinstance(value, bool):
+                for row in self.ctx.alerts.observe(path, float(value), stamp):
+                    self.ctx.writer.enqueue(AlertJob(row=row, epoch=stamp["epoch"]))
+                    for action in self.ctx.alerts.actions:
+                        action(row)
         else:
             self.ctx.writer.enqueue(TensorJob(path=path, tensor=torch.as_tensor(value), **stamp))
 
@@ -50,3 +56,11 @@ def log(
     step: int | None = None,
 ) -> None:
     logger().log(path, value, step)
+
+
+def alert(path: str, check: Check) -> None:
+    get_active_run().alerts.checks.setdefault(path, {})[check.__name__] = check
+
+
+def on_alert(action: Action) -> None:
+    get_active_run().alerts.actions.append(action)

@@ -28,6 +28,7 @@ Short statements of how the product thinks. Every screen decision should be trac
 - **One inset per surface.** The page pads its content by the gutter, a modal by `16px`, a tile by `8px`; everything inside a surface starts at that inset and is spaced by the surface's gap, never by its own margin. A surface never contains a second page inset.
 - **One control height.** Every button, input and select outside a table is `32px` tall (`--control`); a segmented group shares that height. In-table actions (sort, filter) are `24px`, one level down on purpose.
 - **One ink per control.** Icons are masks filled with `currentColor`, so an icon, its label and its state change color together: muted (`--gray-600`) at rest, ink (`--gray-900`) on hover or when active. Control borders and input borders are the same `--gray-200`.
+- **Motion is a token.** `--motion-fast` (120ms), `--motion-slow` (240ms) and `--motion-curve` are the only durations and easing; both durations become 0 under `prefers-reduced-motion`. A component never writes its own duration.
 - **Counts belong to their cause.** The `N of M rows` count appears under the filter only while a filter is active; the editor always shows `cols × rows` there.
 - Labels align left and numbers right. Property lists are two-column grids; spaces and arbitrary flex gaps may not fake alignment.
 - Section headings align index/title left and rationale right, separated by a `2px` top rule rather than a surrounding card.

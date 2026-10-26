@@ -1,4 +1,7 @@
+import itertools
 import json
+import sys
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -272,3 +275,56 @@ def test_a_finished_run_records_its_end_and_the_project_shows_its_duration(tmp_p
     row = read_table("p", LocalFileStorage(tmp_path)).cells[0]
     assert [cell.value for cell in row[:2]] == ["r", "finished"]
     assert float(row[3].value) == round(meta["end_wall_time"] - meta["start_wall_time"], 3)
+
+
+def _alerts(tmp_path):
+    return [json.loads(line) for line in (tmp_path / "p" / "r" / "epoch_0000" / "alerts.jsonl").read_text().splitlines()]
+
+
+def _log_clock(monkeypatch, seconds):
+    monkeypatch.setattr(sys.modules["log.logger"], "time", SimpleNamespace(time=lambda: next(seconds)))
+
+
+def test_built_in_alerts_write_one_row_per_onset_and_custom_checks_and_actions_join_them(tmp_path, monkeypatch):
+    _log_clock(monkeypatch, itertools.count())
+    acted = []
+
+    def below_half(history):
+        return "fell below 0.5" if history[-1] < 0.5 else None
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        log.alert("acc", below_half)
+        log.on_alert(acted.append)
+        for step in range(30):
+            log.log("loss", 1.0 + 0.01 * (step % 2), step=step)
+            log.log("acc", 0.9, step=step)
+        log.log("loss", float("nan"), step=30)
+        log.log("loss", float("nan"), step=31)
+        log.log("loss", 1.0, step=32)
+        log.log("loss", 50.0, step=33)
+        log.log("acc", 0.1, step=33)
+
+    main()
+    rows = _alerts(tmp_path)
+    assert [(row["rule"], row["path"], row["step"]) for row in rows] == [
+        ("non_finite", "loss", 30),
+        ("spike", "loss", 33),
+        ("below_half", "acc", 33),
+    ]
+    assert rows[0]["message"] == "became nan" and set(rows[0]) == {"step", "wall_time", "rank", "rule", "path", "value", "message"}
+    assert [(row["rule"], row["step"]) for row in acted] == [(row["rule"], row["step"]) for row in rows]
+
+
+def test_a_step_far_slower_than_usual_raises_stall_and_switched_off_rules_stay_silent(tmp_path, monkeypatch):
+    (tmp_path / "p").mkdir()
+    (tmp_path / "p" / "project.json").write_text(json.dumps({"alerts": {"non_finite": False}}))
+    _log_clock(monkeypatch, iter([*range(25), 100]))
+
+    @log.run(project="p", name="r", runs_root=str(tmp_path))
+    def main():
+        for step in range(26):
+            log.log("loss", float("nan") if step == 3 else 1.0, step=step)
+
+    main()
+    assert [(row["rule"], row["path"], row["step"], row["value"]) for row in _alerts(tmp_path)] == [("stall", "step", 25, 76.0)]

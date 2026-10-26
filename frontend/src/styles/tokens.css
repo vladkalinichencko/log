@@ -1,3 +1,6 @@
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
 :root {
   --space: 8px;
   --space-0-5: 4px;
@@ -37,6 +40,16 @@
   --menu-width: 220px;
   --menu-column: 160px;
   --menu-height: 320px;
+  --motion-fast: 120ms;
+  --motion-slow: 240ms;
+  --motion-curve: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-slow: 0ms;
+  }
 }
 
 :root[data-theme="dark"] {

@@ -3,8 +3,10 @@ import time
 
 from ..ports.storage_port import StoragePort
 from .models import Cell, CellType, Representation, Table, TableKind
+from .project_settings import PROJECT_SETTINGS_FILE, project_settings
 
 DERIVED_STATE_DIRS = {"views", "workspaces"}
+HEARTBEAT_SECONDS = 300
 
 
 def read_table(path: str, storage: StoragePort) -> Table:
@@ -31,6 +33,8 @@ def read_table(path: str, storage: StoragePort) -> Table:
         return _checkpoints_table(base, run_dir, storage)
     if inside == ["metrics"]:
         return _run_metrics_table(base, run_dir, storage)
+    if inside == ["alerts"]:
+        return _run_alerts_table(project, base, run_dir, storage)
 
     epoch, *leaf = inside
     if not leaf:
@@ -95,6 +99,7 @@ def _run_table(run: str, base: str, run_dir: str, storage: StoragePort) -> Table
     entries += [(epoch, f"{base}.{epoch}") for epoch in run_epochs]
     if storage.exists(f"{run_dir}/checkpoints"):
         entries.append(("checkpoints", f"{base}.checkpoints"))
+    entries.append(("alerts", f"{base}.alerts"))
     return _folder_table(run, base, entries)
 
 
@@ -128,6 +133,42 @@ def _run_metrics_table(base: str, run_dir: str, storage: StoragePort) -> Table:
         source_path=f"{base}.metrics",
         representation=Representation.line,
     )
+
+
+def _run_alerts_table(project: str, base: str, run_dir: str, storage: StoragePort) -> Table:
+    rows = [
+        (int(epoch.removeprefix("epoch_")), row)
+        for epoch in epochs(storage, run_dir)
+        for row in read_jsonl(storage, f"{run_dir}/{epoch}/alerts.jsonl")
+    ]
+    saved = f"{project}/{PROJECT_SETTINGS_FILE}"
+    if project_settings(read_json(storage, saved) if storage.exists(saved) else {})["alerts"]["heartbeat"]:
+        rows += _heartbeat_rows(run_dir, storage)
+    return Table(
+        name="alerts",
+        kind=TableKind.grid,
+        column_names=["step", "rule", "path", "message", "value", "epoch", "wall_time", "rank"],
+        cells=[
+            [_scalar_cell(row["step"]), Cell(CellType.string, row["rule"]), Cell(CellType.string, row["path"]), Cell(CellType.string, row["message"])]
+            + [_scalar_cell(row["value"]), _scalar_cell(epoch), _scalar_cell(row["wall_time"]), _scalar_cell(row["rank"])]
+            for epoch, row in rows
+        ],
+        source_path=f"{base}.alerts",
+    )
+
+
+def _heartbeat_rows(run_dir: str, storage: StoragePort) -> list[tuple[int, dict]]:
+    meta = read_json(storage, f"{run_dir}/meta.json")
+    if meta["status"] != "running":
+        return []
+    run_epochs = epochs(storage, run_dir) or ["epoch_0000"]
+    logged = read_jsonl(storage, f"{run_dir}/{run_epochs[-1]}/metrics.jsonl")
+    last = logged[-1] if logged else {"step": None, "wall_time": meta["start_wall_time"], "rank": 0}
+    silence = time.time() - last["wall_time"]
+    if silence <= HEARTBEAT_SECONDS:
+        return []
+    row = {**last, "rule": "heartbeat", "path": "run", "value": round(silence), "message": f"has logged nothing for {silence / 60:.0f} min"}
+    return [(int(run_epochs[-1].removeprefix("epoch_")), row)]
 
 
 def _scalar_cell(value) -> Cell:

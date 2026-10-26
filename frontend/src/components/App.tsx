@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { NavBar } from "./NavBar";
 import { MainView } from "./MainView";
 import { Dashboard } from "./Dashboard";
@@ -84,6 +84,8 @@ const loadPaths = () => attempt("table paths", () => fetchPaths().then(useStore.
 function useLiveUpdates() {
   const bump = useStore((state) => state.connection_bump);
   const connectionEvent = useStore((state) => state.connection_event);
+  const notify = useStore((state) => state.notices_push);
+  const navigate = useNavigate();
   useEffect(() => {
     let socket: WebSocket;
     let retryDelay = 1000;
@@ -95,6 +97,10 @@ function useLiveUpdates() {
         if (message.type === "run_added" || message.type === "run_removed") {
           bump();
           loadPaths();
+        }
+        if (message.type === "alert") {
+          const run = message.run.replace("/", ".");
+          notify(`${run}: ${message.path} ${message.message} at step ${message.step}`, { label: "Open", perform: () => navigate(`/${run}`) });
         }
       });
       socket.onopen = () => {

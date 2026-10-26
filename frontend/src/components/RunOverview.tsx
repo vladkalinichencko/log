@@ -1,8 +1,20 @@
 import { Link } from "react-router-dom";
 import { Representation } from "../types/domain";
-import { duration, execution_strip_selector, run_stats_selector } from "../store/selectors/runSelectors";
+import {
+  alert_marks_selector,
+  duration,
+  execution_strip_selector,
+  hero_metric_selector,
+  hero_table_selector,
+  metric_names,
+  run_stats_selector,
+} from "../store/selectors/runSelectors";
+import { path_segments } from "../store/selectors/pathSelectors";
+import { useProjectSettings } from "./useProjectSettings";
+import { Menu } from "./Menu";
+import { MenuButton } from "./MenuButton";
 import { useTable } from "./useTable";
-import { ChartView } from "./ChartView";
+import { Chart } from "../modules/chart";
 import { LoadError } from "./LoadError";
 import { Sparkline } from "./Sparkline";
 import { Placeholder } from "./Placeholder";
@@ -19,20 +31,49 @@ const blank_strip = (ranks: number) => ({
 export function RunOverview({ path }: { path: string }) {
   const metrics = useTable(`${path}.metrics`);
   const meta = useTable(`${path}.meta`);
+  const alerts = useTable(`${path}.alerts`);
+  const { settings, save } = useProjectSettings(path_segments(path)[0]);
   const failed = [metrics, meta].find((load) => load.loadState === "error");
   if (failed) return <LoadError message={failed.error} retry={failed.retry} />;
   const stats = metrics.table && meta.table ? run_stats_selector(meta.table, metrics.table) : BLANK_STATS;
   const ranks = Number(meta.table?.cells.find(([key]) => key.value === "world_size")?.[1].value) || 1;
   const timing = metrics.table && execution_strip_selector(metrics.table, EXECUTION_COLUMNS);
   const strip = timing || blank_strip(ranks);
+  const hero = metrics.table && hero_metric_selector(metrics.table, settings?.hero);
 
   return (
     <section className="run-overview">
       <div className="bar">
-        <Link className="tile-name link" to={`/${path}.metrics`}>metrics</Link>
+        <div className="group">
+          <Link className="tile-name link" to={`/${path}.metrics`}>metrics</Link>
+          {metrics.table && hero && (
+            <MenuButton label={`${hero} ▾`} ghost title="Main chart metric for every run of this project">
+              {(close) => (
+                <Menu
+                  items={metric_names(metrics.table!).map((name) => ({
+                    label: name,
+                    onPick: () => {
+                      save({ alerts: {}, ...settings, hero: name });
+                      close();
+                    },
+                  }))}
+                />
+              )}
+            </MenuButton>
+          )}
+        </div>
       </div>
       <div className="run-hero">
-        {metrics.table ? <ChartView table={metrics.table} representation={Representation.Line} overview /> : <Placeholder label="loading" />}
+        {metrics.table && hero ? (
+          <Chart
+            table={hero_table_selector(metrics.table, hero)}
+            representation={Representation.Line}
+            overview
+            marks={alerts.table && alert_marks_selector(alerts.table)}
+          />
+        ) : (
+          <Placeholder label={metrics.table ? "no metrics logged" : "loading"} />
+        )}
       </div>
       <div className="stat-strip">
         {stats.map((stat) => (

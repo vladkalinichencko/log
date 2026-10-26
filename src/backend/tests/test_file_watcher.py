@@ -52,6 +52,11 @@ def test_saved_views_and_workspaces_are_not_run_changes(tmp_path):
     assert changed_runs(paths, tmp_path) == {}
 
 
+def test_project_level_files_are_not_runs(tmp_path):
+    paths = [str(tmp_path / "p" / "project.json"), str(tmp_path / "p" / "project.json.tmp")]
+    assert changed_runs(paths, tmp_path) == {}
+
+
 def test_paths_outside_runs_root_ignored(tmp_path):
     assert changed_runs(["/somewhere/else/x.json"], tmp_path) == {}
 
@@ -62,3 +67,26 @@ def test_groups_multiple_runs(tmp_path):
         str(tmp_path / "proj" / "run2" / "meta.json"),
     ]
     assert set(changed_runs(paths, tmp_path)) == {("proj", "run1"), ("proj", "run2")}
+
+
+def test_watcher_pushes_each_new_alert_row_once_and_not_the_rows_it_found_at_start(tmp_path):
+    index = SqliteIndex(tmp_path)
+    run = tmp_path / "p" / "r"
+    (run / "epoch_0000").mkdir(parents=True)
+    (run / "meta.json").write_text(json.dumps({"status": "running", "samples_seen": 0}))
+    alerts = run / "epoch_0000" / "alerts.jsonl"
+    old = {"step": 1, "wall_time": 1.0, "rank": 0, "rule": "spike", "path": "loss", "value": 9.0, "message": "old"}
+    alerts.write_text(json.dumps(old) + "\n")
+    index.rebuild()
+    transport = RecordingTransport()
+    watcher = FileWatcher(tmp_path, index, transport)
+    new = {**old, "step": 2, "rule": "non_finite", "value": float("nan"), "message": "became nan"}
+
+    alerts.write_text(alerts.read_text() + json.dumps(new) + "\n" + '{"step": 3, "wall')
+    asyncio.run(watcher.handle([str(alerts)]))
+    asyncio.run(watcher.handle([str(alerts)]))
+
+    assert [event for event in transport.events if event["type"] == "alert"] == [
+        {"type": "alert", "run": "p/r", "step": 2, "rule": "non_finite", "path": "loss", "message": "became nan"},
+    ]
+    assert transport.events[0] == {"type": "run_updated", "run": "p/r", "kind": "alert"}

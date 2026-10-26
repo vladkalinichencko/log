@@ -1,7 +1,7 @@
 import { ComponentType } from "react";
 import { Table, Cell, CellType, TableKind, Representation } from "../types/domain";
 import { TableUse, TableView } from "./TableView";
-import { ChartView } from "./ChartView";
+import { Chart } from "../modules/chart";
 import { InlineView } from "./InlineView";
 
 interface ViewProps {
@@ -12,11 +12,11 @@ interface ViewProps {
 
 const RENDERERS: Record<Representation, ComponentType<ViewProps>> = {
   [Representation.Grid]: TableView,
-  [Representation.Line]: ChartView,
-  [Representation.Heatmap]: ChartView,
-  [Representation.Histogram]: ChartView,
-  [Representation.Scatter]: ChartView,
-  [Representation.Trajectory]: ChartView,
+  [Representation.Line]: Chart,
+  [Representation.Heatmap]: Chart,
+  [Representation.Histogram]: Chart,
+  [Representation.Scatter]: Chart,
+  [Representation.Trajectory]: Chart,
   [Representation.Inline]: InlineView,
 };
 

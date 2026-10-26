@@ -39,7 +39,7 @@ def _make_run(root):
 def test_drill_run_to_scalar(tmp_path):
     _make_run(tmp_path)
     run = read_table("p.r", _storage(tmp_path))
-    assert {c[0].value for c in run.cells} == {"config", "meta", "metrics", "epoch_0000"}
+    assert {c[0].value for c in run.cells} == {"config", "meta", "metrics", "epoch_0000", "alerts"}
 
     epoch = read_table("p.r.epoch_0000", _storage(tmp_path))
     assert {c[0].value for c in epoch.cells} == {"loss", "w"}
@@ -116,3 +116,30 @@ def test_project_table_pulls_status_start_and_duration_up_from_each_run(tmp_path
     assert rows["done"] == ["finished", "100.0", "60.5", "8"]
     assert float(rows["live"][2]) > 1_000_000
     assert rows["old"] == ["finished", "5.0", "", "0"]
+
+
+def test_alerts_table_lists_logged_alerts_and_a_heartbeat_for_a_silent_running_run_unless_switched_off(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+
+    run = tmp_path / "p" / "r"
+    (run / "epoch_0001").mkdir(parents=True)
+    (run / "meta.json").write_text(json.dumps({"status": "running", "samples_seen": 0, "start_wall_time": 0.0}))
+    (run / "epoch_0001" / "metrics.jsonl").write_text(json.dumps({"step": 7, "samples_seen": 0, "wall_time": 100.0, "rank": 0, "scalars": {"loss": 1.0}}) + "\n")
+    (run / "epoch_0001" / "alerts.jsonl").write_text(json.dumps({"step": 5, "wall_time": 90.0, "rank": 0, "rule": "non_finite", "path": "loss", "value": float("nan"), "message": "became nan"}) + "\n")
+    monkeypatch.setenv("LOG_RUNS_ROOT", str(tmp_path))
+    monkeypatch.setattr("backend.domain.read_table.time.time", lambda: 100.0 + 600)
+    client = TestClient(app)
+
+    def alerts():
+        table = client.get("/api/table", params={"path": "p.r.alerts"}).json()
+        return [[cell["value"] for cell in row] for row in table["cells"]]
+
+    assert "alerts" in [row[0]["value"] for row in client.get("/api/table", params={"path": "p.r"}).json()["cells"]]
+    assert alerts() == [
+        ["5", "non_finite", "loss", "became nan", "nan", "1", "90.0", "0"],
+        ["7", "heartbeat", "run", "has logged nothing for 10 min", "600", "1", "100.0", "0"],
+    ]
+    (tmp_path / "p" / "project.json").write_text(json.dumps({"alerts": {"heartbeat": False}}))
+    assert [row[1] for row in alerts()] == ["non_finite"]

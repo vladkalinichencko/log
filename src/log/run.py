@@ -5,6 +5,9 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
+from backend.domain.project_settings import read_project_settings
+
+from .alerts import Alerts
 from .errors import ConfigSerializationError, InvalidStepUnitError, NoActiveRunError, RunDirectoryError
 from .writer.atomic import atomic_write_bytes, update_json
 from .writer.identity import git_hash, requirements_hash
@@ -23,11 +26,13 @@ class RunContext:
         config: dict,
         step_unit: str,
         writer: WriterThread,
+        alerts: Alerts,
     ):
         self.run_dir = run_dir
         self.config = config
         self.step_unit = step_unit
         self.writer = writer
+        self.alerts = alerts
         self.samples_seen = 0
         self.epoch = 0
         self.current_step = 0
@@ -104,7 +109,7 @@ def run(
 
             writer = WriterThread(run_dir, meta_path)
             writer.start()
-            _active_run = RunContext(run_dir, config, step_unit, writer)
+            _active_run = RunContext(run_dir, config, step_unit, writer, Alerts(read_project_settings(run_dir.parent)["alerts"]))
 
             status = "finished"
             try:

@@ -21,7 +21,10 @@ function violations() {
   const found = [];
   const name = (element) => `${element.tagName.toLowerCase()}.${[...element.classList].join(".")}`;
   const outside = (element) => element.closest("svg, .js-plotly-plot, .lab, .catalog-chart, .catalog-space") !== null;
-  const visible = (element) => element.getClientRects().length > 0;
+  const visible = (element) => {
+    const box = element.getBoundingClientRect();
+    return element.getClientRects().length > 0 && (box.width > 1 || box.height > 1);
+  };
   for (const element of document.querySelectorAll("#root *, .menu, .menu *, .notices *")) {
     if (outside(element) || !visible(element)) continue;
     const style = getComputedStyle(element);

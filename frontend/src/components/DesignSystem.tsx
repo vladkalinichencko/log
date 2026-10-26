@@ -3,7 +3,7 @@ import { Cell, CellType, Representation, SavedView, Table, TableKind } from "../
 import { useStore } from "../store/store";
 import { SERIES } from "../store/slices/settingsSlice";
 import { Button } from "./Button";
-import { ChartView } from "./ChartView";
+import { Chart } from "../modules/chart";
 import { DesignSystemLab } from "./DesignSystemLab";
 import { Icon, ICON_NAMES } from "./Icon";
 import { LoadError } from "./LoadError";
@@ -214,7 +214,7 @@ export function DesignSystem() {
           {CHARTS.map(([fixture, representation]) => (
             <div key={representation} className="tile catalog-chart">
               <span className="tile-name">{representation}</span>
-              <ChartView table={fixture} representation={representation} />
+              <Chart table={fixture} representation={representation} />
             </div>
           ))}
         </div>

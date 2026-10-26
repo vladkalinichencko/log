@@ -97,7 +97,9 @@ Trainer-style API (`log.fit(model, data)`); auto-instrumentation of Lightning/Ac
 
 Dependencies are named, **not pinned to exact versions**. The repo commits a lockfile (`uv.lock` / `package-lock.json`) that captures the resolved versions at install time; the spec lists names + the one capability that justifies each. No version is written into this document, so "latest compatible at install" is the rule and the lockfile is the record.
 
-For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected.
+For every dependency: one line on what it does and what specifically breaks or must be hand-written without it. If the standard library / a few lines / plain CSS suffice, the dependency is rejected. Nothing with a paid tier is used, not even its free part.
+
+Two kinds (CLAUDE.md 8c). **Platform** dependencies are used directly: the runtimes, React, react-router (the URL is state), FastAPI/pydantic/uvicorn, torch, numpy. **Capability** dependencies live behind an interface we own and are imported in exactly one adapter file: Plotly (`frontend/src/modules/chart/plotly.tsx`), dnd-kit and Motion (`frontend/src/modules/arrange/dndkit.tsx`), zustand (`store/store.ts`), matplotlib (`log/export.py`), watchfiles (`backend/adapters/file_watcher.py`), sqlite3 (`backend/adapters/sqlite_index.py`). Swapping one is a new adapter plus one changed export line.
 
 ### 4.1 Python package + backend
 
@@ -108,6 +110,8 @@ For every dependency: one line on what it does and what specifically breaks or m
 | numpy | `.npy` read/write with a documented header and memory-mapped partial reads. Hand-rolling a binary array format is the thing ADR-004 rejects. |
 | fastapi | Typed request/response models (matches the DTO-as-message constraint) + first-class WebSocket in one framework. Without it we hand-wire ASGI routing, validation, and WS handshakes. |
 | uvicorn | ASGI server to run FastAPI (`--workers 1`). Without it, no server process. |
+
+Every HTTP response over 500 bytes is gzip-compressed by FastAPI's built-in `GZipMiddleware` when the client accepts it (a 20 000-row table: 4.9 MB → 336 KB).
 | websockets | The WebSocket protocol implementation uvicorn needs for `/ws`. Without it uvicorn rejects the upgrade, the catch-all route answers 200, and live updates never connect. |
 | pydantic | Request/response/DTO validation; pairs with FastAPI. Without it, hand-written JSON validation everywhere. |
 | watchfiles | OS-level filesystem change events (inotify/FSEvents) for the watcher. Without it we poll `os.stat` in a loop — slower and higher latency. |
@@ -128,13 +132,15 @@ Dropped vs the earlier draft: **orjson** (stdlib `json` suffices for one user's 
 | vite | Dev server + production static build. Without it, hand-configured bundler. |
 | zustand | The single canonical state tree (one JS object in browser memory) with subscribe-by-slice. Lighter than Redux for one user, same store/selector/action model. Without it we hand-write a store + subscription. |
 | react-router-dom | URL ↔ route state (URL is state). Without it we hand-parse `location` and manage history. |
+| @dnd-kit/core + @dnd-kit/sortable + @dnd-kit/utilities | Pointer drag-and-drop with sortable previews for rearranging tiles, including touch (HTML5 drag events never fire on touch screens). MIT, no paid tier. Imported only by `modules/arrange/dndkit.tsx`. Without it we hand-write pointer tracking, collision detection and the live preview of the other tiles shifting. |
+| motion | Layout animation for reorders that do not come from a drag (Alt+arrow): `layout` on an element animates it from its old slot to the new one. MIT, no paid tier. Imported only by `modules/arrange/dndkit.tsx`; duration comes from `--motion-slow`. Without it we hand-write FLIP measurement. |
 | plotly.js + react-plotly.js | The one chart framework behind the RENDER slot (ADR-006): line/heatmap/histogram + future 3D/interpretability views, one `Table → figure` mapping. Without it we hand-write SVG and cannot reach 3D/interactivity. |
 
 Dropped vs the earlier draft, with the replacement named:
 - **@tanstack/react-query** → replaced by our own `load_fsm` (a hand-written `idle → loading → loaded → error` FSM, ~30 lines) + `fetch`. We already require FSM-everywhere; a query library would be a second, redundant async-state system.
 - **@visx/visx** → superseded by **plotly.js** (ADR-006, revised): the owner chose one declarative chart framework for many styles + 3D + low effort over hand-drawn SVG. (The original draft dropped all charting libs and hand-drew SVG; that decision was reversed when 3D/interpretability views entered scope.)
 - **reselect** → selectors are hand-written memoized functions (close over last input/output). For a single-user tree the memo is a three-line helper.
-- **framer-motion** → no animations exist (Constraint), so nothing to interpolate.
+- **framer-motion** → superseded: the owner accepted `motion` (its successor) in 2026-10 for tile reorder animation, behind `modules/arrange`.
 
 ### 4.3 Conditional, only under measured v1+ performance pressure on large tables
 
@@ -176,7 +182,8 @@ log/
     log/                          # the `import log` package (toolkit + writer)
       __init__.py                 # re-exports public API (Section 9.1)
       run.py                      # log.run decorator factory, RunContext
-      logger.py                   # log.logger(), Logger class, log.log shortcut
+      logger.py                   # log.logger(), Logger class, log.log shortcut, log.alert, log.on_alert
+      alerts.py                   # built-in alert rules (non_finite, spike, stall) + Alerts: per-path history, edge-triggered firing
       watch.py                    # log.watch(model), hook registration, WatchHandle
       track.py                    # log.track(loader), TrackedLoader
       distribute.py               # log.distribute(model)
@@ -209,6 +216,7 @@ log/
         websocket_transport.py    # WebSocketTransport implements TransportPort
         file_watcher.py           # FileWatcher (watchfiles) -> events; views/ and workspaces/ are not run changes
         json_store.py             # list/save/delete JSON documents in one folder (views, workspaces)
+        (domain) project_settings.py  # read_project_settings(project_dir) with defaults; ALERT_RULES — the one reader of project.json's schema, shared with the toolkit
       domain/
         __init__.py
         models.py                 # Table, Cell, CellType, TableKind, Representation + on-disk record DTOs
@@ -221,6 +229,7 @@ log/
         tables.py                 # /api/table, /api/tables/eval endpoints
         series.py                 # /api/series endpoints (scalar/tensor reads)
         workspaces.py             # /api/workspaces endpoints
+        projects.py               # /api/projects/{project}/settings: the only writer of <project>/project.json
         views.py                  # /api/views endpoints
         ws.py                     # /ws websocket handler
       tests/
@@ -255,7 +264,8 @@ log/
           searchSlice.ts          # search_state, search_reducer (query)
           focusSlice.ts           # focus_state, focus_reducer (focused path)
           connectionSlice.ts      # connection_state, connection_reducer (websocket FSM)
-          noticesSlice.ts         # notices_state: failures waiting for the user (message, retry)
+          noticesSlice.ts         # notices_state: messages waiting for the user (message, action: {label, perform} — Retry for failures, Open for alerts)
+          projectsSlice.ts        # projects_state: settings per project (hero metric, alert toggles), loaded by useProjectSettings
         selectors/
           tableSelectors.ts       # table_selector, table_selection_selector, selection_has_cell/row/column, selection_* clipboard and run refs
           tableViewSelectors.ts   # table_view_selector: URL-scoped filters, sorts, widths, column order
@@ -297,10 +307,19 @@ log/
         RepresentationSwitcher.tsx
         ResizeHandle.tsx          # drag-resize corner (resize_fsm)
         render.tsx                # render(table, representation) -> the one view component (Section 7.4)
-        ChartView.tsx             # every chart representation: chartSpec(table, representation) -> lazy Plotly
+        (charts live in modules/chart — see below)
         Button.tsx                # base button component (button_fsm; an async onClick drives pending -> idle | error)
         useTable.ts / useTensor.ts # load_fsm fetches into the store (tables, tensor frames)
         DesignSystem.tsx          # the catalog page body; DesignSystemLab.tsx holds proposals not yet in the product
+      modules/                    # one folder per capability (CLAUDE.md 8a/8c): index.ts is the interface every caller imports; each other file is the one adapter allowed to import its library
+        chart/
+          index.ts                # ChartProps { table, representation, overview? }; export { Chart, saveChartImage } from the active adapter — swapping libraries is this one line
+          series.ts               # library-neutral: chart_theme() from tokens, downsampleSeries, line_series_selector, end_label_selector
+          plotly.tsx              # the Plotly adapter: chartSpec (Table → Plotly data/layout), Chart (lazy react-plotly.js + relayout → window), saveChartImage (PNG)
+          plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
+        arrange/
+          index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
+          dndkit.tsx              # the dnd-kit + motion adapter: mouse drag after 8px, touch drag after a 250 ms still press (a quick swipe stays a page/tile scroll), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/
@@ -310,6 +329,7 @@ log/
         TableView.test.tsx
         inlineView.test.tsx       # parent stays a table; child controls live inside its row
         representations.test.tsx  # chartSpec mapping + applicable + switcher
+        dependencies.test.ts      # fails when a capability library is imported outside its adapter or an import is unregistered (CLAUDE.md 8c)
         tilesSlice.test.ts        # pin / unpin / loadWorkspace / resize
         connectionSlice.test.ts   # live_bump + connection FSM
         modal.test.tsx            # route-backed modal open/close
@@ -330,6 +350,7 @@ runs/
       meta.json                  # run metadata (Section 6.3)
       epoch_<N>/                 # N zero-padded to 4 digits: epoch_0000
         metrics.jsonl            # one row per scalar log call (Section 6.3)
+        alerts.jsonl             # one row per alert onset (Section 6.3); absent until the first alert
         tensors/
           index.jsonl            # one row per tensor write: path, step, file, shape, dtype
           <path>__step<S>.npy    # one tensor; <path> = dot-path with dots kept; S zero-padded 9 digits
@@ -421,7 +442,8 @@ Field rules:
 |---|---|
 | `runs/` root | `kind=folder`; one `table_ref` cell per `<project>` directory |
 | `<project>` | `kind=folder`; one `table_ref` cell per `<run-name>` directory; columns `run, status, started, duration, samples_seen`, pulled up from each run's `meta.json` (progressive disclosure: the run list shows a few attributes of each run's files): `started` = `start_wall_time`; `duration` = `end_wall_time − start_wall_time`, or now − start while `running`, empty when an older run never recorded its end. The UI shows `started` as relative time (`2 h ago`, exact time on hover), `duration` as `1h 20m` / `3.008 s` (one `duration` formatter for every duration), and a status dot (finished = `--positive`, crashed = `--critical`, running = `--series-5`); sort and filter use the raw numbers. |
-| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints` |
+| `<project>.<run>` | `kind=folder`; cells = `table_ref`s to `config`, `meta`, `metrics` (when the run has an epoch), each `epoch_<N>`, `checkpoints`, `alerts` (always last, so it is the last tile of the run page) |
+| `<project>.<run>.alerts` | `kind=grid`; `column_names=["step","rule","path","message","value","epoch","wall_time","rank"]` (what fired first, bookkeeping after — progressive disclosure, so a narrow tile shows the meaning); one row per `alerts.jsonl` row across all epochs, plus one `heartbeat` row computed at read time when the project's `heartbeat` toggle is on, `meta.status` is `running` and the last logged row (or `start_wall_time`) is more than 300 s old (`path: "run"`, `value` = seconds of silence, `step` = the last logged step). The hero chart draws each row with a step as a flag: a dotted `--warning` line with ⚑ above the plot, the message on hover (`ChartProps.marks`). |
 | `<project>.<run>.metrics` | `kind=grid`; `column_names=["step","epoch","wall_time","rank",<every scalar name, first-seen order>]`; one row per `metrics.jsonl` row across all epochs, empty cell where that row did not log the scalar. The run screen's hero chart, status strip and execution strip read this table. `step`, `epoch`, `samples_seen`, `wall_time`, `rank` (and their `_N` suffixed copies) are bookkeeping: never drawn as a line and never a stat (`BOOKKEEPING` / `is_bookkeeping` in `runSelectors.ts` is the one list). The run screen draws it as: (1) the hero line chart with Plotly's range slider underneath — the slider always shows the whole run; while zoomed, `chartSpec` sends the whole series downsampled plus the visible window at full resolution, and downsampling always keeps the first and last point so end labels are the real last values; a line that continues past the visible window shows its last value pinned at the plot's right edge as `value →` (the slider reports `xaxis.range`, a drag zoom `xaxis.range[0]/[1]`; both set the window); (2) the status strip; (3) the execution strip: one lane per `rank`, each cell the longest wall-clock gap between consecutive logged rows of that rank within a bucket of steps (≤120 buckets), shaded from `--gray-100` to `--accent` relative to the slowest gap, with the median and the slowest gap (and its step) above. Operation-level timing (forward / backward / optimizer, as in the design lab) needs profiler data the toolkit does not log; it is out of this table. |
 | `<project>.<run>.epoch_<N>` | `kind=folder`; cells = `table_ref`s to each scalar name in `metrics.jsonl` and each tensor path in `tensors/index.jsonl` |
 | `<project>.<run>.epoch_<N>.<scalar>` | `kind=column`; `column_names=["step","samples_seen","wall_time","rank",<scalar>]`; one row per `metrics.jsonl` row containing that scalar |
@@ -552,6 +574,8 @@ Field-level rules:
 ```json
 { "params": { "lr": 0.0001, "batch_size": 32 }, "step_unit": "samples_seen" }
 ```
+`<runs_root>/<project>/project.json` (written only by the backend, read by the run screen and the toolkit): `{"hero": "loss", "alerts": {"non_finite": true, "spike": false, "stall": true, "heartbeat": true}}`. Path segments never contain `.`, so the watcher treats any `<project>/<name>.json` as a project file, never as a run.
+
 `meta.json` example:
 ```json
 { "git_hash": "a1b2c3d", "requirements_hash": "sha256:9f86d0...", "start_wall_time": 1748534400.123, "samples_seen": 0, "world_size": 1, "status": "running", "resume_diff": null, "writer_errors": [] }
@@ -560,6 +584,10 @@ When the run ends (finished or crashed) the toolkit adds `"end_wall_time": <time
 `metrics.jsonl` row example:
 ```json
 { "step": 1000, "samples_seen": 32000, "wall_time": 1748534512.5, "rank": 0, "scalars": { "loss": 2.31, "lr": 0.00009 } }
+```
+`alerts.jsonl` row example (one row when a rule starts firing for a path; it fires again only after it has cleared; no severity — owner: alerts have no priorities):
+```json
+{ "step": 1000, "wall_time": 1748534512.5, "rank": 0, "rule": "spike", "path": "loss", "value": 9.7, "message": "is +6.2 standard deviations from its last 100 values" }
 ```
 
 ---
@@ -598,6 +626,15 @@ classDiagram
     class MetaJob {
         +dict fields
     }
+    class AlertJob {
+        +dict row
+        +int epoch
+    }
+    class Alerts {
+        +dict checks
+        +list actions
+        +observe(path, value, stamp)
+    }
     class Logger {
         +RunContext ctx
         +log(path, value, step)
@@ -614,6 +651,8 @@ classDiagram
     WriteJob <|-- TensorJob
     WriteJob <|-- CheckpointJob
     WriteJob <|-- MetaJob
+    WriteJob <|-- AlertJob
+    RunContext "1" --> "1" Alerts
     WriterThread "1" --> "*" WriteJob : consumes
     RunContext "1" --> "1" WriterThread
     Logger --> RunContext
@@ -623,6 +662,7 @@ Classes (justified by held state):
 - `RunContext` — holds the live run's counters + writer + config; one process-global instance set by `log.run`. Read by `log.log`, `log.tick`, `log.track`, `log.checkpoint`, `log.resume_state`.
 - `WriterThread` — owns the background queue + thread; the only writer of files on the training side.
 - `WriteJob` and its subclasses `ScalarJob` / `TensorJob` / `CheckpointJob` / `MetaJob` — dataclasses carrying one unit of work to the writer. `MetaJob` exists so that `meta.json` has one writer while the run is live: `resume_state` enqueues its `resume_diff` instead of writing the file beside the thread that records `writer_errors`.
+- `Alerts` — holds the run's alert state: each path's last 100 values, the gaps between logged steps, which `(rule, path)` pairs are firing, the custom checks and the actions; `observe` returns the rows that start firing. `AlertJob` carries one such row to `epoch_N/alerts.jsonl`.
 - `Logger` — thin object bound to `RunContext`; exists so `log.logger()` can return a handle, but `log.log` is the module-level shortcut.
 - `WatchHandle` — holds the `weakref` + registered hook handles so `.remove()` can deregister.
 - `TrackedLoader` — wraps a `DataLoader`, holds the epoch counter.
@@ -642,6 +682,8 @@ Per-function I/O and purpose (training side):
 | `checkpoint(model, optimizer, scheduler, every, keep_top_k, metric, mode, tag)` | training state | `bool` | Decide cadence, build payload, enqueue write + rotation. |
 | `resume_state(model, optimizer, scheduler, checkpoint)` | training state | `int` | Restore states + RNG; return the step to resume from. |
 | `warmup_cosine/linear/constant(optimizer, ...)` | optimizer + schedule args | `LambdaLR` | Build the LR multiplier schedule. |
+| `alert(path, check)` | path, `history -> message \| None` | `None` | Add a custom alert rule on one path (Section 9.3a). |
+| `on_alert(action)` | `row -> None` | `None` | Run an action in the training thread on every alert row. |
 | `tick(samples, **scalars)` | optional samples + scalars | `None` | Advance samples_seen + log scalars in one call. |
 | `export.figure(view_id, path, renderer)` | view id + out path | path str | Render a table to an image file. |
 | `atomic_write_bytes(path, data)` | path, bytes | `None` | temp-write + `os.replace`. |
@@ -841,6 +883,8 @@ The first three ship with v1 (the version that first handles real-scale data); t
 log.run            (decorator factory)
 log.logger         (function -> Logger)
 log.log            (function: shortcut to active logger)
+log.alert          (function: add a custom alert rule on one path)
+log.on_alert       (function: run an action on every alert)
 log.watch          (function)
 log.track          (function -> TrackedLoader)
 log.distribute     (function)
@@ -887,6 +931,23 @@ log.log(path, value, step=None) -> None
 - Never blocks: enqueues a `WriteJob`, returns immediately.
 - `log.log` is the module-level shortcut for `log.logger().log(...)`.
 - Errors: `NoActiveRunError`, `InvalidPathError`, `UnsupportedValueTypeError`.
+
+### 9.3a `log.alert` / `log.on_alert`
+
+```
+log.alert(path: str, check: Callable[[list[float]], str | None]) -> None
+log.on_alert(action: Callable[[dict], None]) -> None
+```
+- Every numeric (non-bool) scalar passes through the alert rules in the training thread, inside `log.log`, right after its write is enqueued. A rule is one shape: `check(history) -> message | None`, where `history` is that path's last 100 values, newest last.
+- Built-in rules, each skipped when switched off in `project.json` (read once at run start):
+  - `non_finite` — the newest value is NaN or ±inf;
+  - `spike` — the newest value is more than 4 standard deviations from the mean of the previous (finite) values, once at least 20 exist;
+  - `stall` — the time between the starts of two logged steps within one epoch is more than 10× the median of the previous gaps, once at least 20 exist; its row has `path: "step"` and `value` = the gap in seconds;
+  - `heartbeat` is computed by the backend (Section 6.2), not here.
+- `log.alert(path, check)` adds a custom rule on one path; the row's `rule` is `check.__name__`.
+- Edge-triggered: a rule writes one `alerts.jsonl` row (Section 6.3) when it starts firing for a path and stays silent until its check returns `None` again.
+- `log.on_alert(action)` calls `action(row)` for every row, built-in or custom, in the training thread; this is how an alert does more than notify (for example, raise to stop training or save a checkpoint). Default: no action.
+- Errors: `NoActiveRunError`.
 
 ### 9.4 `log.watch`
 
@@ -1003,6 +1064,8 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 | Method | Path | Request | Response 200 | Errors |
 |---|---|---|---|---|
 | GET | `/api/runs` | query `project?`, `status?`, `tag?` | `RunSummary[]` (meta + config, no series) | — |
+| GET | `/api/projects/{project}/settings` | — | `{ hero: str \| null, alerts: {non_finite, spike, stall, heartbeat: bool} }` (defaults: hero null = `loss` if logged else the first scalar; every alert on) | 404 `PROJECT_NOT_FOUND` |
+| PUT | `/api/projects/{project}/settings` | the same shape (missing alert keys default to on) | the stored settings | 404 `PROJECT_NOT_FOUND`, 422 |
 | GET | `/api/runs/{project}/{run}` | — | full run as a folder `Table` | 404 `RUN_NOT_FOUND` |
 | DELETE | `/api/runs/{project}/{run}` | — | `{ "deleted": true }` | 404 `RUN_NOT_FOUND` |
 | POST | `/api/runs/rename` | `{ pattern: str, run_refs: str[] }` | `{ renamed: {old: new}[] }` | 400 `INVALID_PATTERN` |
@@ -1023,7 +1086,8 @@ All responses are JSON. Base path `/api`. Errors return `{ "error": { "code": st
 
 WebSocket `/ws`:
 - On connect, server sends `{ "type": "hello", "runs_root": str }`.
-- On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta" }`.
+- On any filesystem change under `runs/`, server pushes `{ "type": "run_updated", "run": "<project>/<name>", "kind": "metrics"|"tensor"|"checkpoint"|"meta"|"alert" }`.
+- For each new complete line of an `alerts.jsonl` the server pushes `{ "type": "alert", "run": "<project>/<name>", "step", "rule", "path", "message" }` (no `value`: it may be NaN, which is not JSON). Lines present when the backend started are not pushed again. The app shows each as a notice `<project>.<run>: <path> <message> at step <step>` with an Open action that goes to the run. `heartbeat` has no file and therefore no event yet (queue item 14).
 - Server pushes `{ "type": "run_added", "run": "<project>/<name>" }` and `{ "type": "run_removed", "run": "<project>/<name>" }`.
 - Client sends `{ "type": "subscribe", "run": "<project>/<name>" }` to scope updates; absent any subscribe, all run-level events are sent. The server confirms with `{ "type": "subscribed", "run" }`; any other client message answers `{ "type": "error", "message" }` instead of being ignored.
 - A watcher batch produces one event per run: `run_added` when the run was not in the index, `run_removed` when its folder is gone, otherwise `run_updated`. The app reloads open tables on all three and reloads the search paths on `run_added`/`run_removed`.
@@ -1550,7 +1614,7 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Consequences**: We own ~30 lines of `load_fsm` and a memo helper; in exchange the frontend has one async-state mechanism and a smaller dependency set. Client-rendered SPA only; build artifacts are static files servable by the backend.
 
 ### ADR-006: Charts = Plotly.js, one declarative framework behind the render dispatch
-**Decision**: Line, heatmap, histogram (and future 3D / node-link / embedding-projection views) are rendered with **Plotly.js** (`react-plotly.js`). One pure function `chartSpec(table, kind)` maps a `Table` to a Plotly figure (`{ data, layout }`, monochrome theme); each representation component is a one-liner `<Plot {...chartSpec(table, kind)} />`. The framework lives **only** inside the RENDER slot — the `render(table, representation)` dispatch and `applicable(table)` are unchanged, and store/selectors never see Plotly.
+**Decision**: Line, heatmap, histogram (and future 3D / node-link / embedding-projection views) are rendered with **Plotly.js** (`react-plotly.js`), behind the `modules/chart` interface (revised 2026-10: Plotly is imported only by `modules/chart/plotly.tsx`; library-neutral series logic lives in `modules/chart/series.ts`, so a second renderer such as uPlot is a new adapter, not a rewrite). One pure function `chartSpec(table, kind)` maps a `Table` to a Plotly figure (`{ data, layout }`, monochrome theme); each representation component is a one-liner `<Plot {...chartSpec(table, kind)} />`. The framework lives **only** inside the RENDER slot — the `render(table, representation)` dispatch and `applicable(table)` are unchanged, and store/selectors never see Plotly.
 **Why** (revised — supersedes the original hand-drawn-SVG decision): the owner needs many chart styles, fine control, *and* low effort, plus eventual complex 3D interpretability views (trajectories with correspondence lines, embedding projections). Hand-drawn SVG cannot reach 3D / interactivity without re-implementing a charting engine. Plotly gives ~40 chart types incl. native 3D, built-in zoom/pan/hover, a single JSON config that fits our dispatch, and a monochrome theme. It maps `Table → figure` as one `chartSpec`, preserving WHAT (data) vs HOW (drawing).
 **Cost accepted**: a ~1 MB(gz) dependency — negligible for a local-first single-user tool; the owner chose this trade explicitly. Truly bespoke diagrams Plotly cannot express get a separate representation on D3/three.js *later*, only when a concrete case appears.
 **Alternatives considered**: hand-drawn SVG (original choice; no 3D, no interactivity, reimplements a chart engine for anything nontrivial); ECharts (comparable, slightly more 3D setup); Vega-Lite (great 2D grammar, no real 3D); D3/three.js (max control, far more work — kept as a later escape hatch).
@@ -1592,7 +1656,7 @@ Per-module test coverage summary: every plain function gets a unit test; every e
 **Consequences**: We write the cell, selection, edit FSM, and formula evaluator ourselves (small, testable). We do not get a spreadsheet's batteries for free; we add tiny MIT primitives only when profiling shows a need.
 
 ### ADR-013: Minimal frontend dependency set (drop query lib, selector lib, animation lib)
-**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom, **plotly.js + react-plotly.js** (Section 4.2). TanStack Query, reselect, and framer-motion are not used; their jobs are done by `load_fsm`, a memo helper, and (nothing — no animations). The charting lib is **kept** (plotly.js, ADR-006 revised): one declarative framework earns its place by covering many chart styles + 3D + interactivity that hand-drawn SVG cannot.
+**Decision**: Frontend deps are react, react-dom, vite, typescript, zustand, react-router-dom, **plotly.js + react-plotly.js** (Section 4.2). TanStack Query and reselect are not used; their jobs are done by `load_fsm` and a memo helper. (Revised 2026-10: dnd-kit and motion were added for tile rearranging, each behind `modules/arrange`.) The charting lib is **kept** (plotly.js, ADR-006 revised): one declarative framework earns its place by covering many chart styles + 3D + interactivity that hand-drawn SVG cannot.
 **Why**: Each dropped library either duplicates a mechanism we already require (FSM for async state) or exists to do something trivial (memoize a function, draw a polyline) or something the spec forbids (animations). Section 4's rule: a dependency is allowed only when the stdlib / a few lines / plain CSS cannot do the job.
 **Alternatives considered**: keep them for convenience (rejected — convenience alone is not justification per the dependency rule).
 **Consequences**: A little more first-party code (an FSM, a memo helper, SVG scale math), all small and unit-tested. Smaller bundle, fewer upgrade surfaces, one async-state model.

@@ -28,7 +28,6 @@ export function ResizeHandle({ onResize }: ResizeHandleProps) {
     <div
       className="resize-handle"
       data-state={state}
-      onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={onMouseDown}
     />
   );

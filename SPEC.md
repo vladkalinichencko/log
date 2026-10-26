@@ -319,7 +319,7 @@ log/
           plotly-dist.d.ts        # type declaration for the lazily imported Plotly bundle
         arrange/
           index.ts                # ArrangeProps { keys, onMove(moved, target), className, children }, ArrangeItemProps { id, className, style, children }; export { Arrange, ArrangeItem } from the active adapter
-          dndkit.tsx              # the dnd-kit + motion adapter: pointer/touch drag (8px activation), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
+          dndkit.tsx              # the dnd-kit + motion adapter: mouse drag after 8px, touch drag after a 250 ms still press (a quick swipe stays a page/tile scroll), Alt+arrow moves to the neighbour, layout animation when not dragging, one swallowed click after a drop (so dropping on a link does not follow it); timing from --motion-slow / --motion-curve
       types/
         domain.ts                 # TS mirrors of backend Table/Cell/enums + DTOs
       tests/

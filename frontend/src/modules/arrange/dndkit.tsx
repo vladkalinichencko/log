@@ -1,5 +1,5 @@
 import { createContext, KeyboardEvent, useContext, useState } from "react";
-import { closestCenter, DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { closestCenter, DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "motion/react";
@@ -31,7 +31,10 @@ const ArrangeContext = createContext<Pick<ArrangeProps, "keys" | "onMove"> & { d
 
 export function Arrange({ keys, onMove, className, children }: ArrangeProps) {
   const [dragging, setDragging] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+  );
   const drop = ({ active, over }: DragEndEvent) => {
     setDragging(false);
     swallowClickAfterDrop();
@@ -78,7 +81,8 @@ export function ArrangeItem({ id, className, style, children }: ArrangeItemProps
       aria-label={`${id}: Alt+arrow moves it`}
       layout={!dragging}
       transition={{ duration: milliseconds / 1000 }}
-      onPointerDown={(event) => listeners?.onPointerDown?.(event)}
+      onMouseDown={(event) => listeners?.onMouseDown?.(event)}
+      onTouchStart={(event) => listeners?.onTouchStart?.(event)}
       onKeyDown={moveWithKeys}
       style={{ ...style, transform: CSS.Translate.toString(transform), transition: transition ?? undefined }}
     >

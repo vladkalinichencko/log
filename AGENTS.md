@@ -48,6 +48,8 @@ Each rule below exists because an agent in this project broke it and a reviewer 
 
 ## How to communicate
 
+- **Transform files by script, not by authoring.** When restructuring a document, the script works against the real file: read its lines, strip junk programmatically (link artifacts, stray marks, duplicate bullet blocks — a script can drop exact/near-duplicate bullets), convert formats (tables → lists, `- [ ]`), and only then move blocks by explicit ranges ("from this heading to that heading → paste there"). Never compose long new replacement text by hand where moving/trimming original lines can do it. New hand-written text is allowed only for glue, labels, and genuinely new content (e.g. a task list derived from accepted decisions), never as a rewrite of the original. Never draft large documents inside reasoning; produce them through the tool calls themselves.
+
 Explain in concrete mechanics: name the actual file, extension, function, and roughly what the call looks like; prefer one concrete example over a sentence of theory; the first time a concept appears, say what it IS mechanically and why it is here. Do not guess on behavior or cost — calculate it or say you don't know.
 
 **Human framing before any list, table, flow, or error set.** Every section that holds a list (errors, data flows, features, endpoints) opens with a 1–2 sentence plain-language "in one breath" line that says what the whole group IS, what scope it covers, and names the repeated Lego shape — so a reader grasps it without reading every row. Group long lists into a few labeled kinds rather than one flat enumeration. The owner will not read sixteen rows to discover what they have in common; state the common thing first. This applies to `SPEC.md` as much as to code.

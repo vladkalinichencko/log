@@ -67,7 +67,8 @@ class FileWatcher:
         for summary in self.index.query(None, "running", None):
             run = f"{summary.project}/{summary.name}"
             alerts = read_table(f"{summary.project}.{summary.name}.alerts", storage)
-            rows = [dict(zip(alerts.column_names, (cell.value for cell in row))) for row in alerts.cells]
+            columns = alerts.column_names or []
+            rows = [dict(zip(columns, (cell.value for cell in row))) for row in alerts.cells]
             heartbeat = next((row for row in rows if row["rule"] == "heartbeat"), None)
             if heartbeat is None:
                 self.silent_runs.discard(run)

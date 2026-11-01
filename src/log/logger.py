@@ -33,7 +33,13 @@ class Logger:
         if isinstance(value, (torch.Tensor, np.ndarray)) and value.ndim == 0:
             value = value.item()
 
-        stamp = dict(step=step, samples_seen=self.ctx.samples_seen, wall_time=time.time(), rank=0, epoch=self.ctx.epoch)
+        stamp = {
+            "step": int(step),
+            "samples_seen": int(self.ctx.samples_seen),
+            "wall_time": time.time(),
+            "rank": 0,
+            "epoch": int(self.ctx.epoch),
+        }
         if isinstance(value, (int, float, bool)):
             self.ctx.writer.enqueue(ScalarJob(path=path, value=value, **stamp))
             if not isinstance(value, bool):

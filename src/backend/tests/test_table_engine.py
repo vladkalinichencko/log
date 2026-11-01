@@ -45,10 +45,14 @@ def test_filter_select_derive(tmp_path):
     assert len(t.cells) == 3
 
 
+def names(t):
+    return t.column_names or []
+
+
 def test_agg_groups(tmp_path):
     _series(tmp_path, values=(0.4, 0.2))
     t = _eval("table(p.r.epoch_0000.loss) | agg(mean, by=rank)", tmp_path)
-    assert "loss" in t.column_names
+    assert names(t) and "loss" in names(t)
     assert len(t.cells) == 1
 
 
@@ -59,7 +63,7 @@ def test_join_two_runs(tmp_path):
         "table(p.a.epoch_0000.loss) | join(table(p.b.epoch_0000.loss), on=step)",
         tmp_path,
     )
-    assert "loss" in t.column_names and "loss_2" in t.column_names
+    assert "loss" in names(t) and "loss_2" in names(t)
     assert len(t.cells) == 2
 
 
@@ -156,7 +160,8 @@ def test_splice_continues_a_run_with_the_run_resumed_from_it_and_names_each_segm
         ("0.0", "10.0", "", "p.a"), ("1.0", "9.0", "", "p.a"),
         ("2.0", "18.0", "0.1", "p.b"), ("3.0", "17.0", "0.1", "p.b"), ("4.0", "16.0", "0.1", "p.b"),
     ]
-    assert _route("splice(p.a)", tmp_path, monkeypatch).startswith("splice takes two runs")
+    splice_single = _route("splice(p.a)", tmp_path, monkeypatch)
+    assert isinstance(splice_single, str) and splice_single.startswith("splice takes two runs")
 
 
 def test_a_quoted_name_reaches_metrics_logged_with_slashes(tmp_path, monkeypatch):

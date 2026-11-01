@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "ruff", "pyright"]
 
 [build-system]
 requires = ["hatchling"]
@@ -28,6 +28,22 @@ packages = ["src/log", "src/backend"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["src/backend/tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E9", "F", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/backend/tests/*" = ["E741"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["src/log", "src/backend"]
+venvPath = "."
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"

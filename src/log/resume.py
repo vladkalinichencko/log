@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from typing import Any
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,7 +16,7 @@ from .writer.queue_writer import MetaJob
 def resume_state(
     model: nn.Module,
     optimizer: optim.Optimizer | None = None,
-    scheduler: object | None = None,
+    scheduler: Any | None = None,
     checkpoint: str | None = None,
 ) -> int:
     ctx = get_active_run()

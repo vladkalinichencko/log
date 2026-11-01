@@ -2,7 +2,9 @@ import asyncio
 import base64
 import json
 from pathlib import Path
+from typing import cast
 
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from py_vapid import Vapid02
 from pywebpush import WebPushException, webpush
@@ -21,7 +23,8 @@ class WebPushTransport:
         self.runs_root = runs_root
 
     def public_key(self) -> str:
-        point = self._vapid().public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+        public_key = cast(EllipticCurvePublicKey, self._vapid().public_key)
+        point = public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
         return base64.urlsafe_b64encode(point).decode().rstrip("=")
 
     def subscribe(self, subscription: dict) -> None:

@@ -2,7 +2,7 @@ import inspect
 import operator
 import re
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 import numpy as np
 
@@ -319,8 +319,8 @@ def _eval_splice(arg: list[str], storage: StoragePort):
         raise ExpressionError("splice takes two runs, the earlier first: splice(project.run, project.resumed_run)")
     (names_a, rows_a), (names_b, rows_b) = (_run_rows(run, storage) for run in arg)
     names = list(dict.fromkeys(names_a + names_b))
-    resumed_at = min((row[names_b.index("step")] for row in rows_b), default=float("inf"))
-    before = [dict(zip(names_a, row)) | {"segment": arg[0]} for row in rows_a if row[names_a.index("step")] < resumed_at]
+    resumed_at = min((float(row[names_b.index("step")]) for row in rows_b), default=float("inf"))
+    before = [dict(zip(names_a, row)) | {"segment": arg[0]} for row in rows_a if float(row[names_a.index("step")]) < resumed_at]
     after = [dict(zip(names_b, row)) | {"segment": arg[1]} for row in rows_b]
     return names + ["segment"], [[row.get(name, "") for name in names + ["segment"]] for row in before + after]
 
@@ -469,7 +469,7 @@ def _eval_call(node, names, rows):
     return [result] * len(rows) if func.kind == "aggregation" else result
 
 
-EXPR_EVAL: dict[str, Callable[..., Column]] = {
+EXPR_EVAL: dict[str, Callable[..., Any]] = {
     "num": _eval_num,
     "col": _eval_ref,
     "neg": _eval_neg,

@@ -1,4 +1,5 @@
 
+from . import errors as errors
 from . import export
 from .checkpoint import checkpoint
 from .distribute import distribute

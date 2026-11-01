@@ -171,7 +171,8 @@ export function TableView({ table, use = "browse" }: TableViewProps) {
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(paramsRef.current.value);
-    value ? next.set(key, value) : next.delete(key);
+    if (value) next.set(key, value);
+    else next.delete(key);
     paramsRef.current = { value: next, requested: next.toString() };
     setSearchParams(next, { replace: true });
   };

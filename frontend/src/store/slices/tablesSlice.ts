@@ -116,7 +116,7 @@ export const createTablesSlice = (set: SetStore) => ({
 
   tables_loadView: (id: string, view: SavedView) =>
     set((state) => {
-      const { history, future, id: _, ...table } = view;
+      const { history, future, ...table } = view;
       const others = (edits: Edit[]) => edits.filter((edit) => edit.tableId !== id);
       const restored = (snapshots: Table[] | undefined) =>
         (snapshots ?? []).map((snapshot) => ({ tableId: id, table: snapshot }));

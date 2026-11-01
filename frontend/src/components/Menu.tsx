@@ -58,7 +58,8 @@ export function Menu({ items, sections, at, children }: MenuProps) {
               : (index - 1 + flat.length) % flat.length;
           root.current
             ?.querySelectorAll("[data-pick]")
-            [next]?.scrollIntoView({ block: "nearest" });
+            .item(next)
+            ?.scrollIntoView({ block: "nearest" });
           return next;
         });
       } else if (e.key === "Enter" && active >= 0) {

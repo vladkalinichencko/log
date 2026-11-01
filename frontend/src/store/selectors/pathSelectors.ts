@@ -6,7 +6,8 @@ export const is_run_ref = (ref: string | null) => ref !== null && path_segments(
 
 export function with_param(params: URLSearchParams, key: string, value: string | null): URLSearchParams {
   const next = new URLSearchParams(params);
-  value ? next.set(key, value) : next.delete(key);
+  if (value) next.set(key, value);
+  else next.delete(key);
   return next;
 }
 
